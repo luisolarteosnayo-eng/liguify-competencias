@@ -896,6 +896,94 @@ async function generarFixture(){
   await renderFixture(); await renderTabla();
 }
 
+/* ---- Fase eliminatoria: GENERAR LLAVES (cuartos/semis/final — no suman puntos) ---- */
+const ETAPAS_LLAVE={'Cuartos de final':4,'Semifinal':2,'Tercer puesto':1,'Final':1};
+let LL_RANK={}, LL_ZONAS=[];
+async function modalLlaves(){
+  const {data:vt}=await sb.from('vista_tabla_zona').select('*').eq('categoria_id',CAT.id);
+  LL_ZONAS=[...new Set((vt||[]).map(r=>r.zona))].sort();
+  LL_RANK={}; LL_ZONAS.forEach(z=>LL_RANK[z]=(vt||[]).filter(r=>r.zona===z).sort((a,b)=>b.pts-a.pts||b.dg-a.dg||b.gf-a.gf));
+  const fasesElim=FASES.filter(f=>f.tipo==='eliminacion');
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">🏆 GENERAR LLAVES</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">Fase eliminatoria estilo mundial: estos partidos <b>NO suman puntos</b> a la tabla de grupos. Los cruces se sugieren desde las posiciones actuales — ajústalos si quieres.</p>
+    <div class="grid grid-cols-2 gap-3 text-sm mb-3">
+      <label><span class="text-ink-400 font-semibold text-xs">Fase</span>
+        <select id="ll-fase" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
+          ${fasesElim.map(f=>`<option value="${f.id}">${f.nombre}</option>`).join('')}
+          <option value="__new__" ${fasesElim.length?'':'selected'}>➕ Nueva fase eliminatoria</option>
+        </select></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Nombre (si es nueva)</span><input id="ll-fn" value="Eliminatoria" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Etapa</span>
+        <select id="ll-etapa" onchange="renderLlaveRows()" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
+          ${Object.keys(ETAPAS_LLAVE).map(e=>`<option>${e}</option>`).join('')}
+        </select></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Fecha</span><input id="ll-f" type="date" value="${new Date(Date.now()+3*864e5).toISOString().slice(0,10)}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Hora del primer partido</span><input id="ll-h" type="time" value="09:00" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Sede</span><input id="ll-s" placeholder="Arena 7" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+    </div>
+    <div id="ll-rows" class="space-y-2 mb-4"></div>
+    <button onclick="crearLlaves()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">CREAR LLAVES</button>`);
+  renderLlaveRows();
+}
+function llEquipoOpts(sel){
+  // opciones etiquetadas con posición y zona cuando clasifican
+  const opts=[['','— por definir —']];
+  LL_ZONAS.forEach(z=>LL_RANK[z].forEach((r,i)=>opts.push([r.equipo_id,`${i+1}º ${z} · ${r.equipo}`])));
+  Object.values(EQUIPOS).filter(e=>e.estado==='activo'&&!opts.some(o=>o[0]===e.id))
+    .forEach(e=>opts.push([e.id,nomEq(e)]));
+  return opts.map(([v,l])=>`<option value="${v}" ${v===sel?'selected':''}>${l}</option>`).join('');
+}
+function llSugeridos(etapa){
+  const A=LL_RANK[LL_ZONAS[0]]||[], B=LL_RANK[LL_ZONAS[1]]||[];
+  const t=(arr,i)=>(arr[i]||{}).equipo_id||'';
+  const dosZonas=LL_ZONAS.length>=2;
+  if(etapa==='Semifinal') return dosZonas?[[t(A,0),t(B,1)],[t(B,0),t(A,1)]]:[[t(A,0),t(A,3)],[t(A,1),t(A,2)]];
+  if(etapa==='Cuartos de final') return dosZonas
+    ?[[t(A,0),t(B,3)],[t(A,1),t(B,2)],[t(B,0),t(A,3)],[t(B,1),t(A,2)]]
+    :[[t(A,0),t(A,7)],[t(A,3),t(A,4)],[t(A,1),t(A,6)],[t(A,2),t(A,5)]];
+  return [['','']];
+}
+function renderLlaveRows(){
+  const etapa=$('ll-etapa').value, n=ETAPAS_LLAVE[etapa];
+  const pares=llSugeridos(etapa);
+  $('ll-rows').innerHTML=Array.from({length:n},(_,i)=>{
+    const [l,v]=pares[i]||['',''];
+    return `<div class="flex items-center gap-2 border border-line rounded-xl px-3 py-2">
+      <span class="text-[10px] font-bold text-ink-400 w-16">${etapa}${n>1?' #'+(i+1):''}</span>
+      <select id="ll-l-${i}" class="flex-1 border border-line rounded-lg px-2 py-1.5 text-xs font-semibold bg-white">${llEquipoOpts(l)}</select>
+      <span class="text-ink-300 text-xs">vs</span>
+      <select id="ll-v-${i}" class="flex-1 border border-line rounded-lg px-2 py-1.5 text-xs font-semibold bg-white">${llEquipoOpts(v)}</select>
+    </div>`;
+  }).join('');
+}
+async function crearLlaves(){
+  let faseId=$('ll-fase').value;
+  if(faseId==='__new__'){
+    const fn=$('ll-fn').value.trim()||'Eliminatoria';
+    const nf=await sb.from('fase').insert({categoria_id:CAT.id,nombre:fn,tipo:'eliminacion',orden:FASES.length+1}).select().single();
+    if(nf.error){toast(errNegocio(nf.error));return;}
+    FASES.push(nf.data); faseId=nf.data.id;
+  }
+  const etapa=$('ll-etapa').value, n=ETAPAS_LLAVE[etapa];
+  const hBase=$('ll-h').value||'09:00', fecha=$('ll-f').value, sede=$('ll-s').value.trim()||null;
+  const filas=[];
+  for(let i=0;i<n;i++){
+    const l=$(`ll-l-${i}`).value, v=$(`ll-v-${i}`).value;
+    if(!l||!v) continue;                       // llaves "por definir" se crean después
+    if(l===v){toast(`⚠ ${etapa} #${i+1}: un equipo no puede jugar contra sí mismo`);return;}
+    filas.push({categoria_id:CAT.id, fase_id:faseId, zona_id:null, jornada_id:null,
+      etapa: n>1?`${etapa} #${i+1}`:etapa, local_id:l, visita_id:v,
+      fecha, hora:String(((+hBase.slice(0,2))+i)%24).padStart(2,'0')+':'+hBase.slice(3),
+      sede, estado:'programado'});
+  }
+  if(!filas.length){toast('⚠ Define al menos una llave con ambos equipos');return;}
+  const {error}=await sb.from('partido').insert(filas);
+  if(error){toast(errNegocio(error));return;}
+  cerrarModal();
+  toast(`🏆 ${filas.length} llave(s) de ${etapa} creadas — SIN sumar puntos a la tabla de grupos`);
+  await renderFixture();
+}
+
 /* ---- Fixture / Resultados ---- */
 async function renderFixture(){
   const {data,error}=await sb.from('partido').select('*, jornada:jornada_id(numero)').eq('categoria_id',CAT.id).order('fecha').order('hora');
@@ -903,7 +991,9 @@ async function renderFixture(){
   const grupos={};
   data.forEach(m=>{const k=m.etapa||('FECHA '+((m.jornada&&m.jornada.numero)||'?'));(grupos[k]=grupos[k]||[]).push(m);});
   $('tab-fixture').innerHTML=
-  `<div class="flex justify-end mb-3">${esAdmin()?`<button onclick="modalFixture()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">⚙️ GENERAR FIXTURE</button>`:''}</div>`+
+  `<div class="flex justify-end gap-2 mb-3">${esAdmin()?`
+    <button onclick="modalLlaves()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">🏆 GENERAR LLAVES</button>
+    <button onclick="modalFixture()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">⚙️ GENERAR FIXTURE</button>`:''}</div>`+
   Object.entries(grupos).map(([g,ms])=>`
     <div class="bg-white border border-line rounded-2xl mb-4">
       <div class="px-4 py-2.5 border-b border-line font-display text-lg tracking-wide">${g.toUpperCase()}</div>
@@ -932,17 +1022,30 @@ function modalResultado(m){
       <input id="rs-v" type="number" min="0" value="${m.goles_visita??0}" class="w-14 border-2 border-line rounded-xl text-center font-display text-3xl py-1"/>
       <div class="text-center flex-1">${V?badgeEq(V,9):''}<p class="text-xs font-bold mt-1">${V?nomEq(V):''}</p></div>
     </div>
-    <label class="flex items-center justify-center gap-2 text-sm font-semibold mb-4">Estado
+    <label class="flex items-center justify-center gap-2 text-sm font-semibold mb-3">Estado
       <select id="rs-e" class="border border-line rounded-lg px-2 py-1 font-semibold bg-white">
         ${['finalizado','programado','en_vivo','suspendido','walkover'].map(s=>`<option ${m.estado===s&&s!=='programado'?'selected':s==='finalizado'&&m.estado==='programado'?'selected':''}>${s}</option>`).join('')}
       </select></label>
+    <div class="flex items-center justify-center gap-3 text-sm font-semibold mb-4">
+      <label class="flex items-center gap-2">
+        <input id="rs-pen" type="checkbox" ${m.penales?'checked':''} onchange="$('rs-penbox').classList.toggle('hidden',!this.checked)" class="w-4 h-4 accent-[#d9232e]"/>
+        Definición por penales
+      </label>
+      <span id="rs-penbox" class="${m.penales?'':'hidden'} flex items-center gap-1.5">
+        <input id="rs-pl" type="number" min="0" value="${m.penales_local??0}" class="w-12 border border-line rounded-lg text-center py-1 font-bold"/>
+        <span class="text-ink-400">×</span>
+        <input id="rs-pv" type="number" min="0" value="${m.penales_visita??0}" class="w-12 border border-line rounded-lg text-center py-1 font-bold"/>
+      </span>
+    </div>
     <button onclick="guardarResultado('${m.id}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR EN LA BD</button>
     <p class="text-[10px] text-ink-400 mt-2 text-center">Al guardar: standings recalculados por Postgres + push Realtime al módulo público.</p>`);
 }
 async function guardarResultado(id){
   const gl=$('rs-l').value, gv=$('rs-v').value;
   if(gl===''||gv===''){toast('Ingresa ambos marcadores');return;}
-  const {error}=await sb.from('partido').update({goles_local:+gl,goles_visita:+gv,estado:$('rs-e').value}).eq('id',id);
+  const pen=$('rs-pen').checked;
+  const {error}=await sb.from('partido').update({goles_local:+gl,goles_visita:+gv,estado:$('rs-e').value,
+    penales:pen, penales_local:pen?+$('rs-pl').value||0:null, penales_visita:pen?+$('rs-pv').value||0:null}).eq('id',id);
   if(error){toast(errNegocio(error));return;}
   cerrarModal(); toast('Resultado guardado ✔ — tabla recalculada por la BD y publicada en vivo ⚡');
   await renderFixture(); await renderTabla();
