@@ -927,9 +927,9 @@ function modalResultado(m){
   abrirModal(`<div class="flex items-center justify-between mb-4"><h3 class="font-display text-2xl tracking-wide">CARGAR RESULTADO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
     <div class="flex items-center justify-center gap-3 mb-4">
       <div class="text-center flex-1">${L?badgeEq(L,9):''}<p class="text-xs font-bold mt-1">${L?nomEq(L):''}</p></div>
-      <input id="rs-l" type="number" min="0" value="${m.goles_local??''}" class="w-14 border-2 border-line rounded-xl text-center font-display text-3xl py-1"/>
+      <input id="rs-l" type="number" min="0" value="${m.goles_local??0}" class="w-14 border-2 border-line rounded-xl text-center font-display text-3xl py-1"/>
       <span class="font-display text-xl text-ink-400">:</span>
-      <input id="rs-v" type="number" min="0" value="${m.goles_visita??''}" class="w-14 border-2 border-line rounded-xl text-center font-display text-3xl py-1"/>
+      <input id="rs-v" type="number" min="0" value="${m.goles_visita??0}" class="w-14 border-2 border-line rounded-xl text-center font-display text-3xl py-1"/>
       <div class="text-center flex-1">${V?badgeEq(V,9):''}<p class="text-xs font-bold mt-1">${V?nomEq(V):''}</p></div>
     </div>
     <label class="flex items-center justify-center gap-2 text-sm font-semibold mb-4">Estado
