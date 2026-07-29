@@ -515,7 +515,8 @@ grant select on competencias.jugador_maestro, competencias.inscripcion_lbf,
                 competencias.usuario_club, competencias.auditoria to authenticated;
 grant insert, update on all tables in schema competencias to authenticated;
 grant delete on competencias.partido, competencias.equipo_en_zona,
-  competencias.evento_partido, competencias.inscripcion_lbf to authenticated;  -- RLS sigue gobernando quién
+  competencias.evento_partido, competencias.inscripcion_lbf,
+  competencias.acreditacion_partido to authenticated;  -- RLS sigue gobernando quién
 grant update (goles_local, goles_visita, estado, penales, penales_local, penales_visita, updated_at)
   on competencias.partido to anon;          -- ⚠ solo para poc_write_partido
 

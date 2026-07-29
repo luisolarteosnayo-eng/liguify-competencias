@@ -3,6 +3,7 @@
 <title>Liguify — Panel Administrador</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 <script>
 tailwind.config={theme:{extend:{
@@ -76,6 +77,18 @@ tailwind.config={theme:{extend:{
     <div id="tab-equipos" class="ctab"></div>
     <div id="tab-fixture" class="ctab hidden"></div>
     <div id="tab-tabla" class="ctab hidden"></div>
+  </section>
+
+  <!-- ACREDITACIÓN EN CANCHA -->
+  <section id="s-acred" class="screen">
+    <button onclick="abrirCategoria(CAT)" class="text-sm text-ink-500 mb-3 font-semibold">← Categoría</button>
+    <div class="flex items-center gap-3 mb-1 flex-wrap">
+      <h1 class="font-display text-3xl tracking-wide">ACREDITACIÓN EN CANCHA</h1>
+      <span id="acred-memb" class="text-[10px] font-bold bg-ink-900 text-white rounded-full px-3 py-1"></span>
+    </div>
+    <p class="text-sm text-ink-400 mb-4">Check-in de la alineación: verifica la inscripción del jugador y actualiza su <b>participación (J)</b> en la planilla del partido.</p>
+    <div id="acred-head" class="mb-4"></div>
+    <div class="grid md:grid-cols-2 gap-4" id="acred-body"></div>
   </section>
 
   <!-- MATCH CENTER EN VIVO -->
@@ -702,6 +715,7 @@ async function renderFixture(){
             <span class="font-display text-2xl">${m.goles_local??'–'} : ${m.goles_visita??'–'}</span>
           </div>
           <div class="flex-1 flex items-center gap-2 text-sm font-semibold">${V?badgeEq(V):''} ${V?nomEq(V):'—'}</div>
+          <button onclick='abrirAcred(${JSON.stringify(m).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-500 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper" title="Acreditación en cancha">🪪</button>
           <button onclick='abrirLive(${JSON.stringify(m).replace(/'/g,"&#39;")})' class="text-xs font-bold text-white bg-brand-500 rounded-lg px-2.5 py-1.5 hover:bg-brand-600" title="Match Center en vivo">▶ VIVO</button>
           <button onclick='modalResultado(${JSON.stringify(m).replace(/'/g,"&#39;")})' class="text-xs font-bold text-brand-600 border border-brand-100 rounded-lg px-2.5 py-1.5 hover:bg-brand-50">CARGAR</button>
         </div>`;}).join('')}
@@ -731,6 +745,139 @@ async function guardarResultado(id){
   if(error){toast(errNegocio(error));return;}
   cerrarModal(); toast('Resultado guardado ✔ — tabla recalculada por la BD y publicada en vivo ⚡');
   await renderFixture(); await renderTabla();
+}
+
+/* ---- ACREDITACIÓN EN CANCHA (QR real + planilla) ---- */
+const METODOS={dni_scan:{ic:'📄',lb:'DNI',tier:'basico'},qr:{ic:'📱',lb:'QR',tier:'intermedio'},nfc:{ic:'💳',lb:'NFC',tier:'premium'}};
+const TIER_ORD={basico:0,intermedio:1,premium:2};
+let ACRP=null, ACR_INS=[], ACR_MAP={}, ACR_SANC=new Set();
+
+async function abrirAcred(m){
+  ACRP=m;
+  $('acred-memb').textContent=`MEMBRESÍA ${MARCA.membresia.toUpperCase()} · ${Object.values(METODOS).filter(x=>TIER_ORD[x.tier]<=TIER_ORD[MARCA.membresia]).map(x=>x.lb).join(' + ')}`;
+  const L=EQUIPOS[m.local_id], V=EQUIPOS[m.visita_id];
+  $('acred-head').innerHTML=`<div class="bg-ink-900 text-white rounded-2xl px-5 py-3 flex items-center justify-center gap-4 text-sm font-bold">
+    ${L?badgeEq(L,7):''} ${L?nomEq(L):''} <span class="text-white/40">vs</span> ${V?badgeEq(V,7):''} ${V?nomEq(V):''}
+    <span class="text-white/40 font-normal">· ${m.fecha||''} ${m.hora?m.hora.slice(0,5):''}</span></div>`;
+  // inscripciones + jugadores + sanciones + acreditaciones + planilla
+  const ins=await sb.from('inscripcion_lbf').select('*').in('equipo_id',[m.local_id,m.visita_id]);
+  const jids=(ins.data||[]).map(i=>i.jugador_id);
+  const [js,ac,sg]=await Promise.all([
+    jids.length?sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,verificado,consentimiento_imagen,foto_url').in('id',jids):{data:[]},
+    sb.from('acreditacion_partido').select('*').eq('partido_id',m.id),
+    jids.length?sb.from('sancion_global').select('jugador_id,vigencia_desde,vigencia_hasta').in('jugador_id',jids):{data:[]}
+  ]);
+  const jmap=Object.fromEntries((js.data||[]).map(j=>[j.id,j]));
+  const hoy=new Date().toISOString().slice(0,10);
+  ACR_SANC=new Set((sg.data||[]).filter(s=>s.vigencia_desde<=hoy&&(!s.vigencia_hasta||s.vigencia_hasta>=hoy)).map(s=>s.jugador_id));
+  ACR_INS=(ins.data||[]).map(i=>({...i, jug:jmap[i.jugador_id]||{}}));
+  ACR_MAP=Object.fromEntries((ac.data||[]).map(a=>[a.inscripcion_id,a]));
+  renderAcred(); show('s-acred');
+}
+function renderAcred(){
+  const lados=[ACRP.local_id,ACRP.visita_id];
+  $('acred-body').innerHTML=lados.map(eqId=>{
+    const e=EQUIPOS[eqId], pl=ACR_INS.filter(i=>i.equipo_id===eqId);
+    const hechos=pl.filter(i=>ACR_MAP[i.id]).length;
+    const filas=pl.length?pl.map(i=>{
+      const j=i.jug, a=ACR_MAP[i.id];
+      const bloqueado=i.inhabilitado||i.estado!=='activo'||!i.en_lbf||ACR_SANC.has(i.jugador_id);
+      const avatar=j.foto_url&&j.consentimiento_imagen
+        ? `<img src="${j.foto_url}" class="w-9 h-9 rounded-full object-cover"/>`
+        : `<span class="w-9 h-9 rounded-full bg-ink-700 text-white grid place-items-center text-[10px] font-bold" style="${j.consentimiento_imagen?'':'filter:grayscale(1);opacity:.75'}">${iniciales((j.nombres||'')+' '+(j.apellidos||''))}</span>`;
+      return `<div class="flex items-center gap-3 px-4 py-2.5 border-b border-line last:border-0 ${i.inhabilitado?'bg-red-50/60':''}">
+        ${avatar}
+        <span class="w-6 text-ink-400 font-bold text-sm">${i.dorsal??''}</span>
+        <span class="flex-1 min-w-0"><span class="font-semibold text-sm block truncate">${j.nombres||'—'} ${j.apellidos||''}</span>
+          <span class="text-[10px] ${i.inhabilitado||ACR_SANC.has(i.jugador_id)?'text-brand-600 font-bold':i.estado==='activo'?'text-emerald-600':'text-amber-600 font-bold'}">${ACR_SANC.has(i.jugador_id)?'SANCIÓN GLOBAL':i.inhabilitado?'INHABILITADO':i.estado.toUpperCase()}${i.es_excepcion?' · EXC. EDAD':''}</span></span>
+        ${a
+          ? `<span class="text-xs font-bold text-emerald-600 whitespace-nowrap">✔ ${METODOS[a.metodo].ic} ${METODOS[a.metodo].lb}</span>
+             <button onclick="desacreditar('${i.id}')" class="text-ink-400 hover:text-brand-600 text-sm" title="Quitar acreditación">↺</button>`
+          : `<button onclick="abrirCarnet('${i.id}')" class="${bloqueado?'bg-white border border-brand-500 text-brand-600':'bg-ink-900 text-white'} text-[11px] font-bold px-3 py-1.5 rounded-lg hover:opacity-80 whitespace-nowrap">${bloqueado?'VER FICHA':'ACREDITAR'}</button>`}
+      </div>`;
+    }).join(''):'<p class="px-4 py-8 text-center text-sm text-ink-400">Sin LBF cargada.</p>';
+    return `<div class="bg-white border border-line rounded-2xl overflow-hidden">
+      <div class="bg-ink-900 text-white px-4 py-2.5 flex items-center gap-2.5">
+        ${e?badgeEq(e,7):''}<span class="font-display text-lg tracking-wide flex-1">${e?nomEq(e).toUpperCase():''}</span>
+        <span class="text-[10px] font-bold ${hechos&&hechos===pl.length?'text-emerald-400':'text-white/50'}">${hechos}/${pl.length} acreditados</span>
+      </div>${filas}</div>`;
+  }).join('');
+}
+async function abrirCarnet(insId){
+  const i=ACR_INS.find(x=>x.id===insId); if(!i) return;
+  const j=i.jug, e=EQUIPOS[i.equipo_id];
+  // token del carnet (se genera y guarda si no existe)
+  let token=i.qr_token;
+  if(!token){
+    token=crypto.randomUUID().replace(/-/g,'');
+    const up=await sb.from('inscripcion_lbf').update({qr_token:token}).eq('id',i.id);
+    if(!up.error) i.qr_token=token;
+  }
+  // QR REAL escaneable (verificación futura del lado Club/árbitro)
+  const qr=qrcode(0,'M'); qr.addData(`https://www.liguify.com/verificar?c=${token}`); qr.make();
+  const qrSvg=qr.createSvgTag({cellSize:3,margin:2});
+  const sancion=ACR_SANC.has(i.jugador_id);
+  const problemas=[];
+  if(sancion) problemas.push('⛔ SANCIÓN GLOBAL vigente (fallo de oficio de la plataforma)');
+  if(i.inhabilitado) problemas.push(`⛔ INHABILITADO — ${i.motivo_inhabilitacion||'sanción del torneo'}`);
+  if(!i.inhabilitado&&i.estado!=='activo') problemas.push('⚠ Sin ACTIVAR: apto médico/documentación pendiente');
+  if(!i.en_lbf) problemas.push('⚠ Fuera de la Lista de Buena Fe');
+  const ok=!problemas.length;
+  const check=(c,l)=>`<div class="flex items-center justify-between py-1.5 border-b border-line last:border-0 text-sm"><span class="text-ink-500">${l}</span><span class="font-bold ${c?'text-emerald-600':'text-brand-600'}">${c?'✔':'✖'}</span></div>`;
+  const metodos=Object.entries(METODOS).filter(([k,x])=>TIER_ORD[x.tier]<=TIER_ORD[MARCA.membresia]);
+  abrirModal(`<div class="flex items-center justify-between mb-3"><h3 class="font-display text-2xl tracking-wide">CARNET DIGITAL</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <div class="bg-ink-900 text-white rounded-2xl p-4 mb-4">
+      <p class="text-[10px] uppercase tracking-widest text-white/50 font-bold mb-3">${MARCA.nombre} · ${TORNEO.nombre} · ${CAT.nombre_display||''}</p>
+      <div class="flex items-center gap-4">
+        ${j.foto_url&&j.consentimiento_imagen?`<img src="${j.foto_url}" class="w-20 h-20 rounded-2xl object-cover"/>`
+          :`<span class="w-20 h-20 rounded-2xl bg-ink-700 grid place-items-center text-xl font-bold" style="${j.consentimiento_imagen?'':'filter:grayscale(1);opacity:.8'}">${iniciales((j.nombres||'')+' '+(j.apellidos||''))}</span>`}
+        <div class="flex-1 min-w-0">
+          <p class="font-bold leading-tight">${(j.nombres||'').toUpperCase()} ${(j.apellidos||'').toUpperCase()}</p>
+          <p class="font-display text-3xl text-brand-500">${i.dorsal??''}</p>
+          <p class="text-xs text-white/60">${e?nomEq(e):''} · 🇵🇪 ${j.nro_documento||''}</p>
+          <p class="text-[10px] ${j.consentimiento_imagen?'text-emerald-400':'text-white/40'} mt-1">${j.consentimiento_imagen?'📷 Foto a color — consentimiento ✔':'📷 B/N — sin consentimiento del tutor'}</p>
+        </div>
+        <div class="text-center bg-white rounded-lg p-1">${qrSvg}</div>
+      </div>
+    </div>
+    <p class="font-bold text-ink-500 uppercase tracking-wider text-xs mb-1">Verificación de inscripción</p>
+    <div class="border border-line rounded-xl px-4 py-1 mb-3">
+      ${check(j.verificado,'Identidad verificada (documento)')}
+      ${check(i.en_lbf,'En Lista de Buena Fe')}
+      ${check(i.estado==='activo','Habilitado (apto médico validado)')}
+      ${check(!i.inhabilitado,'Sin sanciones del torneo')}
+      ${check(!sancion,'Sin sanción global de la plataforma')}
+      ${i.es_excepcion?'<div class="py-1.5 text-sm text-amber-600 font-semibold">⚠ Excepción por edad (según reglas del torneo)</div>':''}
+    </div>
+    ${ok
+      ? `<div class="bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm font-bold rounded-xl px-4 py-2.5 mb-3">✅ CORRECTAMENTE INSCRITO — apto para alinear</div>
+         <p class="text-[10px] text-ink-400 mb-2">Acreditar por (según membresía ${MARCA.membresia}):</p>
+         <div class="grid grid-cols-${metodos.length} gap-2">
+           ${metodos.map(([k,x])=>`<button onclick="acreditar('${i.id}','${k}')" class="bg-ink-900 text-white rounded-xl py-2.5 font-bold text-sm hover:bg-ink-700">${x.ic} ${x.lb}<span class="block text-[8px] font-normal text-white/50">${x.tier}</span></button>`).join('')}
+         </div>`
+      : `<div class="bg-brand-50 border border-brand-100 rounded-xl px-4 py-3">
+           <p class="text-brand-700 font-bold text-sm mb-1">⛔ NO PUEDE SER ALINEADO</p>
+           ${problemas.map(x=>`<p class="text-xs text-ink-700">${x}</p>`).join('')}
+         </div>`}`);
+}
+async function acreditar(insId, metodo){
+  const {data:{user}}=await sb.auth.getUser();
+  const ins=await sb.from('acreditacion_partido').insert({partido_id:ACRP.id, inscripcion_id:insId, metodo, verificado_por:user?.id||null});
+  if(ins.error){toast(errNegocio(ins.error));return;}
+  // la acreditación ACTUALIZA LA PARTICIPACIÓN (J) en la planilla del partido
+  const pl=await sb.from('planilla_partido').upsert({partido_id:ACRP.id, inscripcion_id:insId, jugo:true},{onConflict:'partido_id,inscripcion_id'});
+  if(pl.error){toast(errNegocio(pl.error));return;}
+  ACR_MAP[insId]={inscripcion_id:insId, metodo};
+  cerrarModal(); renderAcred();
+  const i=ACR_INS.find(x=>x.id===insId);
+  toast(`${i.jug.nombres} acreditado por ${METODOS[metodo].ic} ${METODOS[metodo].lb} — participación (J) actualizada en la planilla ✔`);
+}
+async function desacreditar(insId){
+  const del=await sb.from('acreditacion_partido').delete().eq('partido_id',ACRP.id).eq('inscripcion_id',insId);
+  if(del.error){toast(errNegocio(del.error));return;}
+  await sb.from('planilla_partido').upsert({partido_id:ACRP.id, inscripcion_id:insId, jugo:false},{onConflict:'partido_id,inscripcion_id'});
+  delete ACR_MAP[insId];
+  renderAcred(); toast('Acreditación retirada — la participación (J) se desmarcó en la planilla');
 }
 
 /* ---- MATCH CENTER EN VIVO ---- */
