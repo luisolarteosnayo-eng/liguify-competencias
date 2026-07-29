@@ -468,6 +468,7 @@ function modalEquipo(){
     <div id="ne-nuevo" class="grid grid-cols-2 gap-3 text-sm mb-3 bg-paper border border-line rounded-xl p-3">
       <label><span class="text-ink-400 font-semibold text-xs">Nombre del club</span><input id="ne-cn" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
       <label><span class="text-ink-400 font-semibold text-xs">Color</span><input id="ne-cc" type="color" value="#0d9488" class="w-full h-9 border border-line rounded-lg bg-white"/></label>
+      <label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Escudo del club (opcional)</span><input id="ne-esc" type="file" accept="image/*" class="w-full text-xs mt-1"/></label>
     </div>
     <div class="grid grid-cols-2 gap-3 text-sm">
       <label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Nombre del equipo (opcional)</span><input id="ne-n" placeholder="Vacío = nombre del club · ej. ALIANZA A" class="w-full border-b border-line py-1.5 font-semibold"/></label>
@@ -483,6 +484,10 @@ async function crearEquipo(){
     const ins=await sb.from('club').insert({marca_id:MARCA.id,nombre:cn,color:$('ne-cc').value}).select().single();
     if(ins.error){toast(errNegocio(ins.error));return;}
     clubId=ins.data.id; CLUBES[clubId]=ins.data;
+    try{
+      const esc=await subirImagen('ne-esc', `clubes/${clubId}`);
+      if(esc){ const u=await sb.from('club').update({escudo_url:esc}).eq('id',clubId).select().single(); if(!u.error) CLUBES[clubId]=u.data; }
+    }catch(e){ toast('Equipo creado; el escudo no se pudo subir: '+(e.message||e)); }
   }
   const nombre=$('ne-n').value.trim()||null;
   let zonaId=$('ne-z').value;
@@ -509,10 +514,44 @@ async function crearEquipo(){
 /* ---- LBF ---- */
 async function abrirLBF(eqId){
   EQUIPO=EQUIPOS[eqId];
-  $('lbf-head').innerHTML=`<div class="bg-ink-900 text-white rounded-2xl p-5 flex items-center gap-4">
-    ${badgeEq(EQUIPO,9)}<div><h1 class="font-display text-3xl tracking-wide">${nomEq(EQUIPO).toUpperCase()}</h1>
-    <p class="text-white/50 text-sm">${(CLUBES[EQUIPO.club_id]||{}).nombre||''} · ${CAT.nombre_display||''}</p></div></div>`;
+  $('lbf-head').innerHTML=`<div class="bg-ink-900 text-white rounded-2xl p-5 flex items-center gap-4 flex-wrap">
+    <button onclick="modalClub('${EQUIPO.club_id}')" title="Editar escudo y datos del club">${badgeEq(EQUIPO,9)}</button>
+    <div class="flex-1 min-w-40"><h1 class="font-display text-3xl tracking-wide">${nomEq(EQUIPO).toUpperCase()}</h1>
+    <p class="text-white/50 text-sm">${(CLUBES[EQUIPO.club_id]||{}).nombre||''} · ${CAT.nombre_display||''}</p></div>
+    ${esAdmin()?`<button onclick="modalClub('${EQUIPO.club_id}')" class="bg-white/10 border border-white/20 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/20">🛡️ ESCUDO DEL CLUB</button>`:''}
+  </div>`;
   await renderLBF(); show('s-lbf');
+}
+/* ---- Club: escudo (único por marca) + datos ---- */
+function modalClub(clubId){
+  const cl=CLUBES[clubId]; if(!cl) return;
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">CLUB · ESCUDO Y DATOS</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">El club es <b>único en tu marca</b>: su escudo aplica a todos sus equipos en todos los torneos de ${MARCA.nombre}.</p>
+    <div class="flex items-center gap-3 mb-3">
+      <span class="w-16 h-16 rounded-2xl grid place-items-center text-white font-display text-xl overflow-hidden relative shrink-0" style="background:${cl.color}">${cl.escudo_url?`<img src="${cl.escudo_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(cl.nombre)}</span>
+      <label class="text-sm flex-1"><span class="text-ink-400 font-semibold text-xs">Escudo del club (subir imagen)</span>
+        <input id="cb-esc" type="file" accept="image/*" class="w-full text-xs mt-1"/></label>
+    </div>
+    <div class="grid grid-cols-2 gap-3 text-sm mb-4">
+      <label><span class="text-ink-400 font-semibold text-xs">Nombre del club</span><input id="cb-n" value="${cl.nombre}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Color (si no hay escudo)</span><input id="cb-c" type="color" value="${cl.color||'#1d4ed8'}" class="w-full h-9 border border-line rounded-lg bg-white"/></label>
+    </div>
+    <button onclick="guardarClub('${clubId}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR CLUB</button>`);
+}
+async function guardarClub(clubId){
+  try{
+    const n=$('cb-n').value.trim();
+    if(!n){toast('Ingresa el nombre del club');return;}
+    const escudo=await subirImagen('cb-esc', `clubes/${clubId}`);
+    const upd={nombre:n, color:$('cb-c').value};
+    if(escudo) upd.escudo_url=escudo;
+    const {data,error}=await sb.from('club').update(upd).eq('id',clubId).select().single();
+    if(error){toast(errNegocio(error));return;}
+    CLUBES[clubId]=data;
+    cerrarModal(); toast('Club actualizado ✔ — el escudo aplica a todos sus equipos y torneos');
+    if($('s-lbf').classList.contains('active')&&EQUIPO) abrirLBF(EQUIPO.id);
+    else renderEquipos();
+  }catch(e){toast('Escudo: '+(e.message||e));}
 }
 async function renderLBF(){
   const {data:ins,error}=await sb.from('inscripcion_lbf').select('*').eq('equipo_id',EQUIPO.id).order('dorsal');
