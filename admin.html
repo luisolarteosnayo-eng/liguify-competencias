@@ -466,14 +466,58 @@ async function renderEquipos(){
         return `<div class="flex items-center gap-3 px-5 py-2.5 border-b border-line last:border-0">
           ${badgeEq(e)}<span class="flex-1 font-semibold text-sm">${nomEq(e)}</span>
           <button onclick='abrirLBF("${e.id}")' class="text-xs font-bold text-brand-600 hover:underline">LBF →</button>
-          ${esAdmin()?`<button onclick="quitarDeZona('${z.id}','${e.id}')" title="Quitar de la zona (el equipo sigue en el torneo, pasa a Sin Zona)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-paper">✕ ZONA</button>
+          ${esAdmin()?`<button onclick="modalZonaEquipo('${e.id}','${z.id}')" title="Mover de zona o quitar de la zona (validado contra sus partidos)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-paper">⇄ ZONA</button>
           <button onclick="retirarEquipo('${e.id}')" title="Retirar del torneo (no se borra: se inactiva conservando su historial)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-brand-50 hover:text-brand-600">RETIRAR</button>`:''}
         </div>`;}).join('')||'<p class="px-5 py-5 text-sm text-ink-400">Zona sin equipos.</p>'}
     </div>`).join('')+cardRetirados;
 }
+// REGLA: no se puede mover ni quitar de la zona si tiene partidos (programados o jugados) en ella
+async function partidosEnZona(eqId,zonaId){
+  const {data}=await sb.from('partido').select('id,estado').eq('zona_id',zonaId)
+    .or(`local_id.eq.${eqId},visita_id.eq.${eqId}`);
+  return data||[];
+}
+async function modalZonaEquipo(eqId,zonaId){
+  const e=EQUIPOS[eqId], z=ZONAS.find(x=>x.id===zonaId);
+  const ms=await partidosEnZona(eqId,zonaId);
+  if(ms.length){
+    const jug=ms.filter(m=>['finalizado','walkover','en_vivo'].includes(m.estado)).length;
+    const prog=ms.length-jug;
+    abrirModal(`<div class="flex items-center justify-between mb-3"><h3 class="font-display text-2xl tracking-wide">⇄ ZONA — BLOQUEADO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+      <div class="bg-brand-50 border border-brand-100 rounded-xl px-4 py-3 mb-3">
+        <p class="text-brand-700 font-bold text-sm mb-1">⛔ ${nomEq(e)} no puede moverse ni quitarse de la Zona ${z.nombre}</p>
+        <p class="text-sm text-ink-700">Tiene <b>${ms.length} partido(s)</b> en esta zona: ${jug} jugado(s)/en vivo y ${prog} programado(s).</p>
+      </div>
+      <p class="text-xs text-ink-400">Para moverlo: elimina o regenera el fixture de la zona (⚙️ Generar fixture con "Reemplazar"), o borra sus partidos programados desde el fixture. Los partidos jugados protegen la integridad de la tabla.</p>`);
+    return;
+  }
+  const otras=ZONAS.filter(x=>x.id!==zonaId);
+  abrirModal(`<div class="flex items-center justify-between mb-3"><h3 class="font-display text-2xl tracking-wide">⇄ ZONA</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-sm font-semibold mb-1">${badgeEq(e)} ${nomEq(e)} <span class="text-ink-400 font-normal">· hoy en Zona ${z.nombre}</span></p>
+    <p class="text-xs text-emerald-700 mb-4">✔ Sin partidos en la zona — se puede mover o quitar.</p>
+    ${otras.length?`<div class="flex gap-2 mb-3">
+      <select id="mz-dest" class="flex-1 border border-line rounded-xl px-3 py-2 text-sm font-semibold bg-white">${otras.map(x=>`<option value="${x.id}">Zona ${x.nombre}</option>`).join('')}</select>
+      <button onclick="moverZona('${eqId}','${zonaId}')" class="bg-brand-500 text-white text-sm font-bold px-4 rounded-xl hover:bg-brand-600">MOVER</button>
+    </div>`:'<p class="text-xs text-ink-400 mb-3">No hay otras zonas — crea una para poder moverlo.</p>'}
+    <button onclick="quitarDeZona('${zonaId}','${eqId}')" class="w-full bg-white border border-line font-bold py-2.5 rounded-xl text-sm hover:bg-paper">QUITAR DE LA ZONA (queda en "Sin Zona")</button>`);
+}
+async function moverZona(eqId,deZonaId){
+  const destino=$('mz-dest').value;
+  const del=await sb.from('equipo_en_zona').delete().eq('zona_id',deZonaId).eq('equipo_id',eqId);
+  if(del.error){toast(errNegocio(del.error));return;}
+  const ins=await sb.from('equipo_en_zona').insert({zona_id:destino,equipo_id:eqId});
+  if(ins.error){toast(errNegocio(ins.error));return;}
+  cerrarModal();
+  toast(`${nomEq(EQUIPOS[eqId])} movido a la Zona ${ZONAS.find(z=>z.id===destino).nombre} ✔`);
+  await renderEquipos(); await renderTabla();
+}
 async function quitarDeZona(zonaId,eqId){
+  // doble validación (por si se llama directo)
+  const ms=await partidosEnZona(eqId,zonaId);
+  if(ms.length){toast(`⛔ Tiene ${ms.length} partido(s) en la zona — no se puede quitar`);return;}
   const {error}=await sb.from('equipo_en_zona').delete().eq('zona_id',zonaId).eq('equipo_id',eqId);
   if(error){toast(errNegocio(error));return;}
+  cerrarModal();
   toast(`${nomEq(EQUIPOS[eqId])} quitado de la zona — sigue en el torneo (sección Sin Zona)`);
   await renderEquipos(); await renderTabla();
 }
