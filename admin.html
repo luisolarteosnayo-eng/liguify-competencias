@@ -382,7 +382,9 @@ async function renderEquipos(){
   const ez=ZONAS.length?await sb.from('equipo_en_zona').select('*').in('zona_id',ZONAS.map(z=>z.id)):{data:[]};
   const porZona={}; (ez.data||[]).forEach(x=>{(porZona[x.zona_id]=porZona[x.zona_id]||[]).push(x.equipo_id);});
   $('tab-equipos').innerHTML=
-    `<div class="flex justify-end mb-3">${esAdmin()?`<button onclick="modalEquipo()" class="bg-brand-500 text-white font-bold px-4 py-2 rounded-xl text-sm hover:bg-brand-600">+ NUEVO EQUIPO</button>`:''}</div>`+
+    `<div class="flex justify-end gap-2 mb-3">${esAdmin()?`
+      <button onclick="modalZona()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">+ NUEVA ZONA</button>
+      <button onclick="modalEquipo()" class="bg-brand-500 text-white font-bold px-4 py-2 rounded-xl text-sm hover:bg-brand-600">+ NUEVO EQUIPO</button>`:''}</div>`+
     ZONAS.map(z=>`<div class="bg-white border border-line rounded-2xl mb-4 overflow-hidden">
       <div class="bg-ink-900 text-white px-5 py-2.5 font-display text-lg tracking-wide">ZONA ${z.nombre}</div>
       ${(porZona[z.id]||[]).map(eqId=>{const e=EQUIPOS[eqId]; if(!e) return '';
@@ -515,13 +517,143 @@ async function altaJugador(pais,doc){
   renderLBF();
 }
 
+/* ---- Zonas (con su fase) ---- */
+function modalZona(){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">NUEVA ZONA</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">Grupo dentro de la categoría. Si no existe una Fase de Grupos, se crea automáticamente.</p>
+    <div class="grid grid-cols-2 gap-3 text-sm">
+      <label><span class="text-ink-400 font-semibold text-xs">Nombre de la zona</span><input id="nz-n" placeholder="B" maxlength="12" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Fase</span>
+        <select id="nz-f" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
+          ${FASES.map(f=>`<option value="${f.id}">${f.nombre}</option>`).join('')}
+          <option value="__new__">➕ Nueva Fase de Grupos</option>
+        </select></label>
+    </div>
+    <button onclick="crearZona()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl mt-4 hover:bg-brand-600">CREAR ZONA</button>`);
+}
+async function crearZona(){
+  const nom=$('nz-n').value.trim().toUpperCase();
+  if(!nom){toast('Ingresa el nombre de la zona');return;}
+  let faseId=$('nz-f').value;
+  if(faseId==='__new__'||!faseId){
+    const nf=await sb.from('fase').insert({categoria_id:CAT.id,nombre:'Fase de Grupos',tipo:'grupos',orden:FASES.length+1}).select().single();
+    if(nf.error){toast(errNegocio(nf.error));return;}
+    faseId=nf.data.id;
+  }
+  if(ZONAS.some(z=>z.fase_id===faseId&&z.nombre===nom)){toast(`⚠ La zona ${nom} ya existe en esa fase`);return;}
+  const {error}=await sb.from('zona').insert({fase_id:faseId,nombre:nom});
+  if(error){toast(errNegocio(error));return;}
+  cerrarModal(); toast(`Zona ${nom} creada ✔`); abrirCategoria(CAT);
+}
+
+/* ---- Generador de fixture: round-robin (método del círculo) ---- */
+// N equipos → N-1 fechas, sin repetición; impar = un descanso por fecha;
+// las fechas son COMPARTIDAS entre zonas (ronda r de cada zona → jornada r+1)
+function roundRobin(ids){
+  const teams=[...ids];
+  if(teams.length%2) teams.push(null);
+  const n=teams.length, mitad=n/2, rondas=n-1, fechas=[];
+  let arr=[...teams];
+  for(let r=0;r<rondas;r++){
+    const pares=[];
+    for(let i=0;i<mitad;i++){
+      const a=arr[i], b=arr[n-1-i];
+      if(a!==null&&b!==null) pares.push(r%2?[b,a]:[a,b]);
+    }
+    fechas.push(pares);
+    arr=[arr[0],arr[n-1],...arr.slice(1,n-1)];
+  }
+  return fechas;
+}
+async function modalFixture(){
+  const ez=ZONAS.length?await sb.from('equipo_en_zona').select('*').in('zona_id',ZONAS.map(z=>z.id)):{data:[]};
+  const conteo={}; (ez.data||[]).forEach(x=>conteo[x.zona_id]=(conteo[x.zona_id]||0)+1);
+  const hoy=new Date(); hoy.setDate(hoy.getDate()+3);
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⚙️ GENERAR FIXTURE</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">Todos contra todos por zona (N equipos → N−1 fechas, sin repetición). Las <b>fechas son compartidas</b>: en cada jornada juegan todas las zonas. Zona impar = un descanso por fecha.</p>
+    <div class="grid grid-cols-2 gap-3 text-sm mb-3">
+      <label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Alcance</span>
+        <select id="gf-z" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
+          <option value="__all__">Todas las zonas (fechas compartidas)</option>
+          ${ZONAS.map(z=>`<option value="${z.id}">Solo Zona ${z.nombre} (${conteo[z.id]||0} equipos → ${Math.max((conteo[z.id]||0)-1,0)} fechas)</option>`).join('')}
+        </select></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Fecha de inicio</span><input id="gf-f" type="date" value="${hoy.toISOString().slice(0,10)}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Días entre fechas</span><input id="gf-int" type="number" min="1" value="7" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Hora del primer partido</span><input id="gf-h" type="time" value="09:00" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Sede</span><input id="gf-s" placeholder="Arena 7" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+    </div>
+    <label class="flex items-center justify-between text-sm font-semibold border border-line rounded-xl px-3 py-2.5 mb-4">
+      <span>Reemplazar partidos existentes<br><span class="text-[10px] text-brand-600 font-normal">⚠ Borra los partidos de fase de grupos de las zonas elegidas (incluye resultados)</span></span>
+      <input id="gf-rep" type="checkbox" class="w-4 h-4 accent-[#d9232e]"/>
+    </label>
+    <button onclick="generarFixture()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GENERAR</button>`);
+}
+async function generarFixture(){
+  const sel=$('gf-z').value;
+  const zonasSel = sel==='__all__' ? ZONAS : ZONAS.filter(z=>z.id===sel);
+  // equipos por zona
+  const ez=await sb.from('equipo_en_zona').select('*').in('zona_id',zonasSel.map(z=>z.id));
+  const porZona={}; (ez.data||[]).forEach(x=>{(porZona[x.zona_id]=porZona[x.zona_id]||[]).push(x.equipo_id);});
+  const zonasOk=zonasSel.filter(z=>(porZona[z.id]||[]).length>=2);
+  if(!zonasOk.length){toast('⚠ Se necesitan al menos 2 equipos en la zona para generar');return;}
+  // guardia de resultados existentes
+  const exist=await sb.from('partido').select('id,estado').in('zona_id',zonasOk.map(z=>z.id));
+  if(exist.error){toast(errNegocio(exist.error));return;}
+  if(exist.data.length && !$('gf-rep').checked){
+    toast(`⚠ Ya hay ${exist.data.length} partidos en esas zonas (incluye resultados). Activa "Reemplazar" para regenerar desde cero.`);
+    return;
+  }
+  if(exist.data.length){
+    const del=await sb.from('partido').delete().in('id',exist.data.map(p=>p.id));
+    if(del.error){toast(errNegocio(del.error));return;}
+  }
+  // round-robin por zona; ronda r de todas las zonas → jornada r+1
+  const rr={}; zonasOk.forEach(z=>rr[z.id]=roundRobin(porZona[z.id]));
+  const totalFechas=Math.max(...zonasOk.map(z=>rr[z.id].length));
+  // asegurar jornadas 1..totalFechas
+  const js=await sb.from('jornada').select('*').eq('categoria_id',CAT.id);
+  const jorPorNum=Object.fromEntries((js.data||[]).map(j=>[j.numero,j]));
+  const fInicio=$('gf-f').value, intervalo=+$('gf-int').value||7;
+  for(let r=0;r<totalFechas;r++){
+    if(!jorPorNum[r+1]){
+      const d=new Date(fInicio+'T00:00:00'); d.setDate(d.getDate()+r*intervalo);
+      const nj=await sb.from('jornada').insert({categoria_id:CAT.id,numero:r+1,nombre:'Fecha '+(r+1),fecha:d.toISOString().slice(0,10)}).select().single();
+      if(nj.error){toast(errNegocio(nj.error));return;}
+      jorPorNum[r+1]=nj.data;
+    }
+  }
+  // construir e insertar partidos (horas escalonadas entre TODAS las zonas de la fecha)
+  const hBase=$('gf-h').value||'09:00', sede=$('gf-s').value.trim()||null;
+  const filas=[];
+  for(let r=0;r<totalFechas;r++){
+    const d=new Date(fInicio+'T00:00:00'); d.setDate(d.getDate()+r*intervalo);
+    let slot=0;
+    zonasOk.forEach(z=>{
+      (rr[z.id][r]||[]).forEach(([l,v])=>{
+        const h=((+hBase.slice(0,2))+slot)%24;
+        filas.push({categoria_id:CAT.id, fase_id:z.fase_id, zona_id:z.id, jornada_id:jorPorNum[r+1].id,
+          local_id:l, visita_id:v, fecha:d.toISOString().slice(0,10),
+          hora:String(h).padStart(2,'0')+':'+hBase.slice(3), sede, estado:'programado'});
+        slot++;
+      });
+    });
+  }
+  const ins=await sb.from('partido').insert(filas);
+  if(ins.error){toast(errNegocio(ins.error));return;}
+  cerrarModal();
+  toast(`Fixture generado ✔ ${zonasOk.length} zona(s) → ${totalFechas} fechas compartidas, ${filas.length} partidos (todos contra todos, sin repetición)`);
+  await renderFixture(); await renderTabla();
+}
+
 /* ---- Fixture / Resultados ---- */
 async function renderFixture(){
   const {data,error}=await sb.from('partido').select('*, jornada:jornada_id(numero)').eq('categoria_id',CAT.id).order('fecha').order('hora');
   if(error){$('tab-fixture').innerHTML='';msg(errNegocio(error),'err');return;}
   const grupos={};
   data.forEach(m=>{const k=m.etapa||('FECHA '+((m.jornada&&m.jornada.numero)||'?'));(grupos[k]=grupos[k]||[]).push(m);});
-  $('tab-fixture').innerHTML=Object.entries(grupos).map(([g,ms])=>`
+  $('tab-fixture').innerHTML=
+  `<div class="flex justify-end mb-3">${esAdmin()?`<button onclick="modalFixture()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">⚙️ GENERAR FIXTURE</button>`:''}</div>`+
+  Object.entries(grupos).map(([g,ms])=>`
     <div class="bg-white border border-line rounded-2xl mb-4">
       <div class="px-4 py-2.5 border-b border-line font-display text-lg tracking-wide">${g.toUpperCase()}</div>
       ${ms.map(m=>{const fin=m.estado==='finalizado'||m.estado==='walkover';
