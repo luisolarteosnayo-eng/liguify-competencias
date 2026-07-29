@@ -1,0 +1,196 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Liguify — Verificación de arquitectura multi-usuario</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{background:#faf9f7;font-family:Inter,system-ui,sans-serif}
+  .display{font-family:"Bebas Neue",sans-serif}
+  .pulse{animation:p 1.2s infinite}@keyframes p{0%,100%{opacity:1}50%{opacity:.3}}
+</style>
+<body class="text-slate-800 min-h-screen p-4">
+
+<div class="max-w-5xl mx-auto">
+  <div class="flex items-center gap-3 mb-1 flex-wrap">
+    <span class="w-9 h-9 rounded-xl bg-[#d9232e] grid place-items-center text-white display text-xl pt-0.5">L</span>
+    <h1 class="display text-3xl tracking-wide">VERIFICACIÓN DE ARQUITECTURA</h1>
+    <span id="conn" class="text-[10px] font-bold bg-slate-200 text-slate-500 rounded-full px-3 py-1">conectando…</span>
+  </div>
+  <p class="text-sm text-slate-500 mb-4">Una sola fuente de verdad (Supabase/Postgres). <b>Abre esta página en DOS ventanas</b>: guarda un resultado en una y en la otra presiona Refrescar (o mira cómo llega solo, por Realtime ⚡).</p>
+
+  <div id="authbar" class="bg-white border border-slate-200 rounded-2xl px-4 py-3 mb-4 flex items-center gap-2 flex-wrap text-sm"></div>
+
+  <div class="grid md:grid-cols-2 gap-4">
+
+    <!-- PANEL PÚBLICO -->
+    <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+      <div class="bg-[#171e2e] text-white px-4 py-3 flex items-center justify-between">
+        <p class="display text-xl tracking-wide">🌐 MÓDULO PÚBLICO <span class="text-white/40 text-sm">(otro usuario)</span></p>
+        <button onclick="cargar('manual')" class="bg-white/10 border border-white/20 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-white/20">↻ REFRESCAR</button>
+      </div>
+      <div class="p-4">
+        <p class="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-2">Partidos · <span id="pub-marca"></span></p>
+        <div id="pub-partidos" class="mb-4 text-sm"></div>
+        <p class="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-2">Tabla de posiciones (calculada de la BD)</p>
+        <table class="w-full text-sm" id="pub-tabla"></table>
+        <p id="pub-meta" class="text-[10px] text-slate-400 mt-3"></p>
+      </div>
+    </div>
+
+    <!-- PANEL MESA/ADMIN -->
+    <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+      <div class="bg-[#d9232e] text-white px-4 py-3">
+        <p class="display text-xl tracking-wide">⚙️ MESA DE CONTROL <span class="text-white/60 text-sm">(este usuario escribe)</span></p>
+      </div>
+      <div class="p-4">
+        <p class="text-xs text-slate-500 mb-3">Carga un resultado → se escribe en Postgres → cualquier usuario lo ve al refrescar.</p>
+        <div id="adm-partidos" class="space-y-2 text-sm"></div>
+        <div id="log" class="mt-4 text-[11px] text-slate-400 space-y-1 max-h-40 overflow-y-auto"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL='https://bpsczjjomgzhnjxnzmhj.supabase.co';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwc2N6ampvbWd6aG5qeG56bWhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1MDg5MTgsImV4cCI6MjA5ODA4NDkxOH0.3O92Q-3xxdCmF1LStCQrlCtz1s_EfdlayXnL_mEElOw';
+// storageKey propio: la sesión de Competencias vive en su propio cajón y NUNCA
+// pisa la de ERP/Academias aunque compartan origen en el futuro
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY,
+  { db:{ schema:'competencias' }, auth:{ storageKey:'sb-competencias-auth' } });
+
+let EQUIPOS={}, CLUBES={}, PARTIDOS=[];
+const $=id=>document.getElementById(id);
+function log(msg,color){ const d=document.createElement('p'); d.textContent=`${new Date().toLocaleTimeString('es-PE')} — ${msg}`; if(color)d.style.color=color; $('log').prepend(d); }
+
+function badge(eqId,sz=6){
+  const eq=EQUIPOS[eqId]; if(!eq) return '';
+  const cl=CLUBES[eq.club_id]||{};
+  return `<span class="inline-grid place-items-center w-${sz} h-${sz} rounded-md text-white text-[9px] font-bold align-middle" style="background:${cl.color||'#334155'}">${(cl.nombre||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</span>`;
+}
+const nom = eqId => { const eq=EQUIPOS[eqId]; return eq ? (eq.nombre || (CLUBES[eq.club_id]||{}).nombre || '—') : '—'; };
+
+async function cargar(origen){
+  try{
+    const [ma,cl,eq,pa]=await Promise.all([
+      sb.from('marca').select('*'),
+      sb.from('club').select('*'),
+      sb.from('equipo').select('*'),
+      sb.from('partido').select('*, jornada:jornada_id(numero)').order('updated_at')
+    ]);
+    if(ma.error||cl.error||eq.error||pa.error) throw (ma.error||cl.error||eq.error||pa.error);
+    CLUBES=Object.fromEntries(cl.data.map(c=>[c.id,c]));
+    EQUIPOS=Object.fromEntries(eq.data.map(e=>[e.id,e]));
+    PARTIDOS=pa.data.map(m=>({...m, jnum:(m.jornada&&m.jornada.numero)||1})).sort((a,b)=>a.jnum-b.jnum);
+    $('conn').textContent='● conectado a Supabase'; $('conn').className='text-[10px] font-bold bg-emerald-100 text-emerald-700 rounded-full px-3 py-1';
+    $('pub-marca').textContent=(ma.data[0]||{}).nombre||'';
+    render();
+    $('pub-meta').textContent=`Última lectura de la BD: ${new Date().toLocaleTimeString('es-PE')} · origen: ${origen}`;
+    if(origen==='manual') log('Datos releídos de Postgres (refrescar) ✓');
+    if(origen==='realtime') log('⚡ Cambio recibido por REALTIME — sin refrescar','#059669');
+  }catch(err){
+    $('conn').textContent='sin conexión / esquema no expuesto'; $('conn').className='text-[10px] font-bold bg-red-100 text-red-700 rounded-full px-3 py-1';
+    log('Error: '+(err.message||JSON.stringify(err)),'#dc2626');
+  }
+}
+
+function render(){
+  // público: partidos
+  $('pub-partidos').innerHTML=PARTIDOS.map(m=>{
+    const fin=m.estado==='finalizado'||m.estado==='walkover';
+    return `<div class="flex items-center py-2 border-b border-slate-100 last:border-0">
+      <div class="flex-1 text-right ${fin&&m.goles_local>m.goles_visita?'font-bold':''}">${nom(m.local_id)} ${badge(m.local_id)}</div>
+      <div class="w-24 text-center">
+        <span class="block text-[8px] font-bold uppercase ${fin?'text-emerald-600':'text-slate-400'}">${m.estado} · J${m.jnum}</span>
+        <span class="display text-2xl">${m.goles_local??'–'} : ${m.goles_visita??'–'}</span>
+      </div>
+      <div class="flex-1 ${fin&&m.goles_visita>m.goles_local?'font-bold':''}">${badge(m.visita_id)} ${nom(m.visita_id)}</div>
+    </div>`;
+  }).join('');
+  // público: tabla calculada
+  const t={};
+  Object.keys(EQUIPOS).forEach(id=>t[id]={id,pj:0,gf:0,gc:0,pts:0});
+  PARTIDOS.filter(m=>(m.estado==='finalizado'||m.estado==='walkover')&&m.goles_local!==null).forEach(m=>{
+    const L=t[m.local_id],V=t[m.visita_id]; if(!L||!V)return;
+    L.pj++;V.pj++;L.gf+=m.goles_local;L.gc+=m.goles_visita;V.gf+=m.goles_visita;V.gc+=m.goles_local;
+    if(m.goles_local>m.goles_visita)L.pts+=3; else if(m.goles_local<m.goles_visita)V.pts+=3; else{L.pts++;V.pts++;}
+  });
+  const rows=Object.values(t).map(x=>({...x,dg:x.gf-x.gc})).sort((a,b)=>b.pts-a.pts||b.dg-a.dg||b.gf-a.gf);
+  $('pub-tabla').innerHTML=`<tr class="text-[10px] uppercase text-slate-400 border-b"><th></th><th class="text-left">Equipo</th><th>PJ</th><th>DG</th><th>PTS</th></tr>`+
+    rows.map((r,i)=>`<tr class="border-b border-slate-100 last:border-0">
+      <td class="py-1.5 text-slate-400 font-bold text-center w-7">${i+1}</td>
+      <td>${badge(r.id,5)} <span class="font-semibold">${nom(r.id)}</span></td>
+      <td class="text-center">${r.pj}</td>
+      <td class="text-center ${r.dg>0?'text-emerald-600':r.dg<0?'text-red-500':''}">${r.dg>0?'+':''}${r.dg}</td>
+      <td class="text-center font-extrabold">${r.pts}</td></tr>`).join('');
+  // mesa: formularios
+  $('adm-partidos').innerHTML=PARTIDOS.map(m=>`
+    <div class="border border-slate-200 rounded-xl px-3 py-2 flex items-center gap-2">
+      <span class="flex-1 text-xs font-semibold">${nom(m.local_id)} vs ${nom(m.visita_id)} <span class="text-slate-400">J${m.jnum} · ${m.estado}</span></span>
+      <input id="gl-${m.id}" type="number" min="0" value="${m.goles_local??''}" class="w-12 border border-slate-200 rounded-lg text-center py-1 text-sm font-bold"/>
+      <span class="text-slate-300">:</span>
+      <input id="gv-${m.id}" type="number" min="0" value="${m.goles_visita??''}" class="w-12 border border-slate-200 rounded-lg text-center py-1 text-sm font-bold"/>
+      <button onclick="guardar('${m.id}')" class="bg-[#d9232e] text-white text-xs font-bold px-3 py-1.5 rounded-lg hover:opacity-90">GUARDAR</button>
+    </div>`).join('');
+}
+
+async function guardar(id){
+  const gl=$('gl-'+id).value, gv=$('gv-'+id).value;
+  if(gl===''||gv===''){ log('Ingresa ambos marcadores','#d97706'); return; }
+  const {error}=await sb.from('partido')
+    .update({goles_local:+gl, goles_visita:+gv, estado:'finalizado', updated_at:new Date().toISOString()})
+    .eq('id',id);
+  if(error){ log('Error al guardar: '+error.message,'#dc2626'); return; }
+  log(`Resultado ${gl}-${gv} ESCRITO en Postgres ✓ — cualquier usuario lo ve al refrescar`,'#059669');
+  cargar('escritura propia');
+}
+
+/* ===== AUTH: la escritura ahora exige sesión con rol (admin/mesa de la marca) ===== */
+async function renderAuth(){
+  const {data:{session}}=await sb.auth.getSession();
+  const el=$('authbar');
+  if(session){
+    let roles='sin rol asignado';
+    const um=await sb.from('usuario_marca').select('rol');
+    if(!um.error && um.data.length) roles=um.data.map(x=>x.rol).join(' · ');
+    el.innerHTML=`<span>🔐 Sesión: <b>${session.user.email}</b> · rol: <b class="text-emerald-700">${roles}</b></span>
+      <button onclick="salir()" class="ml-auto bg-slate-100 border border-slate-200 font-bold px-3 py-1.5 rounded-lg text-xs hover:bg-slate-200">SALIR</button>`;
+  } else {
+    el.innerHTML=`<span class="font-bold">🔓 Anónimo</span><span class="text-slate-400">— solo lectura (la escritura requiere rol)</span>
+      <input id="au-e" placeholder="email" class="border border-slate-200 rounded-lg px-2 py-1.5 text-xs w-44"/>
+      <input id="au-p" type="password" placeholder="contraseña" class="border border-slate-200 rounded-lg px-2 py-1.5 text-xs w-32"/>
+      <button onclick="entrar()" class="bg-[#171e2e] text-white font-bold px-3 py-1.5 rounded-lg text-xs">ENTRAR</button>
+      <button onclick="crearQA()" class="bg-emerald-600 text-white font-bold px-3 py-1.5 rounded-lg text-xs" title="Crea el usuario de prueba mesa@inticup.pe">CREAR USUARIO QA (MESA)</button>`;
+  }
+}
+async function asegurarPerfil(){
+  const {data:{user}}=await sb.auth.getUser();
+  if(user) await sb.from('usuario_perfil').upsert({id:user.id,email:user.email},{onConflict:'id',ignoreDuplicates:true});
+}
+async function entrar(){
+  const {error}=await sb.auth.signInWithPassword({email:$('au-e').value.trim(),password:$('au-p').value});
+  if(error){ log('Login: '+error.message,'#dc2626'); return; }
+  await asegurarPerfil(); log('Sesión iniciada ✔','#059669'); renderAuth();
+}
+async function crearQA(){
+  const email='mesa@inticup.pe', password='Liguify2026!';
+  const {error}=await sb.auth.signUp({email,password});
+  if(error && !/already/i.test(error.message)){ log('SignUp: '+error.message,'#dc2626'); return; }
+  if(error){ const r=await sb.auth.signInWithPassword({email,password}); if(r.error){ log('Login QA: '+r.error.message,'#dc2626'); return; } }
+  await asegurarPerfil();
+  log(`Usuario QA listo: ${email} (contraseña Liguify2026! — fixture de prueba, borrable) ✔`,'#059669');
+  renderAuth();
+}
+// scope:'local' — cierra la sesión SOLO en esta app; jamás desconecta ERP/Academias
+async function salir(){ await sb.auth.signOut({scope:'local'}); log('Sesión cerrada solo en esta app (ERP/Academias intactos)'); renderAuth(); }
+
+// Realtime: los cambios llegan SIN refrescar (la otra ventana se actualiza sola)
+sb.channel('poc-partidos')
+  .on('postgres_changes',{event:'*',schema:'competencias',table:'partido'},()=>cargar('realtime'))
+  .subscribe();
+
+renderAuth();
+cargar('inicial');
+</script>
+</body>

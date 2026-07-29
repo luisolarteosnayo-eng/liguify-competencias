@@ -1,0 +1,722 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Liguify — Módulo Público (mockup)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>
+tailwind.config = { theme: { extend: {
+  colors: {
+    brand: {50:'#fef2f2',100:'#fde3e3',500:'#d9232e',600:'#c11d27',700:'#a11820'},
+    ink: {900:'#171e2e',700:'#2b3550',500:'#5b6478',400:'#8b93a7'},
+    paper: '#faf9f7', line:'#e9e6e0'
+  },
+  fontFamily: { display:['"Bebas Neue"','sans-serif'], sans:['Inter','system-ui','sans-serif'] }
+}}}
+</script>
+<style>
+  body{background:#faf9f7}
+  .screen{display:none} .screen.active{display:block}
+  .fade{animation:f .22s ease} @keyframes f{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+  .tabbtn.active{background:#171e2e;color:#fff}
+  .chip.active{background:#d9232e;color:#fff;border-color:#d9232e}
+  .live-dot{width:7px;height:7px;border-radius:99px;background:#d9232e;animation:pulse 1.2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  ::-webkit-scrollbar{height:8px;width:8px} ::-webkit-scrollbar-thumb{background:#d6d3cd;border-radius:8px}
+</style>
+
+<body class="text-ink-900 font-sans min-h-screen">
+
+<!-- ============ HEADER ============ -->
+<header class="bg-white/90 backdrop-blur border-b border-line sticky top-0 z-40">
+  <div class="max-w-6xl mx-auto px-4 h-16 flex items-center gap-3">
+    <button onclick="goCatalogo()" class="flex items-center gap-2.5">
+      <span class="w-9 h-9 rounded-xl bg-brand-500 grid place-items-center text-white font-display text-xl pt-0.5">L</span>
+      <span class="text-left leading-tight">
+        <span id="hdr-brand" class="font-display text-2xl tracking-wide block">LIGUIFY</span>
+        <span id="hdr-sub" class="text-[10px] text-ink-400 font-semibold tracking-widest uppercase block -mt-1">Competencias</span>
+      </span>
+    </button>
+    <div class="ml-auto hidden sm:flex items-center gap-2 bg-paper border border-line rounded-xl px-3 py-2 text-sm text-ink-400 w-72">
+      🔍 <span>Buscar equipos o jugadores…</span>
+    </div>
+    <button class="ml-2 text-sm font-semibold text-ink-700 border border-line rounded-xl px-4 py-2 hover:bg-paper" onclick="alert('Login: acceso de coordinadores (The Hub) y administradores. Fuera del alcance de este mockup público.')">Login</button>
+  </div>
+  <div id="hdr-live" class="hidden bg-ink-900 text-white text-xs">
+    <div class="max-w-6xl mx-auto px-4 py-1.5 flex items-center gap-2 cursor-pointer" onclick="openPartido('cf3')">
+      <span class="live-dot"></span><b>EN VIVO</b> · Tercer Puesto Copa Oro — Team Candela 1 : 1 Alianza Lima Surquillo · 2º 12' <span class="ml-auto underline">Ver →</span>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-6xl mx-auto px-4 py-6">
+
+<!-- ============ P1: CATÁLOGO DE MARCAS ============ -->
+<section id="s-catalogo" class="screen">
+  <h1 class="font-display text-4xl tracking-wide mb-1">CAMPEONATOS</h1>
+  <p class="text-ink-500 text-sm mb-6">Marcas organizadoras en la plataforma</p>
+  <div class="grid grid-cols-2 md:grid-cols-3 gap-4" id="catalogo-grid"></div>
+</section>
+
+<!-- ============ P1b: MARCA → TORNEOS ============ -->
+<section id="s-marca" class="screen">
+  <button onclick="goCatalogo()" class="text-sm text-ink-500 mb-4 font-semibold">← Campeonatos</button>
+  <div class="rounded-2xl bg-ink-900 text-white p-8 mb-6 relative overflow-hidden">
+    <div id="marca-wm" class="absolute -right-6 -top-10 font-display text-[160px] opacity-[.07] tracking-wide"></div>
+    <p id="marca-meta" class="text-brand-500 font-bold text-xs tracking-widest"></p>
+    <h1 id="marca-nombre" class="font-display text-6xl tracking-wide mt-1"></h1>
+    <p id="marca-sub" class="text-white/60 text-sm mt-1"></p>
+  </div>
+  <h2 class="font-display text-2xl tracking-wide mb-3">TORNEOS / CIRCUITOS</h2>
+  <div class="space-y-2" id="marca-torneos"></div>
+</section>
+
+<!-- ============ P2: TORNEO ============ -->
+<section id="s-torneo" class="screen">
+  <button onclick="openMarca('inti')" class="text-sm text-ink-500 mb-4 font-semibold">← INTI CUP</button>
+  <div class="rounded-2xl bg-ink-900 text-white p-8 mb-6 relative overflow-hidden">
+    <div class="absolute -right-6 -top-10 font-display text-[160px] opacity-[.07] tracking-wide">ORO</div>
+    <p class="text-brand-500 font-bold text-xs tracking-widest">🇵🇪 MARCA INTI CUP · LIMA, PERÚ · TEMPORADA 2026</p>
+    <h1 class="font-display text-6xl tracking-wide mt-1">INTI CUP ORO</h1>
+    <p class="text-white/60 text-sm mt-1">Circuito Oro · 13 – 19 de julio de 2026 · Powered by Liguify</p>
+    <div class="flex gap-8 mt-6" id="torneo-stats"></div>
+  </div>
+  <div class="flex items-end justify-between mb-3 flex-wrap gap-2">
+    <div>
+      <h2 class="font-display text-2xl tracking-wide">TABLA GENERAL</h2>
+      <p class="text-xs text-ink-400">Acumulado de todas las categorías por equipo · visible según configuración del torneo</p>
+    </div>
+    <span class="text-[10px] font-bold bg-ink-900 text-white rounded-full px-3 py-1">2 CATEGORÍAS COMPUTADAS</span>
+  </div>
+  <div class="bg-white rounded-2xl border border-line overflow-x-auto" id="tabla-general"></div>
+  <p class="text-xs text-ink-400 mt-2 px-1">El acumulado es <b>por equipo</b>: los sub-equipos (ej. Los Tigres del Callao A y B) acumulan de forma independiente. El detalle por categoría se ve entrando a cada una.</p>
+
+  <h2 class="font-display text-2xl tracking-wide mb-3 mt-8">CATEGORÍAS</h2>
+  <div class="space-y-2" id="torneo-cats"></div>
+</section>
+
+<!-- ============ P3+: CATEGORÍA ============ -->
+<section id="s-categoria" class="screen">
+  <button onclick="showScreen('s-torneo')" class="text-sm text-ink-500 mb-3 font-semibold">← INTI CUP ORO</button>
+  <div class="flex items-end justify-between flex-wrap gap-2 mb-4">
+    <div>
+      <h1 class="font-display text-4xl tracking-wide">CATEGORÍA 2017 / F7</h1>
+      <p class="text-ink-500 text-sm">13 – 19 de julio de 2026 · 8 equipos</p>
+    </div>
+  </div>
+  <div class="flex gap-1.5 mb-5 overflow-x-auto pb-1" id="cat-tabs"></div>
+
+  <!-- TAB: TABLA -->
+  <div id="tab-tabla" class="cattab">
+    <div class="flex items-center gap-2 mb-4 flex-wrap">
+      <button class="chip active border border-line rounded-full px-4 py-1.5 text-sm font-semibold">Fase de Grupos</button>
+      <button class="chip border border-line rounded-full px-4 py-1.5 text-sm font-semibold text-ink-500" onclick="showTab('llaves')">Copa Oro</button>
+      <label class="ml-auto flex items-center gap-2 text-sm text-ink-500 font-semibold">Clasificación por grupo
+        <span class="w-9 h-5 bg-brand-500 rounded-full relative"><span class="absolute right-0.5 top-0.5 w-4 h-4 bg-white rounded-full"></span></span>
+      </label>
+    </div>
+    <div id="tablas-zonas"></div>
+    <div class="flex gap-5 text-xs text-ink-400 mt-3 px-1">
+      <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-emerald-500 inline-block"></span>Clasifica a Copa Oro</span>
+      <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>G</span>
+      <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-slate-300 inline-block"></span>E</span>
+      <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-brand-500 inline-block"></span>P</span>
+    </div>
+  </div>
+
+  <!-- TAB: FIXTURE -->
+  <div id="tab-fixture" class="cattab hidden"><div id="fixture-body"></div></div>
+
+  <!-- TAB: LLAVES -->
+  <div id="tab-llaves" class="cattab hidden">
+    <p class="text-ink-500 text-sm mb-4">Copa Oro — clasifican los 2 primeros de cada zona</p>
+    <div id="bracket-body"></div>
+  </div>
+
+  <!-- TAB: ESTADÍSTICAS -->
+  <div id="tab-stats" class="cattab hidden">
+    <div class="flex gap-1.5 mb-4">
+      <button id="stat-gol" onclick="renderStats('gol')" class="chip active border border-line rounded-full px-4 py-1.5 text-sm font-semibold">Goleadores ⚽</button>
+      <button id="stat-tar" onclick="renderStats('tar')" class="chip border border-line rounded-full px-4 py-1.5 text-sm font-semibold text-ink-500">Tarjetas 🟨🟥</button>
+    </div>
+    <div class="bg-white rounded-2xl border border-line" id="stats-body"></div>
+  </div>
+
+  <!-- TAB: EQUIPOS -->
+  <div id="tab-equipos" class="cattab hidden">
+    <div class="grid sm:grid-cols-2 gap-3" id="equipos-grid"></div>
+  </div>
+</section>
+
+<!-- ============ P6: PARTIDO ============ -->
+<section id="s-partido" class="screen">
+  <button onclick="backFromPartido()" class="text-sm text-ink-500 mb-3 font-semibold">← Volver</button>
+  <div id="partido-head"></div>
+  <div class="flex gap-1.5 my-4" id="partido-tabs"></div>
+  <div id="ptab-juego" class="ptab"></div>
+  <div id="ptab-comentarios" class="ptab hidden"></div>
+  <div id="ptab-medios" class="ptab hidden"></div>
+</section>
+
+<!-- ============ P9: EQUIPO ============ -->
+<section id="s-equipo" class="screen">
+  <button onclick="showScreen('s-categoria')" class="text-sm text-ink-500 mb-3 font-semibold">← Categoría 2017 / F7</button>
+  <div id="equipo-head"></div>
+  <div class="flex gap-1.5 my-4">
+    <button id="eqtab-jug" onclick="renderEquipoTab('jug')" class="tabbtn active rounded-xl px-4 py-2 text-sm font-bold border border-line">Jugadores</button>
+    <button id="eqtab-par" onclick="renderEquipoTab('par')" class="tabbtn rounded-xl px-4 py-2 text-sm font-bold border border-line text-ink-500">Partidos</button>
+  </div>
+  <div id="equipo-body"></div>
+</section>
+
+</main>
+
+<!-- ============ MODAL JUGADOR (P10) ============ -->
+<div id="modal" class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-4" onclick="if(event.target===this)closeModal()">
+  <div class="bg-white rounded-2xl max-w-md w-full max-h-[85vh] overflow-y-auto p-6" id="modal-body"></div>
+</div>
+
+<footer class="max-w-6xl mx-auto px-4 py-10 text-center text-xs text-ink-400">
+  Mockup módulo Público · Liguify Competencias · datos ficticios · diseño ref. liguifyv1.lovable.app
+</footer>
+
+<script>
+/* ================= DATA ================= */
+// Nivel 1: MARCAS (tenant) → Nivel 2: TORNEOS/circuitos → Nivel 3+4: CATEGORÍAS (año + modalidad)
+const MARCAS = [
+  { id:'inti', nombre:'INTI CUP', pais:'🇵🇪', color:'#d9232e', abbr:'INTI', activo:true, torneos:[
+    { id:'oro', nombre:'INTI CUP ORO', nota:'Circuito Oro · Lima', activo:true },
+    { id:'pnorte', nombre:'INTI CUP PLATA NORTE', nota:'Circuito Plata · Zona Norte', activo:false },
+    { id:'psur', nombre:'INTI CUP PLATA SUR', nota:'Circuito Plata · Zona Sur', activo:false },
+    { id:'inter', nombre:'INTI CUP INTERNACIONAL', nota:'Sedes internacionales · F7/F9/F11', activo:false },
+    { id:'form', nombre:'INTI CUP FORMATIVO', nota:'Nivel formativo', activo:false },
+  ]},
+  { id:'idv', nombre:'IDV LIMA', pais:'🇵🇪', color:'#1d4ed8', abbr:'IDV', activo:false, torneos:[
+    { id:'idv1', nombre:'IDV LIMA', nota:'Temporada 2026', activo:false },
+  ]},
+  { id:'nova', nombre:'NOVA CUP', pais:'🇵🇪', color:'#047857', abbr:'NOVA', activo:false, torneos:[
+    { id:'nova1', nombre:'NOVA CUP', nota:'Temporada 2026', activo:false },
+    { id:'novai', nombre:'NOVA CUP INTERNACIONAL', nota:'Sedes internacionales', activo:false },
+    { id:'novaf', nombre:'NOVA CUP FORMATIVO', nota:'Nivel formativo', activo:false },
+  ]},
+];
+// Categorías de INTI CUP ORO — la llave es (año + modalidad)
+const CATS = [
+  { id:'c2019', display:'Categoría 2019 / F7', activo:false },
+  { id:'c2018', display:'Categoría 2018 / F7', activo:false },
+  { id:'c2017', display:'Categoría 2017 / F7', activo:true },
+  { id:'c2016', display:'Categoría 2016 / F9', activo:false },
+  { id:'c2015', display:'Categoría 2015 / F9', activo:false },
+];
+// equipos: sub-equipos — Tigres A y B son el MISMO club maestro
+const EQ = {
+  acar:  { n:'ACAR', z:'A', c:'#1d4ed8', dot:null },
+  alsur: { n:'Alianza Lima Surquillo', z:'A', c:'#d9232e', dot:null },
+  sbsa:  { n:'Sport Boys Sor Ana', z:'A', c:'#7c3aed', dot:null },
+  amsmp: { n:'Amigos SMP', z:'A', c:'#0d9488', dot:null },
+  tiga:  { n:'Los Tigres del Callao', z:'B', c:'#16a34a', dot:'#e5e7eb', sub:'A' },
+  tigb:  { n:'Los Tigres del Callao', z:'B', c:'#16a34a', dot:'#f97316', sub:'B' },
+  atmi:  { n:'Atlético Micaela', z:'B', c:'#ca8a04', dot:null },
+  tcan:  { n:'Team Candela', z:'B', c:'#9f1239', dot:null },
+};
+// jugadores (roster completo solo equipos destacados; resto: goleadores)
+const JUG = {
+  // ACAR
+  j1:{e:'acar',n:'Gael Llallahui Diaz',d:9,pos:'Delantero',nac:'2017-03-11',cap:true},
+  j2:{e:'acar',n:'Fabio Alvitez Quispe',d:8,pos:'Mediocampo',nac:'2017-06-24'},
+  j3:{e:'acar',n:'Fabricio Gonzales Salazar',d:4,pos:'Defensa',nac:'2017-01-19'},
+  j4:{e:'acar',n:'Jhosep Gonzales Tapia',d:1,pos:'Arquero',nac:'2017-09-02'},
+  j5:{e:'acar',n:'Logan Raul Chahua Deza',d:11,pos:'Extremo',nac:'2017-04-15'},
+  j6:{e:'acar',n:'Luis David Cruz Julca',d:5,pos:'Defensa',nac:'2017-08-08'},
+  j7:{e:'acar',n:'Nicolás Valencia Lollo',d:6,pos:'Mediocampo',nac:'2017-11-30'},
+  j8:{e:'acar',n:'Paolo Flores Clavijo',d:10,pos:'Mediocampo',nac:'2017-02-17'},
+  j9:{e:'acar',n:'Sebastian Cedano Martínez',d:7,pos:'Extremo',nac:'2017-07-21'},
+  j10:{e:'acar',n:'Serchi Andia Castro',d:3,pos:'Defensa',nac:'2017-05-05'},
+  // ALSUR
+  k1:{e:'alsur',n:'Aymar Tantalean Villacrez',d:5,pos:'Mediocampo',nac:'2017-01-13',cap:true},
+  k2:{e:'alsur',n:'Abraham Chumbes Sajam',d:1,pos:'Arquero',nac:'2017-10-12'},
+  k3:{e:'alsur',n:'Cama Salvador Huamán',d:2,pos:'Defensa',nac:'2017-03-28'},
+  k4:{e:'alsur',n:'Diego Andre Masias',d:9,pos:'Delantero',nac:'2017-12-01'},
+  k5:{e:'alsur',n:'Endo Yasuaki Ipushima Mori',d:10,pos:'Mediocampo',nac:'2017-06-06'},
+  k6:{e:'alsur',n:'Thiago Rivas Ponce',d:7,pos:'Extremo',nac:'2017-04-23'},
+  k7:{e:'alsur',n:'Mateo Quispe Rojas',d:4,pos:'Defensa',nac:'2017-08-19'},
+  k8:{e:'alsur',n:'Ian Palacios Vega',d:11,pos:'Extremo',nac:'2017-02-09'},
+  // resto (goleadores / figuras)
+  m1:{e:'amsmp',n:'Thiago Zúñiga Unzueta',d:7,pos:'Delantero',nac:'2017-05-14'},
+  m2:{e:'amsmp',n:'Eyal Abril Vargas',d:10,pos:'Mediocampo',nac:'2017-09-27'},
+  m3:{e:'sbsa',n:'Victor Berveño Salcedo',d:11,pos:'Extremo',nac:'2017-07-03'},
+  t1:{e:'tiga',n:'Diego Peña Morales',d:9,pos:'Delantero',nac:'2017-01-25'},
+  t2:{e:'tiga',n:'Aldo Ríos Campos',d:10,pos:'Mediocampo',nac:'2017-03-08'},
+  t3:{e:'tiga',n:'Kevin Díaz Soto',d:7,pos:'Extremo',nac:'2017-10-30'},
+  u1:{e:'tigb',n:'Marco Ruiz Paredes',d:9,pos:'Delantero',nac:'2017-06-17'},
+  u2:{e:'tigb',n:'Bruno Lara Medina',d:8,pos:'Mediocampo',nac:'2017-02-22'},
+  v1:{e:'atmi',n:'Iván Soto Cárdenas',d:10,pos:'Mediocampo',nac:'2017-11-11'},
+  w1:{e:'tcan',n:'Luis Vera Castillo',d:9,pos:'Delantero',nac:'2017-04-04',cap:true},
+  w2:{e:'tcan',n:'Piero Salas Núñez',d:11,pos:'Extremo',nac:'2017-08-26'},
+  w3:{e:'tcan',n:'Dayiro Ancalla Calderón',d:27,pos:'Delantero',nac:'2017-12-15'},
+};
+// partidos — grupos (fase G) y Copa Oro (fase O)
+const PART = [
+  // Zona A
+  {id:'a1',f:'G',z:'A',fe:1,fecha:'13 jul',hora:'09:00',sede:'Arena 7 - Campo Azul 2',arb:'Diego Haro',l:'acar',v:'alsur',gl:2,gv:1,est:'finalizado'},
+  {id:'a2',f:'G',z:'A',fe:1,fecha:'13 jul',hora:'10:00',sede:'Arena 7 - Campo Azul 1',arb:'M. Garay',l:'sbsa',v:'amsmp',gl:0,gv:0,est:'finalizado'},
+  {id:'a3',f:'G',z:'A',fe:2,fecha:'14 jul',hora:'09:00',sede:'Arena 7 - Campo Azul 2',arb:'Diego Haro',l:'acar',v:'sbsa',gl:3,gv:0,est:'finalizado'},
+  {id:'a4',f:'G',z:'A',fe:2,fecha:'14 jul',hora:'10:00',sede:'Arena 7 - Campo Azul 1',arb:'M. Garay',l:'alsur',v:'amsmp',gl:2,gv:1,est:'finalizado'},
+  {id:'a5',f:'G',z:'A',fe:3,fecha:'15 jul',hora:'09:00',sede:'Arena 7 - Campo Azul 2',arb:'L. Ríos',l:'acar',v:'amsmp',gl:1,gv:1,est:'finalizado'},
+  {id:'a6',f:'G',z:'A',fe:3,fecha:'15 jul',hora:'10:00',sede:'Arena 7 - Campo Azul 1',arb:'Diego Haro',l:'alsur',v:'sbsa',gl:2,gv:0,est:'finalizado'},
+  // Zona B
+  {id:'b1',f:'G',z:'B',fe:1,fecha:'13 jul',hora:'11:00',sede:'Arena 7 - Campo Rojo 1',arb:'C. Palacios',l:'tiga',v:'atmi',gl:4,gv:0,est:'finalizado'},
+  {id:'b2',f:'G',z:'B',fe:1,fecha:'13 jul',hora:'12:00',sede:'Arena 7 - Campo Rojo 2',arb:'L. Ríos',l:'tigb',v:'tcan',gl:1,gv:2,est:'finalizado'},
+  {id:'b3',f:'G',z:'B',fe:2,fecha:'14 jul',hora:'11:00',sede:'Arena 7 - Campo Rojo 1',arb:'C. Palacios',l:'tiga',v:'tcan',gl:2,gv:2,est:'finalizado'},
+  {id:'b4',f:'G',z:'B',fe:2,fecha:'14 jul',hora:'12:00',sede:'Arena 7 - Campo Rojo 2',arb:'M. Garay',l:'tigb',v:'atmi',gl:3,gv:1,est:'finalizado'},
+  {id:'b5',f:'G',z:'B',fe:3,fecha:'15 jul',hora:'11:00',sede:'Arena 7 - Campo Rojo 1',arb:'Diego Haro',l:'tiga',v:'tigb',gl:1,gv:0,est:'finalizado'},
+  {id:'b6',f:'G',z:'B',fe:3,fecha:'15 jul',hora:'12:00',sede:'Arena 7 - Campo Rojo 2',arb:'L. Ríos',l:'atmi',v:'tcan',gl:0,gv:2,est:'finalizado'},
+  // Copa Oro
+  {id:'cf1',f:'O',etapa:'Semifinal #1 Copa Oro · 1º Zona A x 2º Zona B',fecha:'17 jul',hora:'10:00',sede:'Arena 7 - Campo Azul 1',arb:'Diego Haro',l:'acar',v:'tcan',gl:0,gv:0,pen:true,pl:3,pv:2,est:'finalizado'},
+  {id:'cf2',f:'O',etapa:'Semifinal #2 Copa Oro · 1º Zona B x 2º Zona A',fecha:'17 jul',hora:'11:00',sede:'Arena 7 - Campo Azul 2',arb:'C. Palacios',l:'tiga',v:'alsur',gl:2,gv:1,est:'finalizado'},
+  {id:'cf3',f:'O',etapa:'Tercer Puesto Copa Oro',fecha:'19 jul',hora:'17:00',sede:'Arena 7 - Campo Azul 1',arb:'M. Garay',l:'tcan',v:'alsur',gl:1,gv:1,est:'en_vivo',min:"2º 12'"},
+  {id:'cf4',f:'O',etapa:'Final Copa Oro',fecha:'19 jul',hora:'19:00',sede:'Arena 7 - Campo Azul 1',arb:'Diego Haro',l:'acar',v:'tiga',gl:null,gv:null,est:'programado'},
+];
+// eventos: tipo gol|amarilla|roja|asistencia — per/min
+const EV = [
+  // a1 ACAR 2-1 ALSUR (partido destacado — cargado EN VIVO, tiene asistencias)
+  {p:'a1',j:'j1',t:'gol',per:1,min:25},{p:'a1',j:'j2',t:'asistencia',per:1,min:25},
+  {p:'a1',j:'k1',t:'gol',per:2,min:8},{p:'a1',j:'k1',t:'amarilla',per:2,min:14},
+  {p:'a1',j:'j1',t:'gol',per:2,min:19},{p:'a1',j:'j5',t:'asistencia',per:2,min:19},
+  {p:'a1',j:'j8',t:'amarilla',per:2,min:23},
+  // a3 ACAR 3-0 SBSA
+  {p:'a3',j:'j8',t:'gol',per:1,min:12},{p:'a3',j:'j1',t:'gol',per:1,min:22},{p:'a3',j:'j5',t:'gol',per:2,min:9},{p:'a3',j:'j10',t:'roja',per:2,min:18},
+  // a4 ALSUR 2-1 AMSMP
+  {p:'a4',j:'k4',t:'gol',per:1,min:7},{p:'a4',j:'k4',t:'gol',per:2,min:11},{p:'a4',j:'m1',t:'gol',per:2,min:20},
+  // a5 ACAR 1-1 AMSMP
+  {p:'a5',j:'j8',t:'gol',per:1,min:15},{p:'a5',j:'m2',t:'gol',per:2,min:6},
+  // a6 ALSUR 2-0 SBSA
+  {p:'a6',j:'k5',t:'gol',per:1,min:18},{p:'a6',j:'k4',t:'gol',per:2,min:13},{p:'a6',j:'m3',t:'amarilla',per:2,min:21},
+  // b1 TIGA 4-0 ATMI
+  {p:'b1',j:'t1',t:'gol',per:1,min:5},{p:'b1',j:'t1',t:'gol',per:1,min:19},{p:'b1',j:'t2',t:'gol',per:2,min:3},{p:'b1',j:'t3',t:'gol',per:2,min:16},
+  // b2 TIGB 1-2 TCAN
+  {p:'b2',j:'u1',t:'gol',per:1,min:9},{p:'b2',j:'w1',t:'gol',per:1,min:24},{p:'b2',j:'w2',t:'gol',per:2,min:7},
+  // b3 TIGA 2-2 TCAN
+  {p:'b3',j:'t2',t:'gol',per:1,min:11},{p:'b3',j:'w1',t:'gol',per:1,min:21},{p:'b3',j:'t1',t:'gol',per:2,min:4},{p:'b3',j:'w1',t:'gol',per:2,min:22},{p:'b3',j:'w1',t:'amarilla',per:2,min:25},
+  // b4 TIGB 3-1 ATMI
+  {p:'b4',j:'u1',t:'gol',per:1,min:8},{p:'b4',j:'u2',t:'gol',per:1,min:17},{p:'b4',j:'u1',t:'gol',per:2,min:12},{p:'b4',j:'v1',t:'gol',per:2,min:19},
+  // b5 TIGA 1-0 TIGB
+  {p:'b5',j:'t2',t:'gol',per:2,min:14},{p:'b5',j:'u2',t:'amarilla',per:2,min:20},
+  // b6 ATMI 0-2 TCAN
+  {p:'b6',j:'w3',t:'gol',per:1,min:13},{p:'b6',j:'w2',t:'gol',per:2,min:10},{p:'b6',j:'v1',t:'amarilla',per:1,min:22},
+  // cf2 TIGA 2-1 ALSUR
+  {p:'cf2',j:'t1',t:'gol',per:1,min:16},{p:'cf2',j:'k1',t:'gol',per:2,min:5},{p:'cf2',j:'t3',t:'gol',per:2,min:21},
+  // cf3 EN VIVO TCAN 1-1 ALSUR
+  {p:'cf3',j:'w1',t:'gol',per:1,min:10},{p:'cf3',j:'k4',t:'gol',per:1,min:23},{p:'cf3',j:'k4',t:'asistencia',per:1,min:10},
+];
+// alineación del partido destacado a1 (F7: 7 titulares)
+const ALINEACION = { a1: {
+  l:{tit:['j4','j3','j6','j10','j2','j8','j1'],sup:['j5','j7','j9']},
+  v:{tit:['k2','k3','k7','k1','k5','k6','k4'],sup:['k8']}
+}};
+const COMENTARIOS = { a1:[
+  {a:'Mesa de Control',x:'Arranca el segundo tiempo en Campo Azul 2.',t:'13 jul 09:32'},
+  {a:'INTI CUP Oficial',x:'¡Doblete de Gael Llallahui para el triunfo de ACAR! 🔵',t:'13 jul 10:05'},
+]};
+
+/* ================= HELPERS ================= */
+const eqBadge = (id,sz=7) => { const e=EQ[id]; return `<span class="relative inline-grid place-items-center w-${sz} h-${sz} rounded-lg text-white font-bold" style="background:${e.c};font-size:${sz>=9?13:10}px">${e.n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}${e.dot?`<span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white" style="background:${e.dot}"></span>`:''}</span>`; };
+const eqNom = id => EQ[id].n + (EQ[id].sub? ' '+EQ[id].sub : '');
+const edad = nac => Math.floor((new Date('2026-07-19') - new Date(nac)) / 3.15576e10);
+const iniciales = n => n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+
+/* ================= TABLA GENERAL (acumulado multi-categoría, POR EQUIPO) ================= */
+// Standings de Categoría 2016/F9 (no navegable en la demo; alimenta el acumulado por equipo)
+// Cada sub-equipo (Tigres A / Tigres B) acumula de forma INDEPENDIENTE.
+const TABLA_2016 = [
+  {eq:'alsur',pj:3,pg:3,pe:0,pp:0,gf:9,gc:2,pts:9},
+  {eq:'tcan', pj:3,pg:2,pe:1,pp:0,gf:6,gc:2,pts:7},
+  {eq:'acar', pj:3,pg:2,pe:0,pp:1,gf:7,gc:4,pts:6},
+  {eq:'tiga', pj:3,pg:1,pe:2,pp:0,gf:5,gc:3,pts:5},
+  {eq:'sbsa', pj:3,pg:1,pe:1,pp:1,gf:4,gc:4,pts:4},
+  {eq:'tigb', pj:3,pg:1,pe:0,pp:2,gf:3,gc:6,pts:3},
+  {eq:'amsmp',pj:3,pg:0,pe:1,pp:2,gf:2,gc:6,pts:1},
+  {eq:'atmi', pj:3,pg:0,pe:0,pp:3,gf:1,gc:9,pts:0},
+];
+function tablaGeneral(){
+  const acc = {};
+  const add = (k,r)=>{ const a=acc[k]=acc[k]||{eq:k,pj:0,pg:0,pe:0,pp:0,gf:0,gc:0,pts:0,cats:new Set()};
+    a.pj+=r.pj;a.pg+=r.pg;a.pe+=r.pe;a.pp+=r.pp;a.gf+=r.gf;a.gc+=r.gc;a.pts+=r.pts;a.cats.add(r.cat); };
+  // Categoría 2017/F7 — calculada en vivo desde los partidos (llave = equipo/sub-equipo)
+  ['A','B'].forEach(z=>tablaZona(z).forEach(r=>add(r.id,{...r,cat:'2017'})));
+  // Categoría 2016/F9 — standings precargados
+  TABLA_2016.forEach(r=>add(r.eq,{...r,cat:'2016'}));
+  return Object.values(acc).map(x=>({...x,dg:x.gf-x.gc,ncats:x.cats.size}))
+    .sort((a,b)=>b.pts-a.pts||b.dg-a.dg||b.gf-a.gf);
+}
+function renderTablaGeneral(){
+  document.getElementById('tabla-general').innerHTML = `<table class="w-full min-w-[640px]">
+    <thead><tr class="text-[10px] uppercase text-ink-400 border-b border-line tracking-wider">
+      <th class="py-2.5">#</th><th class="text-left">Equipo</th><th class="w-12">Cat.</th><th class="w-8">PJ</th><th class="w-8">PG</th><th class="w-8">PE</th><th class="w-8">PP</th><th class="w-8">GF</th><th class="w-8">GC</th><th class="w-10">DG</th><th class="w-12">PTS</th>
+    </tr></thead>
+    <tbody>${tablaGeneral().map((r,i)=>`
+      <tr class="border-b border-line last:border-0 hover:bg-paper ${i===0?'border-l-4 border-l-amber-400':'border-l-4 border-l-transparent'}">
+        <td class="py-2.5 pl-2 pr-1 text-ink-400 font-bold text-center w-8">${i+1}</td>
+        <td class="py-2 pr-2"><div class="flex items-center gap-2.5 font-semibold text-sm">${eqBadge(r.eq)}<span>${eqNom(r.eq)}</span></div></td>
+        <td class="text-center text-xs text-ink-400 font-semibold">${r.ncats}</td>
+        <td class="text-center text-sm">${r.pj}</td><td class="text-center text-sm text-ink-400">${r.pg}</td>
+        <td class="text-center text-sm text-ink-400">${r.pe}</td><td class="text-center text-sm text-ink-400">${r.pp}</td>
+        <td class="text-center text-sm text-ink-400">${r.gf}</td><td class="text-center text-sm text-ink-400">${r.gc}</td>
+        <td class="text-center text-sm font-semibold ${r.dg>0?'text-emerald-600':r.dg<0?'text-brand-600':'text-ink-400'}">${r.dg>0?'+':''}${r.dg}</td>
+        <td class="text-center font-extrabold">${r.pts}</td>
+      </tr>`).join('')}</tbody></table>`;
+}
+
+/* ================= CÁLCULOS ================= */
+function tablaZona(z){
+  const ids = Object.keys(EQ).filter(k=>EQ[k].z===z);
+  const t = {}; ids.forEach(id=>t[id]={id,pj:0,pg:0,pe:0,pp:0,gf:0,gc:0,pts:0,forma:[]});
+  PART.filter(m=>m.f==='G'&&m.z===z&&m.est==='finalizado').sort((a,b)=>a.fe-b.fe).forEach(m=>{
+    const L=t[m.l],V=t[m.v];
+    L.pj++;V.pj++;L.gf+=m.gl;L.gc+=m.gv;V.gf+=m.gv;V.gc+=m.gl;
+    if(m.gl>m.gv){L.pg++;L.pts+=3;V.pp++;L.forma.push('G');V.forma.push('P');}
+    else if(m.gl<m.gv){V.pg++;V.pts+=3;L.pp++;V.forma.push('G');L.forma.push('P');}
+    else {L.pe++;V.pe++;L.pts++;V.pts++;L.forma.push('E');V.forma.push('E');}
+  });
+  return Object.values(t).map(x=>({...x,dg:x.gf-x.gc})).sort((a,b)=>b.pts-a.pts||b.dg-a.dg||b.gf-a.gf);
+}
+function statsJugador(jid){
+  const s={gol:0,ama:0,roj:0,asi:0};
+  EV.filter(e=>e.j===jid).forEach(e=>{ if(e.t==='gol')s.gol++; if(e.t==='amarilla')s.ama++; if(e.t==='roja')s.roj++; if(e.t==='asistencia')s.asi++; });
+  const eq=JUG[jid].e;
+  s.jue = PART.filter(m=>(m.l===eq||m.v===eq)&&m.est!=='programado').length; // aprox demo
+  return s;
+}
+
+/* ================= RENDER: CATÁLOGO (MARCAS) ================= */
+function renderCatalogo(){
+  document.getElementById('catalogo-grid').innerHTML = MARCAS.map(m=>`
+    <button onclick="openMarca('${m.id}')"
+      class="bg-white border border-line rounded-2xl p-5 text-left hover:shadow-md hover:-translate-y-0.5 transition ${m.activo?'':'opacity-70'}">
+      <div class="w-16 h-16 rounded-2xl grid place-items-center text-white font-display text-2xl mb-3" style="background:${m.color}">${m.abbr}</div>
+      <p class="font-bold text-sm leading-tight">${m.pais} ${m.nombre}</p>
+      <p class="text-xs text-ink-400 mt-1">${m.torneos.length} torneo${m.torneos.length>1?'s':''} · ${m.activo?'En curso':'Próximamente'}</p>
+    </button>`).join('');
+}
+
+/* ================= RENDER: MARCA ================= */
+let currentMarca='inti';
+function openMarca(id){
+  currentMarca=id; const m=MARCAS.find(x=>x.id===id);
+  document.getElementById('marca-wm').textContent=m.abbr;
+  document.getElementById('marca-meta').textContent=`${m.pais} MARCA ORGANIZADORA · TEMPORADA 2026`;
+  document.getElementById('marca-nombre').textContent=m.nombre;
+  document.getElementById('marca-sub').textContent=`${m.torneos.length} torneos / circuitos · Powered by Liguify`;
+  document.getElementById('marca-torneos').innerHTML=m.torneos.map(t=>`
+    <button onclick="${t.activo?`openTorneo()`:`alert('Demo: solo INTI CUP ORO tiene datos cargados.')`}"
+      class="w-full bg-white border border-line rounded-2xl px-5 py-4 flex items-center gap-4 hover:shadow-md transition text-left ${t.activo?'':'opacity-60'}">
+      <span class="w-11 h-11 rounded-xl grid place-items-center text-white font-display text-sm" style="background:${m.color}">${t.nombre.replace(m.nombre,'').trim().slice(0,4)||m.abbr}</span>
+      <span class="flex-1">
+        <span class="font-bold block">${t.nombre}</span>
+        <span class="text-xs text-ink-400">${t.nota}${t.activo?' · En curso':''}</span>
+      </span>
+      <span class="text-ink-400">→</span>
+    </button>`).join('');
+  setBrand(false, m);
+  showScreen('s-marca');
+}
+
+/* ================= RENDER: TORNEO ================= */
+function renderTorneo(){
+  const jug = Object.keys(JUG).length, gol = EV.filter(e=>e.t==='gol').length;
+  document.getElementById('torneo-stats').innerHTML = [
+    ['Equipos',8],['Jugadores',jug+'+'],['Partidos',PART.length],['Goles',gol+'+']
+  ].map(([l,v])=>`<div><p class="font-display text-4xl">${v}</p><p class="text-[11px] text-white/50 uppercase tracking-widest font-semibold">${l}</p></div>`).join('');
+  document.getElementById('torneo-cats').innerHTML = CATS.map(c=>`
+    <button onclick="${c.activo?`openCategoria()`:`alert('Demo: solo Categoría 2017 / F7 tiene datos cargados.')`}"
+      class="w-full bg-white border border-line rounded-2xl px-5 py-4 flex items-center gap-4 hover:shadow-md transition text-left ${c.activo?'':'opacity-60'}">
+      <span class="w-11 h-11 rounded-xl bg-ink-900 text-white font-display grid place-items-center text-lg">${c.display.match(/\d{4}/)[0].slice(2)}</span>
+      <span class="flex-1">
+        <span class="font-bold block">${c.display}</span>
+        <span class="text-xs text-ink-400">13 de julio de 2026 – 19 de julio de 2026</span>
+      </span>
+      <span class="text-ink-400">→</span>
+    </button>`).join('');
+}
+
+/* ================= RENDER: CATEGORÍA / TABLA ================= */
+const CAT_TABS = [['tabla','Tabla'],['fixture','Fixture'],['llaves','Llaves'],['stats','Estadísticas'],['equipos','Equipos']];
+function renderCatTabs(active){
+  document.getElementById('cat-tabs').innerHTML = CAT_TABS.map(([id,l])=>
+    `<button onclick="showTab('${id}')" class="tabbtn ${id===active?'active':''} rounded-xl px-4 py-2 text-sm font-bold border border-line ${id===active?'':'text-ink-500 bg-white'} whitespace-nowrap">${l}</button>`).join('');
+}
+function showTab(id){
+  renderCatTabs(id);
+  document.querySelectorAll('.cattab').forEach(t=>t.classList.add('hidden'));
+  document.getElementById('tab-'+({tabla:'tabla',fixture:'fixture',llaves:'llaves',stats:'stats',equipos:'equipos'}[id])).classList.remove('hidden');
+  if(id==='stats') renderStats('gol');
+}
+const formaChips = f => f.slice(-5).map(x=>`<span class="inline-grid place-items-center w-5 h-5 rounded-full text-[10px] font-bold text-white ${x==='G'?'bg-emerald-500':x==='E'?'bg-slate-300':'bg-brand-500'}">${x}</span>`).join(' ');
+function renderTablas(){
+  document.getElementById('tablas-zonas').innerHTML = ['A','B'].map(z=>{
+    const rows = tablaZona(z).map((r,i)=>`
+      <tr class="border-b border-line last:border-0 hover:bg-paper ${i<2?'border-l-4 border-l-emerald-500':'border-l-4 border-l-transparent'}">
+        <td class="py-2.5 pl-2 pr-1 text-ink-400 font-bold text-center w-8">${i+1}</td>
+        <td class="py-2 pr-2"><button onclick="openEquipo('${r.id}')" class="flex items-center gap-2.5 font-semibold text-sm hover:text-brand-600">${eqBadge(r.id)}<span>${eqNom(r.id)}</span></button></td>
+        <td class="text-center text-sm">${r.pj}</td><td class="text-center text-sm text-ink-400">${r.pg}</td>
+        <td class="text-center text-sm text-ink-400">${r.pe}</td><td class="text-center text-sm text-ink-400">${r.pp}</td>
+        <td class="text-center text-sm text-ink-400">${r.gf}</td><td class="text-center text-sm text-ink-400">${r.gc}</td>
+        <td class="text-center text-sm font-semibold ${r.dg>0?'text-emerald-600':r.dg<0?'text-brand-600':'text-ink-400'}">${r.dg>0?'+':''}${r.dg}</td>
+        <td class="text-center font-extrabold">${r.pts}</td>
+        <td class="text-center whitespace-nowrap px-2">${formaChips(r.forma)}</td>
+      </tr>`).join('');
+    return `<div class="bg-white rounded-2xl border border-line mb-4 overflow-x-auto">
+      <div class="px-4 py-3 border-b border-line font-display text-xl tracking-wide">ZONA ${z}</div>
+      <table class="w-full min-w-[640px]">
+        <thead><tr class="text-[10px] uppercase text-ink-400 border-b border-line tracking-wider">
+          <th class="py-2">#</th><th class="text-left">Equipo</th><th class="w-8">PJ</th><th class="w-8">PG</th><th class="w-8">PE</th><th class="w-8">PP</th><th class="w-8">GF</th><th class="w-8">GC</th><th class="w-10">DG</th><th class="w-10">PTS</th><th class="w-32">Forma</th>
+        </tr></thead><tbody>${rows}</tbody></table></div>`;
+  }).join('');
+}
+
+/* ================= RENDER: FIXTURE ================= */
+function cardPartido(m){
+  const fin = m.est==='finalizado', vivo = m.est==='en_vivo';
+  const centro = fin||vivo
+    ? `<div class="text-center"><span class="font-display text-3xl tracking-wider">${m.gl} : ${m.gv}</span>${m.pen?`<p class="text-[11px] text-ink-400 -mt-1">penales ${m.pl} x ${m.pv}</p>`:''}${vivo?`<p class="text-[11px] text-brand-600 font-bold">${m.min}</p>`:''}</div>`
+    : `<div class="text-center text-xs text-ink-400 font-semibold leading-tight">${m.fecha}<br>${m.hora}</div>`;
+  const estado = vivo
+    ? `<span class="flex items-center gap-1.5 text-[10px] font-bold text-brand-600"><span class="live-dot"></span>EN VIVO</span>`
+    : `<span class="text-[10px] font-bold ${fin?'text-emerald-600':'text-ink-400'} uppercase">${fin?'Finalizado':'Programado'}</span>`;
+  return `<button onclick="openPartido('${m.id}')" class="w-full bg-white border border-line rounded-2xl px-4 py-3 mb-2 hover:shadow-md transition text-left">
+    <div class="flex items-center justify-between text-[11px] text-ink-400 mb-2">
+      <span>📍 ${m.sede}</span>${m.etapa?`<span class="font-semibold text-amber-600">🏆 ${m.etapa.split('·')[0]}</span>`:''}${estado}
+    </div>
+    <div class="flex items-center">
+      <div class="flex-1 flex items-center justify-end gap-2 text-sm ${fin&&(m.pen?m.pl>m.pv:m.gl>m.gv)?'font-bold':''}">${eqNom(m.l)} ${eqBadge(m.l)}</div>
+      <div class="w-24">${centro}</div>
+      <div class="flex-1 flex items-center gap-2 text-sm ${fin&&(m.pen?m.pv>m.pl:m.gv>m.gl)?'font-bold':''}">${eqBadge(m.v)} ${eqNom(m.v)}</div>
+    </div>
+  </button>`;
+}
+function renderFixture(){
+  let html='';
+  [1,2,3].forEach(fe=>{
+    html+=`<p class="font-display text-xl tracking-wide mb-2 mt-4">FECHA ${fe} <span class="text-sm text-ink-400 font-sans font-semibold">· Fase de Grupos</span></p>`;
+    html+=PART.filter(m=>m.f==='G'&&m.fe===fe).map(cardPartido).join('');
+  });
+  html+=`<p class="font-display text-xl tracking-wide mb-2 mt-6 text-amber-600">COPA ORO</p>`;
+  html+=PART.filter(m=>m.f==='O').map(cardPartido).join('');
+  document.getElementById('fixture-body').innerHTML=html;
+}
+
+/* ================= RENDER: LLAVES ================= */
+function miniLlave(m,titulo){
+  const fin=m.est==='finalizado', vivo=m.est==='en_vivo';
+  const marcador = id => fin||vivo ? (id===m.l?m.gl:m.gv) : '–';
+  const pen = id => m.pen ? `<span class="text-[10px] text-ink-400 ml-1">(${id===m.l?m.pl:m.pv})</span>` : '';
+  const gana = id => fin && ((m.pen? (id===m.l?m.pl>m.pv:m.pv>m.pl) : (id===m.l?m.gl>m.gv:m.gv>m.gl)));
+  return `<button onclick="openPartido('${m.id}')" class="bg-white border border-line rounded-2xl p-4 w-full text-left hover:shadow-md transition">
+    <p class="text-[10px] font-bold uppercase tracking-wider ${vivo?'text-brand-600':'text-ink-400'} mb-2">${vivo?'● EN VIVO · ':''}${titulo} · ${m.fecha} ${m.hora}</p>
+    ${[m.l,m.v].map(id=>`<div class="flex items-center gap-2 py-1 ${gana(id)?'font-bold':''}">${eqBadge(id,7)}<span class="text-sm flex-1">${eqNom(id)}</span><span class="font-display text-xl">${marcador(id)}</span>${pen(id)}</div>`).join('')}
+  </button>`;
+}
+function renderBracket(){
+  document.getElementById('bracket-body').innerHTML = `
+    <div class="grid md:grid-cols-3 gap-4 items-center">
+      <div class="space-y-4">${miniLlave(PART.find(p=>p.id==='cf1'),'Semifinal #1')}${miniLlave(PART.find(p=>p.id==='cf2'),'Semifinal #2')}</div>
+      <div>${miniLlave(PART.find(p=>p.id==='cf4'),'🏆 Final')}</div>
+      <div>${miniLlave(PART.find(p=>p.id==='cf3'),'Tercer Puesto')}</div>
+    </div>`;
+}
+
+/* ================= RENDER: STATS ================= */
+function renderStats(tipo){
+  document.getElementById('stat-gol').classList.toggle('active',tipo==='gol');
+  document.getElementById('stat-tar').classList.toggle('active',tipo==='tar');
+  let rows;
+  if(tipo==='gol'){
+    const g={}; EV.filter(e=>e.t==='gol').forEach(e=>g[e.j]=(g[e.j]||0)+1);
+    rows = Object.entries(g).map(([j,n])=>({j,n})).sort((a,b)=>b.n-a.n).slice(0,10)
+      .map((r,i)=>{const p=JUG[r.j];return `<button onclick="openJugador('${r.j}')" class="w-full flex items-center gap-3 px-4 py-2.5 border-b border-line last:border-0 hover:bg-paper text-left">
+        <span class="w-5 text-ink-400 font-bold text-center text-sm">${i+1}</span>
+        <span class="w-9 h-9 rounded-full bg-ink-900 text-white grid place-items-center text-xs font-bold">${iniciales(p.n)}</span>
+        <span class="flex-1"><span class="font-semibold text-sm block">${p.n}</span><span class="text-xs text-ink-400 flex items-center gap-1.5">${eqBadge(p.e,4)} ${eqNom(p.e)}</span></span>
+        <span class="font-display text-2xl">${r.n}</span></button>`;}).join('');
+  } else {
+    const g={}; EV.filter(e=>e.t==='amarilla'||e.t==='roja').forEach(e=>{g[e.j]=g[e.j]||{y:0,r:0}; e.t==='amarilla'?g[e.j].y++:g[e.j].r++;});
+    rows = Object.entries(g).map(([j,v])=>({j,...v})).sort((a,b)=>(b.r*2+b.y)-(a.r*2+a.y))
+      .map(r=>{const p=JUG[r.j];return `<button onclick="openJugador('${r.j}')" class="w-full flex items-center gap-3 px-4 py-2.5 border-b border-line last:border-0 hover:bg-paper text-left">
+        <span class="w-9 h-9 rounded-full bg-ink-900 text-white grid place-items-center text-xs font-bold">${iniciales(p.n)}</span>
+        <span class="flex-1"><span class="font-semibold text-sm block">${p.n}</span><span class="text-xs text-ink-400 flex items-center gap-1.5">${eqBadge(p.e,4)} ${eqNom(p.e)}</span></span>
+        ${r.y?`<span class="px-2 py-0.5 rounded-md bg-yellow-300 text-yellow-900 text-xs font-bold">${r.y} 🟨</span>`:''}
+        ${r.r?`<span class="px-2 py-0.5 rounded-md bg-brand-500 text-white text-xs font-bold">${r.r} 🟥</span>`:''}</button>`;}).join('');
+  }
+  document.getElementById('stats-body').innerHTML = rows || '<p class="p-4 text-sm text-ink-400">Sin registros.</p>';
+}
+
+/* ================= RENDER: EQUIPOS GRID ================= */
+function renderEquiposGrid(){
+  document.getElementById('equipos-grid').innerHTML = Object.keys(EQ).map(id=>`
+    <button onclick="openEquipo('${id}')" class="bg-white border border-line rounded-2xl p-4 flex items-center gap-3 hover:shadow-md transition text-left">
+      ${eqBadge(id,9)}
+      <span class="flex-1"><span class="font-bold text-sm block">${eqNom(id)}</span><span class="text-xs text-ink-400">Zona ${EQ[id].z}${EQ[id].sub?` · Sub-equipo ${EQ[id].sub}`:''}</span></span>
+      <span class="text-ink-400">→</span>
+    </button>`).join('');
+}
+
+/* ================= RENDER: PARTIDO ================= */
+let currentPartido=null, fromScreen='s-categoria';
+function openPartido(id){
+  currentPartido=id; const m=PART.find(x=>x.id===id);
+  const fin=m.est==='finalizado', vivo=m.est==='en_vivo';
+  document.getElementById('partido-head').innerHTML = `
+    <div class="bg-ink-900 text-white rounded-2xl p-6">
+      <p class="text-[11px] text-white/50 uppercase tracking-widest font-semibold mb-4">INTI CUP ORO · CATEGORÍA 2017/F7 ${m.etapa?'· '+m.etapa:'· Fase de Grupos Zona '+m.z+' · Fecha '+m.fe} · 📍 ${m.sede} · 👤 ${m.arb}</p>
+      <div class="flex items-center">
+        <div class="flex-1 text-center"><div class="inline-block">${eqBadge(m.l,9)}</div><p class="font-bold text-sm mt-2">${eqNom(m.l)}</p></div>
+        <div class="w-40 text-center">
+          ${vivo?`<p class="flex items-center justify-center gap-1.5 text-[11px] font-bold text-brand-500 mb-1"><span class="live-dot"></span>EN VIVO · ${m.min}</p>`
+            :`<p class="text-[11px] font-bold ${fin?'text-emerald-400':'text-white/40'} uppercase mb-1">${fin?'Finalizado':'Programado · '+m.fecha+' '+m.hora}</p>`}
+          <p class="font-display text-6xl tracking-wider">${m.gl??'–'} : ${m.gv??'–'}</p>
+          ${m.pen?`<p class="text-xs text-white/50 mt-1">definición por penales ${m.pl} x ${m.pv}</p>`:''}
+        </div>
+        <div class="flex-1 text-center"><div class="inline-block">${eqBadge(m.v,9)}</div><p class="font-bold text-sm mt-2">${eqNom(m.v)}</p></div>
+      </div>
+    </div>`;
+  document.getElementById('partido-tabs').innerHTML = [['juego','Juego'],['comentarios','Comentarios'],['medios','Medios']].map(([t,l],i)=>
+    `<button id="pt-${t}" onclick="showPTab('${t}')" class="tabbtn ${i===0?'active':''} rounded-xl px-4 py-2 text-sm font-bold border border-line ${i===0?'':'text-ink-500 bg-white'}">${l}</button>`).join('');
+  renderPTabJuego(m); renderPTabComentarios(m); renderPTabMedios(m);
+  showPTab('juego'); showScreen('s-partido');
+}
+function showPTab(t){
+  ['juego','comentarios','medios'].forEach(x=>{
+    document.getElementById('pt-'+x).classList.toggle('active',x===t);
+    document.getElementById('ptab-'+x).classList.toggle('hidden',x!==t);
+  });
+}
+function iconosJugadorEnPartido(jid,pid){
+  return EV.filter(e=>e.p===pid&&e.j===jid&&e.t!=='asistencia').map(e=>e.t==='gol'?'⚽':e.t==='amarilla'?'🟨':'🟥').join('');
+}
+function renderPTabJuego(m){
+  let html='';
+  const al=ALINEACION[m.id];
+  if(al){
+    const col=(lado,tit)=>`<div>
+      <p class="text-xs font-bold uppercase tracking-wider text-ink-400 mb-2">${eqNom(lado===al.l?m.l:m.v)}</p>
+      ${lado.tit.map(j=>`<button onclick="openJugador('${j}')" class="w-full flex items-center gap-2 py-1.5 border-b border-line text-sm text-left hover:bg-paper"><span class="w-6 text-ink-400 font-bold">${JUG[j].d}</span><span class="flex-1 font-semibold">${JUG[j].n}</span><span>${iconosJugadorEnPartido(j,m.id)}</span></button>`).join('')}
+      <p class="text-[10px] font-bold uppercase bg-ink-900 text-white rounded px-2 py-1 mt-2 mb-1 inline-block">Suplentes</p>
+      ${lado.sup.map(j=>`<button onclick="openJugador('${j}')" class="w-full flex items-center gap-2 py-1.5 border-b border-line last:border-0 text-sm text-ink-500 text-left hover:bg-paper"><span class="w-6 text-ink-400 font-bold">${JUG[j].d}</span><span class="flex-1">${JUG[j].n}</span><span>${iconosJugadorEnPartido(j,m.id)}</span></button>`).join('')}
+    </div>`;
+    html+=`<div class="bg-white rounded-2xl border border-line p-5 mb-4">
+      <h3 class="font-display text-xl tracking-wide mb-3">ALINEACIÓN</h3>
+      <div class="grid sm:grid-cols-2 gap-6">${col(al.l)}${col(al.v)}</div></div>`;
+  }
+  const evs=EV.filter(e=>e.p===m.id&&e.t!=='asistencia').sort((a,b)=>b.per-a.per||b.min-a.min);
+  if(evs.length){
+    html+=`<div class="bg-white rounded-2xl border border-line p-5">
+      <h3 class="font-display text-xl tracking-wide mb-3">JUGADAS DEL PARTIDO</h3>
+      ${evs.map(e=>{
+        const p=JUG[e.j]; const esLocal=p.e===m.l;
+        const asis=e.t==='gol'?EV.find(a=>a.p===m.id&&a.t==='asistencia'&&a.per===e.per&&a.min===e.min):null;
+        const icono=e.t==='gol'?'<span class="text-emerald-500 text-2xl">⚽</span>':e.t==='amarilla'?'<span class="text-2xl">🟨</span>':'<span class="text-2xl">🟥</span>';
+        const label=e.t==='gol'?'<b class="text-emerald-600">GOOL!</b>':e.t==='amarilla'?'<b class="text-yellow-600">TARJETA</b>':'<b class="text-brand-600">TARJETA ROJA</b>';
+        const bloque=`<div class="flex items-center gap-3 ${esLocal?'':'flex-row-reverse text-right'}">
+          ${icono}
+          <span class="w-9 h-9 rounded-full bg-ink-900 text-white grid place-items-center text-xs font-bold shrink-0">${iniciales(p.n)}</span>
+          <span class="text-sm">${label}<br><button onclick="openJugador('${e.j}')" class="font-semibold hover:text-brand-600">${p.n}</button>${asis?`<span class="text-xs text-ink-400"> · Asist: ${JUG[asis.j].n.split(' ')[0]}</span>`:''}</span>
+        </div>`;
+        return `<div class="flex items-center justify-between py-2.5 border-b border-line last:border-0 ${esLocal?'':'flex-row-reverse'}">
+          <span class="text-xs font-bold text-ink-400 w-16 ${esLocal?'':'text-right'}">⏱ ${e.per}º ${e.min}'0"</span>${bloque}<span class="w-16"></span>
+        </div>`;
+      }).join('')}</div>`;
+  }
+  if(!html) html='<div class="bg-white rounded-2xl border border-line p-8 text-center text-ink-400 text-sm">Partido aún no iniciado. La alineación y las jugadas aparecerán aquí en vivo.</div>';
+  document.getElementById('ptab-juego').innerHTML=html;
+}
+function renderPTabComentarios(m){
+  const cs=COMENTARIOS[m.id]||[];
+  document.getElementById('ptab-comentarios').innerHTML = `<div class="bg-white rounded-2xl border border-line p-5">
+    ${cs.length?cs.map(c=>`<div class="py-3 border-b border-line last:border-0"><p class="text-sm">${c.x}</p><p class="text-xs text-ink-400 mt-1">${c.a} · ${c.t}</p></div>`).join(''):'<p class="text-sm text-ink-400">Sin comentarios.</p>'}
+  </div>`;
+}
+function renderPTabMedios(m){
+  document.getElementById('ptab-medios').innerHTML = `<div class="bg-white rounded-2xl border border-line p-5">
+    <div class="grid grid-cols-3 gap-2">${[1,2,3].map(()=>`<div class="aspect-video bg-paper border border-line rounded-xl grid place-items-center text-2xl">📷</div>`).join('')}</div>
+    <p class="text-xs text-ink-400 mt-3">Fotos y videos subidos por la Mesa de Control (demo).</p></div>`;
+}
+function backFromPartido(){ showScreen(fromScreen); }
+
+/* ================= RENDER: EQUIPO ================= */
+let currentEquipo=null;
+function openEquipo(id){
+  currentEquipo=id; const e=EQ[id];
+  document.getElementById('equipo-head').innerHTML=`
+    <div class="bg-ink-900 text-white rounded-2xl p-6 flex items-center gap-4">
+      ${eqBadge(id,9)}
+      <div><h1 class="font-display text-3xl tracking-wide">${eqNom(id).toUpperCase()}</h1>
+      <p class="text-white/50 text-sm">Zona ${e.z} · Categoría 2017/F7 · INTI CUP ORO${e.sub?` · Sub-equipo ${e.sub} <span class="inline-block w-3 h-3 rounded-full align-middle border border-white/40" style="background:${e.dot}"></span>`:''}</p></div>
+    </div>`;
+  renderEquipoTab('jug'); showScreen('s-equipo');
+}
+function renderEquipoTab(t){
+  document.getElementById('eqtab-jug').classList.toggle('active',t==='jug');
+  document.getElementById('eqtab-par').classList.toggle('active',t==='par');
+  const body=document.getElementById('equipo-body');
+  if(t==='jug'){
+    const js=Object.entries(JUG).filter(([,p])=>p.e===currentEquipo);
+    body.innerHTML=`<div class="bg-white rounded-2xl border border-line overflow-x-auto"><table class="w-full min-w-[560px]">
+      <thead><tr class="text-[10px] uppercase text-ink-400 border-b border-line tracking-wider text-left"><th class="py-2.5 pl-4 w-10">#</th><th>Jugador</th><th>Posición</th><th class="text-center">Goles</th><th class="text-center">Juegos</th><th class="text-center">🟨</th><th class="text-center">🟥</th></tr></thead>
+      <tbody>${js.map(([id,p])=>{const s=statsJugador(id);return `<tr class="border-b border-line last:border-0 hover:bg-paper cursor-pointer" onclick="openJugador('${id}')">
+        <td class="py-2.5 pl-4 font-bold text-ink-400">${p.d}</td>
+        <td class="font-semibold text-sm">${p.n} ${p.cap?'<span class="text-[9px] bg-ink-900 text-white rounded px-1.5 py-0.5 ml-1 font-bold">C</span>':''}</td>
+        <td class="text-ink-400 text-sm">${p.pos}</td>
+        <td class="text-center font-bold">${s.gol||''}</td><td class="text-center text-ink-400 text-sm">${s.jue}</td>
+        <td class="text-center text-sm">${s.ama||''}</td><td class="text-center text-sm">${s.roj||''}</td></tr>`;}).join('')}</tbody></table>
+      ${js.length<8?'<p class="text-xs text-ink-400 px-4 py-3">Demo: plantel parcial — la LBF completa se gestiona en el módulo Club.</p>':''}</div>`;
+  } else {
+    const ms=PART.filter(m=>m.l===currentEquipo||m.v===currentEquipo);
+    body.innerHTML=ms.map(cardPartido).join('');
+  }
+}
+
+/* ================= MODAL JUGADOR ================= */
+function openJugador(id){
+  const p=JUG[id], s=statsJugador(id), e=EQ[p.e];
+  document.getElementById('modal-body').innerHTML=`
+    <div class="flex items-start justify-between mb-4">
+      <div class="flex items-center gap-4">
+        <span class="w-16 h-16 rounded-2xl bg-ink-900 text-white grid place-items-center text-xl font-bold">${iniciales(p.n)}</span>
+        <div><h3 class="font-bold text-lg leading-tight">${p.n.toUpperCase()}</h3>
+        <p class="font-display text-2xl text-brand-600">${p.d}</p></div>
+      </div>
+      <button onclick="closeModal()" class="text-ink-400 text-xl">✕</button>
+    </div>
+    <div class="flex items-center gap-5 text-sm border-y border-line py-3 mb-4">
+      <span title="Por privacidad de menores, el público solo muestra el año de nacimiento">📅 ${p.nac.slice(0,4)} · ${edad(p.nac)} años</span>
+      <span class="border-l border-line pl-5">👤 ${p.pos.toUpperCase()}</span>
+    </div>
+    ${[['GOLES',s.gol],['JUEGOS',s.jue],['T. AMA.',s.ama],['T. ROJ.',s.roj],['FALTAS',0],['ASISTENCIAS',s.asi]].map(([l,v])=>
+      `<div class="flex items-center justify-between py-2 border-b border-line last:border-0 text-sm"><span class="text-ink-400 font-semibold">${l}</span><span class="font-extrabold">${v}</span></div>`).join('')}
+    <p class="text-[11px] text-ink-400 mt-4">Equipo: ${eqNom(p.e)} · Identidad verificada por documento ✔</p>
+    <p class="text-[11px] text-ink-400 mt-1">📷 Foto en blanco y negro — pasa a color con la aprobación explícita del padre/tutor.</p>`;
+  const mo=document.getElementById('modal'); mo.classList.remove('hidden'); mo.classList.add('flex');
+}
+function closeModal(){ const mo=document.getElementById('modal'); mo.classList.add('hidden'); mo.classList.remove('flex'); }
+
+/* ================= NAVEGACIÓN ================= */
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  const el=document.getElementById(id); el.classList.add('active','fade');
+  setTimeout(()=>el.classList.remove('fade'),240);
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function setBrand(catalogo, marca){
+  document.getElementById('hdr-brand').textContent = catalogo?'LIGUIFY':(marca?marca.nombre:'INTI CUP');
+  document.getElementById('hdr-sub').textContent = catalogo?'Competencias':'Powered by Liguify';
+  document.getElementById('hdr-live').classList.toggle('hidden', catalogo || (marca&&!marca.activo));
+}
+function goCatalogo(){ setBrand(true); showScreen('s-catalogo'); }
+function openTorneo(){ setBrand(false, MARCAS.find(m=>m.id==='inti')); showScreen('s-torneo'); }
+function openCategoria(){ fromScreen='s-categoria'; showTab('tabla'); showScreen('s-categoria'); }
+
+/* ================= INIT ================= */
+renderCatalogo(); renderTorneo(); renderTablas(); renderFixture(); renderBracket(); renderEquiposGrid(); renderTablaGeneral();
+goCatalogo();
+</script>
+</body>

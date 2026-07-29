@@ -1,0 +1,575 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Liguify Competencias — Mockup</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          brand: { 50:'#ecfdf5',100:'#d1fae5',300:'#6ee7b7',400:'#34d399',500:'#10b981',600:'#059669',700:'#047857',800:'#065f46',900:'#064e3b' },
+          ink: { 900:'#0b1220',800:'#111a2b',700:'#1c2740',600:'#2b3a5c' }
+        }
+      }
+    }
+  }
+</script>
+<style>
+  html{scroll-behavior:smooth}
+  .screen{display:none}
+  .screen.active{display:block}
+  .navbtn.active{background:#065f46;color:#fff}
+  .modbtn.active{background:#fff;color:#065f46}
+  .fade{animation:f .25s ease}
+  @keyframes f{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  ::-webkit-scrollbar{height:8px;width:8px}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:8px}
+</style>
+
+<body class="bg-slate-100 text-slate-800 min-h-screen">
+
+<!-- ===================== TOP BAR ===================== -->
+<header class="bg-ink-900 text-white sticky top-0 z-40 shadow-lg">
+  <div class="max-w-6xl mx-auto px-4 h-14 flex items-center gap-4">
+    <div class="flex items-center gap-2 font-black text-lg tracking-tight">
+      <span class="w-7 h-7 rounded-lg bg-brand-500 grid place-items-center text-ink-900">L</span>
+      Liguify <span class="font-light text-brand-300">Competencias</span>
+    </div>
+    <div class="ml-auto flex items-center bg-ink-700 rounded-xl p-1 text-sm font-semibold">
+      <button onclick="showModule('publico')" id="mod-publico" class="modbtn px-3 py-1.5 rounded-lg transition">🌐 Público</button>
+      <button onclick="showModule('club')" id="mod-club" class="modbtn px-3 py-1.5 rounded-lg transition">🛡️ Club</button>
+      <button onclick="showModule('admin')" id="mod-admin" class="modbtn px-3 py-1.5 rounded-lg transition">⚙️ Admin</button>
+    </div>
+  </div>
+</header>
+
+<!-- ===================== SUB NAV ===================== -->
+<nav id="subnav" class="bg-white border-b sticky top-14 z-30">
+  <div class="max-w-6xl mx-auto px-4 flex gap-1 overflow-x-auto text-sm" id="navlinks"></div>
+</nav>
+
+<main class="max-w-6xl mx-auto px-4 py-6">
+
+  <!-- ============ PUBLICO: HOME ============ -->
+  <section id="pub-home" class="screen">
+    <div class="rounded-2xl bg-ink-900 text-white p-6 mb-5 relative overflow-hidden">
+      <div class="absolute -right-8 -top-8 text-[120px] opacity-10">⚽</div>
+      <p class="text-brand-300 font-semibold text-sm">TORNEO ACTIVO</p>
+      <h1 class="text-2xl font-black" id="pub-torneo-nombre"></h1>
+      <p class="text-slate-300 text-sm" id="pub-torneo-meta"></p>
+    </div>
+    <div class="grid sm:grid-cols-3 gap-3 mb-6" id="pub-stats"></div>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="bg-white rounded-2xl p-5 shadow-sm">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-bold">📊 Tabla de posiciones</h2>
+          <button onclick="showScreen('pub-tabla')" class="text-brand-600 text-sm font-semibold">Ver completa →</button>
+        </div>
+        <div id="pub-home-tabla"></div>
+      </div>
+      <div class="bg-white rounded-2xl p-5 shadow-sm">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-bold">📅 Próxima jornada</h2>
+          <button onclick="showScreen('pub-programacion')" class="text-brand-600 text-sm font-semibold">Ver todo →</button>
+        </div>
+        <div id="pub-home-prog"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PUBLICO: TABLA ============ -->
+  <section id="pub-tabla" class="screen">
+    <h1 class="text-xl font-black mb-1">Tabla de posiciones</h1>
+    <p class="text-slate-500 text-sm mb-4" id="pub-tabla-cat"></p>
+    <div class="bg-white rounded-2xl shadow-sm overflow-x-auto" id="pub-tabla-full"></div>
+  </section>
+
+  <!-- ============ PUBLICO: RESULTADOS ============ -->
+  <section id="pub-resultados" class="screen">
+    <h1 class="text-xl font-black mb-4">Resultados</h1>
+    <div id="pub-resultados-body"></div>
+  </section>
+
+  <!-- ============ PUBLICO: PROGRAMACION ============ -->
+  <section id="pub-programacion" class="screen">
+    <h1 class="text-xl font-black mb-4">Programación</h1>
+    <div id="pub-programacion-body"></div>
+  </section>
+
+  <!-- ============ PUBLICO: ESTADISTICAS ============ -->
+  <section id="pub-estadisticas" class="screen">
+    <h1 class="text-xl font-black mb-4">Estadísticas</h1>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="bg-white rounded-2xl p-5 shadow-sm">
+        <h2 class="font-bold mb-3">⚽ Goleadores</h2>
+        <div id="pub-goleadores"></div>
+      </div>
+      <div class="bg-white rounded-2xl p-5 shadow-sm">
+        <h2 class="font-bold mb-3">🟨🟥 Tarjetas</h2>
+        <div id="pub-tarjetas"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CLUB: LOGIN HINT ============ -->
+  <section id="club-dash" class="screen">
+    <div class="rounded-2xl bg-gradient-to-r from-ink-900 to-ink-700 text-white p-6 mb-5 flex items-center gap-4">
+      <div class="w-14 h-14 rounded-xl grid place-items-center text-2xl" id="club-badge"></div>
+      <div>
+        <p class="text-brand-300 text-sm font-semibold">SESIÓN DE CLUB</p>
+        <h1 class="text-2xl font-black" id="club-nombre"></h1>
+        <p class="text-slate-300 text-sm" id="club-meta"></p>
+      </div>
+    </div>
+    <div class="grid sm:grid-cols-3 gap-3 mb-5" id="club-stats"></div>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="bg-white rounded-2xl p-5 shadow-sm">
+        <h2 class="font-bold mb-3">📅 Próximos partidos del club</h2>
+        <div id="club-prox"></div>
+      </div>
+      <div class="bg-white rounded-2xl p-5 shadow-sm">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-bold">👥 Plantel</h2>
+          <button onclick="showScreen('club-plantel')" class="text-brand-600 text-sm font-semibold">Gestionar →</button>
+        </div>
+        <div id="club-plantel-mini"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CLUB: PLANTEL ============ -->
+  <section id="club-plantel" class="screen">
+    <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+      <div>
+        <h1 class="text-xl font-black">Plantel</h1>
+        <p class="text-slate-500 text-sm" id="club-plantel-count"></p>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="openImport()" class="bg-white border border-brand-600 text-brand-700 font-semibold px-4 py-2 rounded-xl text-sm flex items-center gap-2 hover:bg-brand-50">
+          🎓 Importar desde Academias
+        </button>
+        <button onclick="openAddPlayer()" class="bg-brand-600 text-white font-semibold px-4 py-2 rounded-xl text-sm hover:bg-brand-700">+ Agregar jugador</button>
+      </div>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm overflow-x-auto" id="club-plantel-full"></div>
+  </section>
+
+  <!-- ============ ADMIN: DASHBOARD ============ -->
+  <section id="admin-dash" class="screen">
+    <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+      <div>
+        <p class="text-brand-600 font-semibold text-sm">PANEL DEL ORGANIZADOR</p>
+        <h1 class="text-2xl font-black" id="admin-torneo-nombre"></h1>
+      </div>
+      <button onclick="showScreen('admin-crear')" class="bg-brand-600 text-white font-semibold px-4 py-2 rounded-xl text-sm hover:bg-brand-700">+ Nuevo torneo</button>
+    </div>
+    <div class="grid sm:grid-cols-4 gap-3 mb-5" id="admin-stats"></div>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="bg-white rounded-2xl p-5 shadow-sm">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-bold">📝 Cargar resultados</h2>
+          <button onclick="showScreen('admin-resultados')" class="text-brand-600 text-sm font-semibold">Ir →</button>
+        </div>
+        <p class="text-sm text-slate-500 mb-3">Partidos pendientes de resultado en la jornada actual.</p>
+        <div id="admin-pendientes"></div>
+      </div>
+      <div class="bg-white rounded-2xl p-5 shadow-sm">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-bold">🛡️ Clubes participantes</h2>
+          <button onclick="showScreen('admin-clubes')" class="text-brand-600 text-sm font-semibold">Gestionar →</button>
+        </div>
+        <div id="admin-clubes-mini"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ADMIN: CREAR TORNEO ============ -->
+  <section id="admin-crear" class="screen">
+    <h1 class="text-xl font-black mb-1">Nuevo torneo</h1>
+    <p class="text-slate-500 text-sm mb-4">Configura una nueva competencia. El sistema es multi-deporte y multi-moneda.</p>
+    <div class="bg-white rounded-2xl p-6 shadow-sm max-w-2xl grid sm:grid-cols-2 gap-4">
+      <label class="text-sm font-semibold sm:col-span-2">Nombre del torneo
+        <input class="mt-1 w-full border rounded-xl px-3 py-2 font-normal" placeholder="Copa Clausura 2026" />
+      </label>
+      <label class="text-sm font-semibold">Deporte
+        <select class="mt-1 w-full border rounded-xl px-3 py-2 font-normal">
+          <option>⚽ Fútbol</option><option>🏐 Vóley</option><option>🎾 Pádel</option>
+        </select>
+      </label>
+      <label class="text-sm font-semibold">Formato
+        <select class="mt-1 w-full border rounded-xl px-3 py-2 font-normal">
+          <option>Liga (todos contra todos)</option><option>Grupos + eliminación</option><option>Eliminación directa</option>
+        </select>
+      </label>
+      <label class="text-sm font-semibold">País
+        <select class="mt-1 w-full border rounded-xl px-3 py-2 font-normal">
+          <option>🇵🇪 Perú</option><option>🇨🇴 Colombia</option><option>🇲🇽 México</option><option>🇨🇱 Chile</option><option>🇦🇷 Argentina</option>
+        </select>
+      </label>
+      <label class="text-sm font-semibold">Moneda
+        <select class="mt-1 w-full border rounded-xl px-3 py-2 font-normal">
+          <option>PEN (S/.)</option><option>COP ($)</option><option>MXN ($)</option><option>USD ($)</option>
+        </select>
+      </label>
+      <label class="text-sm font-semibold sm:col-span-2">Categorías (separadas por coma)
+        <input class="mt-1 w-full border rounded-xl px-3 py-2 font-normal" placeholder="Primera División, Sub-17, Femenino" />
+      </label>
+      <div class="sm:col-span-2 flex gap-2 pt-2">
+        <button onclick="fakeCreate()" class="bg-brand-600 text-white font-semibold px-4 py-2 rounded-xl text-sm hover:bg-brand-700">Crear torneo</button>
+        <button onclick="showScreen('admin-dash')" class="text-slate-500 font-semibold px-4 py-2 text-sm">Cancelar</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ADMIN: CLUBES ============ -->
+  <section id="admin-clubes" class="screen">
+    <div class="flex items-center justify-between mb-4">
+      <h1 class="text-xl font-black">Clubes participantes</h1>
+      <button onclick="alert('En la app real: buscar club en el dato maestro compartido (Liguify ERP) o crear uno nuevo e invitarlo por acceso.')" class="bg-brand-600 text-white font-semibold px-4 py-2 rounded-xl text-sm hover:bg-brand-700">+ Agregar club</button>
+    </div>
+    <p class="text-slate-500 text-sm mb-3">Los clubes provienen del <b>dato maestro compartido con Liguify ERP</b>. Cada uno recibe un acceso para gestionar su plantel.</p>
+    <div class="bg-white rounded-2xl shadow-sm overflow-x-auto" id="admin-clubes-full"></div>
+  </section>
+
+  <!-- ============ ADMIN: RESULTADOS ============ -->
+  <section id="admin-resultados" class="screen">
+    <h1 class="text-xl font-black mb-4">Cargar resultados</h1>
+    <div id="admin-resultados-body"></div>
+  </section>
+
+  <!-- ============ ADMIN: TABLA ============ -->
+  <section id="admin-tabla" class="screen">
+    <h1 class="text-xl font-black mb-4">Tabla de posiciones (calculada)</h1>
+    <div class="bg-white rounded-2xl shadow-sm overflow-x-auto" id="admin-tabla-full"></div>
+  </section>
+
+</main>
+
+<!-- ===================== MODAL ===================== -->
+<div id="modal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
+  <div class="bg-white rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto p-5" id="modal-body"></div>
+</div>
+
+<footer class="max-w-6xl mx-auto px-4 py-8 text-center text-xs text-slate-400">
+  Mockup · Liguify Competencias · lado deportivo del portafolio Liguify · datos ficticios
+</footer>
+
+<script>
+/* ===================== DATOS SEMILLA ===================== */
+const DB = {
+  torneo: { nombre:'Copa Apertura 2026', deporte:'⚽ Fútbol', pais:'🇵🇪 Perú', moneda:'PEN', temporada:'2026', formato:'Liga', categoria:'Primera División' },
+  clubes: [
+    { id:'c1', nombre:'Deportivo Andes',  emoji:'🔵', color:'#2563eb' },
+    { id:'c2', nombre:'Real Costa',       emoji:'🔴', color:'#dc2626' },
+    { id:'c3', nombre:'Atlético Norte',   emoji:'🟢', color:'#16a34a' },
+    { id:'c4', nombre:'CD Halcones',      emoji:'🟡', color:'#ca8a04' },
+    { id:'c5', nombre:'Unión Sur',        emoji:'🟣', color:'#7c3aed' },
+    { id:'c6', nombre:'Sporting Valle',   emoji:'🟠', color:'#ea580c' },
+  ],
+  // resultado null = programado
+  partidos: [
+    { id:'p1', j:1, l:'c1', v:'c2', gl:2, gv:1, fecha:'12 Jul', hora:'15:00', sede:'Estadio Municipal' },
+    { id:'p2', j:1, l:'c3', v:'c4', gl:0, gv:0, fecha:'12 Jul', hora:'17:00', sede:'Complejo Norte' },
+    { id:'p3', j:1, l:'c5', v:'c6', gl:3, gv:2, fecha:'13 Jul', hora:'11:00', sede:'Estadio Sur' },
+    { id:'p4', j:2, l:'c1', v:'c3', gl:1, gv:1, fecha:'19 Jul', hora:'15:00', sede:'Estadio Municipal' },
+    { id:'p5', j:2, l:'c2', v:'c5', gl:2, gv:0, fecha:'19 Jul', hora:'17:00', sede:'Complejo Este' },
+    { id:'p6', j:2, l:'c4', v:'c6', gl:1, gv:3, fecha:'20 Jul', hora:'11:00', sede:'Estadio Sur' },
+    { id:'p7', j:3, l:'c6', v:'c1', gl:0, gv:2, fecha:'26 Jul', hora:'15:00', sede:'Estadio Sur' },
+    { id:'p8', j:3, l:'c4', v:'c2', gl:2, gv:2, fecha:'26 Jul', hora:'17:00', sede:'Complejo Norte' },
+    { id:'p9', j:3, l:'c3', v:'c5', gl:1, gv:0, fecha:'27 Jul', hora:'11:00', sede:'Complejo Norte' },
+    // Jornada 4 — programada (sin resultado)
+    { id:'p10', j:4, l:'c1', v:'c4', gl:null, gv:null, fecha:'02 Ago', hora:'15:00', sede:'Estadio Municipal' },
+    { id:'p11', j:4, l:'c2', v:'c6', gl:null, gv:null, fecha:'02 Ago', hora:'17:00', sede:'Complejo Este' },
+    { id:'p12', j:4, l:'c5', v:'c3', gl:null, gv:null, fecha:'03 Ago', hora:'11:00', sede:'Estadio Sur' },
+  ],
+  // eventos de gol/tarjeta -> alimentan estadísticas
+  eventos: [
+    {p:'p1',jug:'Marco Ruiz',club:'c1',t:'gol'},{p:'p1',jug:'Marco Ruiz',club:'c1',t:'gol'},{p:'p1',jug:'Iván Soto',club:'c2',t:'gol'},{p:'p1',jug:'Iván Soto',club:'c2',t:'amarilla'},
+    {p:'p3',jug:'Luis Vera',club:'c5',t:'gol'},{p:'p3',jug:'Luis Vera',club:'c5',t:'gol'},{p:'p3',jug:'Kevin Díaz',club:'c5',t:'gol'},{p:'p3',jug:'Diego Peña',club:'c6',t:'gol'},{p:'p3',jug:'Diego Peña',club:'c6',t:'gol'},
+    {p:'p4',jug:'Marco Ruiz',club:'c1',t:'gol'},{p:'p4',jug:'Bruno Lara',club:'c3',t:'gol'},
+    {p:'p5',jug:'Iván Soto',club:'c2',t:'gol'},{p:'p5',jug:'Iván Soto',club:'c2',t:'gol'},
+    {p:'p6',jug:'Diego Peña',club:'c6',t:'gol'},{p:'p6',jug:'Diego Peña',club:'c6',t:'gol'},{p:'p6',jug:'Aldo Ríos',club:'c6',t:'gol'},{p:'p6',jug:'Sergio Mena',club:'c4',t:'roja'},
+    {p:'p7',jug:'Marco Ruiz',club:'c1',t:'gol'},{p:'p7',jug:'Gael Nuñez',club:'c1',t:'gol'},
+    {p:'p8',jug:'Bruno Lara',club:'c3',t:'amarilla'},{p:'p8',jug:'Iván Soto',club:'c2',t:'gol'},{p:'p8',jug:'Iván Soto',club:'c2',t:'gol'},
+    {p:'p9',jug:'Bruno Lara',club:'c3',t:'gol'},
+  ],
+  // plantel del club en sesión (Deportivo Andes = c1)
+  plantel: [
+    {n:'Marco Ruiz', d:9, pos:'Delantero', nac:'2001', origen:'academia'},
+    {n:'Gael Nuñez', d:11, pos:'Extremo', nac:'2003', origen:'academia'},
+    {n:'Diego Campos', d:1, pos:'Portero', nac:'1999', origen:'manual'},
+    {n:'Raúl Ponce', d:4, pos:'Defensa', nac:'2000', origen:'manual'},
+    {n:'Hugo Ramos', d:5, pos:'Defensa', nac:'2002', origen:'manual'},
+    {n:'Piero Salas', d:8, pos:'Mediocampo', nac:'2001', origen:'manual'},
+    {n:'Fabio León', d:10, pos:'Mediocampo', nac:'2000', origen:'academia'},
+    {n:'Tomás Guerra', d:7, pos:'Extremo', nac:'2004', origen:'manual'},
+    {n:'Nico Vargas', d:3, pos:'Defensa', nac:'2003', origen:'manual'},
+    {n:'Cristian Ávila', d:6, pos:'Mediocampo', nac:'2002', origen:'manual'},
+    {n:'Julio Meza', d:12, pos:'Portero', nac:'2005', origen:'academia'},
+  ],
+  // pool de jugadores en Liguify Academias disponibles para importar
+  academiaPool: [
+    {n:'Santiago Rojas', pos:'Delantero', nac:'2006', academia:'VOM SPORT'},
+    {n:'Emilio Castro', pos:'Mediocampo', nac:'2006', academia:'VOM SPORT'},
+    {n:'Dilan Flores', pos:'Defensa', nac:'2007', academia:'VOM SPORT'},
+    {n:'Joaquín Bravo', pos:'Portero', nac:'2007', academia:'VOM SPORT'},
+    {n:'Renato Silva', pos:'Extremo', nac:'2006', academia:'VOM SPORT'},
+  ],
+};
+const CLUB_SESION = 'c1';
+const club = id => DB.clubes.find(c => c.id === id);
+const escudo = id => `<span class="inline-grid place-items-center w-6 h-6 rounded-md text-white text-[11px] font-bold" style="background:${club(id).color}">${club(id).nombre.slice(0,2).toUpperCase()}</span>`;
+
+/* ===================== CÁLCULO DE TABLA ===================== */
+function calcularTabla(){
+  const t = {};
+  DB.clubes.forEach(c => t[c.id] = {id:c.id, pj:0, g:0, e:0, p:0, gf:0, gc:0, pts:0});
+  DB.partidos.filter(m => m.gl !== null).forEach(m => {
+    const L=t[m.l], V=t[m.v];
+    L.pj++; V.pj++; L.gf+=m.gl; L.gc+=m.gv; V.gf+=m.gv; V.gc+=m.gl;
+    if(m.gl>m.gv){ L.g++;L.pts+=3;V.p++; }
+    else if(m.gl<m.gv){ V.g++;V.pts+=3;L.p++; }
+    else { L.e++;V.e++;L.pts++;V.pts++; }
+  });
+  return Object.values(t).map(x=>({...x, dg:x.gf-x.gc}))
+    .sort((a,b)=> b.pts-a.pts || b.dg-a.dg || b.gf-a.gf);
+}
+
+/* ===================== RENDER: TABLA ===================== */
+function tablaHTML(tabla, compact){
+  const rows = tabla.map((r,i)=>{
+    const zona = i===0 ? 'border-l-4 border-brand-500' : i>=DB.clubes.length-1 ? 'border-l-4 border-red-400' : 'border-l-4 border-transparent';
+    return `<tr class="${zona} hover:bg-slate-50 border-b last:border-0">
+      <td class="py-2 pl-2 pr-1 text-slate-400 font-bold text-center w-8">${i+1}</td>
+      <td class="py-2 pr-2"><div class="flex items-center gap-2">${escudo(r.id)}<span class="font-semibold text-sm">${club(r.id).nombre}</span></div></td>
+      <td class="text-center text-sm">${r.pj}</td>
+      ${compact?'':`<td class="text-center text-sm text-slate-500">${r.g}</td><td class="text-center text-sm text-slate-500">${r.e}</td><td class="text-center text-sm text-slate-500">${r.p}</td>`}
+      <td class="text-center text-sm ${r.dg>0?'text-brand-600':r.dg<0?'text-red-500':'text-slate-500'}">${r.dg>0?'+':''}${r.dg}</td>
+      <td class="text-center font-black">${r.pts}</td>
+    </tr>`;
+  }).join('');
+  return `<table class="w-full text-slate-700">
+    <thead><tr class="text-[11px] uppercase text-slate-400 border-b">
+      <th class="py-2"></th><th class="text-left pl-0">Club</th><th class="w-8">PJ</th>
+      ${compact?'':'<th class="w-8">G</th><th class="w-8">E</th><th class="w-8">P</th>'}
+      <th class="w-10">DG</th><th class="w-10">Pts</th>
+    </tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+/* ===================== RENDER: PARTIDOS ===================== */
+function partidoRow(m){
+  const jugado = m.gl !== null;
+  const marcador = jugado
+    ? `<span class="font-black tabular-nums px-2">${m.gl} - ${m.gv}</span>`
+    : `<span class="text-xs text-slate-400 px-2">${m.fecha} · ${m.hora}</span>`;
+  return `<div class="flex items-center py-2.5 border-b last:border-0 text-sm">
+    <div class="flex-1 flex items-center justify-end gap-2 ${jugado&&m.gl>m.gv?'font-bold':''}">${club(m.l).nombre} ${escudo(m.l)}</div>
+    <div class="w-20 text-center">${marcador}</div>
+    <div class="flex-1 flex items-center gap-2 ${jugado&&m.gv>m.gl?'font-bold':''}">${escudo(m.v)} ${club(m.v).nombre}</div>
+  </div>`;
+}
+function porJornada(filtro){
+  const js = [...new Set(DB.partidos.filter(filtro).map(m=>m.j))].sort((a,b)=>a-b);
+  return js.map(j=>`<div class="bg-white rounded-2xl shadow-sm p-4 mb-3">
+    <p class="text-xs font-bold uppercase text-brand-600 mb-1">Jornada ${j}</p>
+    ${DB.partidos.filter(m=>m.j===j&&filtro(m)).map(partidoRow).join('')}
+  </div>`).join('');
+}
+
+/* ===================== RENDER: ESTADISTICAS ===================== */
+function goleadoresHTML(){
+  const g={}; DB.eventos.filter(e=>e.t==='gol').forEach(e=>g[e.jug]=(g[e.jug]||{club:e.club,n:0}),g[e.jug].n++);
+  const list=Object.entries(g).map(([jug,v])=>({jug,...v})).sort((a,b)=>b.n-a.n).slice(0,8);
+  return list.map((r,i)=>`<div class="flex items-center gap-2 py-2 border-b last:border-0 text-sm">
+    <span class="w-5 text-slate-400 font-bold text-center">${i+1}</span>${escudo(r.club)}
+    <span class="flex-1 font-semibold">${r.jug}</span>
+    <span class="font-black text-brand-600">${r.n}</span><span class="text-xs text-slate-400">goles</span>
+  </div>`).join('');
+}
+function tarjetasHTML(){
+  const rows=DB.eventos.filter(e=>e.t==='amarilla'||e.t==='roja')
+    .reduce((a,e)=>{const k=e.jug;a[k]=a[k]||{club:e.club,y:0,r:0};e.t==='amarilla'?a[k].y++:a[k].r++;return a;},{});
+  return Object.entries(rows).map(([jug,v])=>`<div class="flex items-center gap-2 py-2 border-b last:border-0 text-sm">
+    ${escudo(v.club)}<span class="flex-1 font-semibold">${jug}</span>
+    ${v.y?`<span class="px-1.5 rounded bg-yellow-300 text-yellow-900 text-xs font-bold">${v.y} 🟨</span>`:''}
+    ${v.r?`<span class="px-1.5 rounded bg-red-500 text-white text-xs font-bold">${v.r} 🟥</span>`:''}
+  </div>`).join('') || '<p class="text-sm text-slate-400">Sin tarjetas registradas.</p>';
+}
+
+/* ===================== RENDER: PLANTEL ===================== */
+function plantelHTML(){
+  return `<table class="w-full text-sm">
+    <thead><tr class="text-[11px] uppercase text-slate-400 border-b text-left">
+      <th class="py-2 pl-3 w-10">#</th><th>Jugador</th><th>Posición</th><th>Nac.</th><th>Origen</th></tr></thead>
+    <tbody>${DB.plantel.map(p=>`<tr class="border-b last:border-0 hover:bg-slate-50">
+      <td class="py-2 pl-3 font-bold text-slate-400">${p.d}</td>
+      <td class="font-semibold">${p.n}</td><td class="text-slate-500">${p.pos}</td><td class="text-slate-500">${p.nac}</td>
+      <td>${p.origen==='academia'
+        ?'<span class="text-xs bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full font-semibold">🎓 Academias</span>'
+        :'<span class="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Manual</span>'}</td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+/* ===================== MODALES ===================== */
+const modal=document.getElementById('modal');
+function closeModal(){ modal.classList.add('hidden'); modal.classList.remove('flex'); }
+modal.addEventListener('click',e=>{ if(e.target===modal) closeModal(); });
+function openModal(html){ document.getElementById('modal-body').innerHTML=html; modal.classList.remove('hidden'); modal.classList.add('flex'); }
+
+function openImport(){
+  openModal(`<div class="flex items-center justify-between mb-1">
+      <h3 class="font-black text-lg">🎓 Importar desde Liguify Academias</h3>
+      <button onclick="closeModal()" class="text-slate-400 text-xl">✕</button></div>
+    <p class="text-sm text-slate-500 mb-4">Jugadores de tus academias vinculadas listos para migrar a este club. Se copian a tu plantel conservando su historial.</p>
+    <div class="space-y-2">${DB.academiaPool.map((p,i)=>`
+      <label class="flex items-center gap-3 border rounded-xl p-3 hover:bg-brand-50 cursor-pointer">
+        <input type="checkbox" class="imp w-4 h-4 accent-brand-600" data-i="${i}" />
+        <div class="flex-1"><p class="font-semibold text-sm">${p.n}</p>
+          <p class="text-xs text-slate-500">${p.pos} · ${p.nac} · <span class="text-brand-600">${p.academia}</span></p></div>
+      </label>`).join('')}</div>
+    <button onclick="doImport()" class="mt-4 w-full bg-brand-600 text-white font-semibold py-2.5 rounded-xl hover:bg-brand-700">Importar seleccionados</button>`);
+}
+function doImport(){
+  const sel=[...document.querySelectorAll('.imp:checked')].map(c=>DB.academiaPool[c.dataset.i]);
+  if(!sel.length){ alert('Selecciona al menos un jugador.'); return; }
+  let d=Math.max(...DB.plantel.map(p=>p.d))+1;
+  sel.forEach(p=>DB.plantel.push({n:p.n,d:d++,pos:p.pos,nac:p.nac,origen:'academia'}));
+  DB.academiaPool=DB.academiaPool.filter(p=>!sel.includes(p));
+  closeModal(); renderClub();
+  showScreen('club-plantel');
+}
+function openAddPlayer(){
+  openModal(`<div class="flex items-center justify-between mb-4">
+      <h3 class="font-black text-lg">+ Agregar jugador</h3>
+      <button onclick="closeModal()" class="text-slate-400 text-xl">✕</button></div>
+    <div class="grid grid-cols-2 gap-3">
+      <label class="text-sm font-semibold col-span-2">Nombre<input id="np-n" class="mt-1 w-full border rounded-xl px-3 py-2 font-normal"/></label>
+      <label class="text-sm font-semibold">Dorsal<input id="np-d" type="number" class="mt-1 w-full border rounded-xl px-3 py-2 font-normal"/></label>
+      <label class="text-sm font-semibold">Nacimiento<input id="np-nac" placeholder="2004" class="mt-1 w-full border rounded-xl px-3 py-2 font-normal"/></label>
+      <label class="text-sm font-semibold col-span-2">Posición
+        <select id="np-pos" class="mt-1 w-full border rounded-xl px-3 py-2 font-normal"><option>Portero</option><option>Defensa</option><option>Mediocampo</option><option>Extremo</option><option>Delantero</option></select></label>
+    </div>
+    <button onclick="doAddPlayer()" class="mt-4 w-full bg-brand-600 text-white font-semibold py-2.5 rounded-xl hover:bg-brand-700">Guardar</button>`);
+}
+function doAddPlayer(){
+  const n=document.getElementById('np-n').value.trim();
+  if(!n){ alert('Ingresa el nombre.'); return; }
+  DB.plantel.push({n, d:+document.getElementById('np-d').value||0, pos:document.getElementById('np-pos').value, nac:document.getElementById('np-nac').value||'—', origen:'manual'});
+  closeModal(); renderClub(); showScreen('club-plantel');
+}
+function fakeCreate(){ alert('Torneo creado (mockup). En la app real se persiste vía la API y aparece en el panel.'); showScreen('admin-dash'); }
+
+/* ===================== CARGAR RESULTADO (ADMIN) ===================== */
+function openResultado(id){
+  const m=DB.partidos.find(x=>x.id===id);
+  openModal(`<div class="flex items-center justify-between mb-4">
+      <h3 class="font-black text-lg">Cargar resultado · J${m.j}</h3>
+      <button onclick="closeModal()" class="text-slate-400 text-xl">✕</button></div>
+    <div class="flex items-center justify-center gap-3 mb-4">
+      <div class="text-center flex-1"><div class="text-2xl mb-1">${escudo(m.l)}</div><p class="text-sm font-semibold">${club(m.l).nombre}</p></div>
+      <input id="r-l" type="number" min="0" value="${m.gl??''}" class="w-14 border-2 rounded-xl text-center text-2xl font-black py-2"/>
+      <span class="text-slate-400 font-black">-</span>
+      <input id="r-v" type="number" min="0" value="${m.gv??''}" class="w-14 border-2 rounded-xl text-center text-2xl font-black py-2"/>
+      <div class="text-center flex-1"><div class="text-2xl mb-1">${escudo(m.v)}</div><p class="text-sm font-semibold">${club(m.v).nombre}</p></div>
+    </div>
+    <p class="text-xs text-slate-400 mb-3">En la app real aquí se registran goleadores y tarjetas por jugador.</p>
+    <button onclick="saveResultado('${id}')" class="w-full bg-brand-600 text-white font-semibold py-2.5 rounded-xl hover:bg-brand-700">Guardar resultado</button>`);
+}
+function saveResultado(id){
+  const m=DB.partidos.find(x=>x.id===id);
+  const l=document.getElementById('r-l').value, v=document.getElementById('r-v').value;
+  if(l===''||v===''){ alert('Ingresa ambos marcadores.'); return; }
+  m.gl=+l; m.gv=+v; closeModal(); renderAll();
+  showScreen('admin-resultados');
+}
+
+/* ===================== ORQUESTACIÓN ===================== */
+const NAV = {
+  publico: [['pub-home','Inicio'],['pub-tabla','Tabla'],['pub-resultados','Resultados'],['pub-programacion','Programación'],['pub-estadisticas','Estadísticas']],
+  club:    [['club-dash','Mi club'],['club-plantel','Plantel']],
+  admin:   [['admin-dash','Panel'],['admin-clubes','Clubes'],['admin-resultados','Resultados'],['admin-tabla','Tabla'],['admin-crear','Nuevo torneo']],
+};
+let modActual='publico';
+function showModule(m){
+  modActual=m;
+  document.querySelectorAll('.modbtn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('mod-'+m).classList.add('active');
+  const nl=document.getElementById('navlinks');
+  nl.innerHTML=NAV[m].map(([id,label])=>`<button data-s="${id}" onclick="showScreen('${id}')" class="navbtn px-4 py-3 font-semibold text-slate-600 border-b-2 border-transparent whitespace-nowrap">${label}</button>`).join('');
+  showScreen(NAV[m][0][0]);
+}
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  const el=document.getElementById(id); el.classList.add('active'); el.classList.add('fade');
+  setTimeout(()=>el.classList.remove('fade'),260);
+  document.querySelectorAll('.navbtn').forEach(b=>{
+    const on=b.dataset.s===id; b.classList.toggle('active',on);
+    b.classList.toggle('!border-brand-600',on); b.classList.toggle('!text-brand-700',on);
+  });
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ===================== RENDER ALL ===================== */
+function statCard(label,val,icon){return `<div class="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3">
+  <div class="text-2xl">${icon}</div><div><p class="text-2xl font-black">${val}</p><p class="text-xs text-slate-500">${label}</p></div></div>`;}
+
+function renderPublico(){
+  const t=DB.torneo, tabla=calcularTabla(), jugados=DB.partidos.filter(m=>m.gl!==null).length, prog=DB.partidos.filter(m=>m.gl===null).length;
+  document.getElementById('pub-torneo-nombre').textContent=t.nombre;
+  document.getElementById('pub-torneo-meta').textContent=`${t.deporte} · ${t.categoria} · ${t.pais} · Temporada ${t.temporada}`;
+  document.getElementById('pub-stats').innerHTML=statCard('Clubes',DB.clubes.length,'🛡️')+statCard('Partidos jugados',jugados,'✅')+statCard('Por jugar',prog,'📅');
+  document.getElementById('pub-home-tabla').innerHTML=tablaHTML(tabla.slice(0,5),true);
+  const proxJ=Math.min(...DB.partidos.filter(m=>m.gl===null).map(m=>m.j));
+  document.getElementById('pub-home-prog').innerHTML=DB.partidos.filter(m=>m.j===proxJ).map(partidoRow).join('');
+  document.getElementById('pub-tabla-cat').textContent=`${t.nombre} · ${t.categoria}`;
+  document.getElementById('pub-tabla-full').innerHTML=`<div class="p-3">${tablaHTML(tabla,false)}</div>
+    <div class="px-4 pb-3 flex gap-4 text-xs text-slate-400"><span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-brand-500 inline-block"></span>Líder</span><span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-red-400 inline-block"></span>Descenso</span></div>`;
+  document.getElementById('pub-resultados-body').innerHTML=porJornada(m=>m.gl!==null);
+  document.getElementById('pub-programacion-body').innerHTML=porJornada(m=>m.gl===null)||'<p class="text-slate-400">No hay partidos programados.</p>';
+  document.getElementById('pub-goleadores').innerHTML=goleadoresHTML();
+  document.getElementById('pub-tarjetas').innerHTML=tarjetasHTML();
+}
+function renderClub(){
+  const c=club(CLUB_SESION);
+  document.getElementById('club-badge').style.background=c.color;
+  document.getElementById('club-badge').textContent=c.emoji;
+  document.getElementById('club-nombre').textContent=c.nombre;
+  document.getElementById('club-meta').textContent=`${DB.torneo.nombre} · ${DB.torneo.categoria}`;
+  const mios=DB.partidos.filter(m=>m.l===CLUB_SESION||m.v===CLUB_SESION);
+  const acad=DB.plantel.filter(p=>p.origen==='academia').length;
+  document.getElementById('club-stats').innerHTML=statCard('Jugadores',DB.plantel.length,'👥')+statCard('Desde Academias',acad,'🎓')+statCard('Partidos',mios.length,'⚽');
+  document.getElementById('club-prox').innerHTML=mios.filter(m=>m.gl===null).map(partidoRow).join('')||'<p class="text-sm text-slate-400">Sin próximos partidos.</p>';
+  document.getElementById('club-plantel-mini').innerHTML=`<table class="w-full text-sm">${DB.plantel.slice(0,6).map(p=>`<tr class="border-b last:border-0"><td class="py-1.5 font-bold text-slate-400 w-8">${p.d}</td><td class="font-semibold">${p.n}</td><td class="text-slate-500 text-right">${p.pos}</td></tr>`).join('')}</table>`;
+  document.getElementById('club-plantel-count').textContent=`${DB.plantel.length} jugadores · ${c.nombre}`;
+  document.getElementById('club-plantel-full').innerHTML=plantelHTML();
+}
+function renderAdmin(){
+  const tabla=calcularTabla(), jugados=DB.partidos.filter(m=>m.gl!==null).length, prog=DB.partidos.filter(m=>m.gl===null).length;
+  document.getElementById('admin-torneo-nombre').textContent=DB.torneo.nombre;
+  document.getElementById('admin-stats').innerHTML=statCard('Clubes',DB.clubes.length,'🛡️')+statCard('Jugados',jugados,'✅')+statCard('Pendientes',prog,'📝')+statCard('Categorías',1,'📁');
+  const pend=DB.partidos.filter(m=>m.gl===null);
+  document.getElementById('admin-pendientes').innerHTML=pend.map(m=>`<button onclick="openResultado('${m.id}')" class="w-full flex items-center justify-between text-sm border rounded-xl px-3 py-2 mb-2 hover:bg-brand-50">
+    <span>${escudo(m.l)} ${club(m.l).nombre} <span class="text-slate-300">vs</span> ${club(m.v).nombre} ${escudo(m.v)}</span>
+    <span class="text-brand-600 font-semibold text-xs">Cargar →</span></button>`).join('')||'<p class="text-sm text-slate-400">Todos los partidos tienen resultado.</p>';
+  document.getElementById('admin-clubes-mini').innerHTML=DB.clubes.slice(0,6).map(c=>`<div class="flex items-center gap-2 py-1.5 text-sm border-b last:border-0">${escudo(c.id)}<span class="font-semibold">${c.nombre}</span></div>`).join('');
+  document.getElementById('admin-clubes-full').innerHTML=`<table class="w-full text-sm"><thead><tr class="text-[11px] uppercase text-slate-400 border-b text-left"><th class="py-2 pl-3">Club</th><th>Jugadores</th><th>Estado</th></tr></thead><tbody>${DB.clubes.map(c=>`<tr class="border-b last:border-0 hover:bg-slate-50"><td class="py-2 pl-3"><div class="flex items-center gap-2">${escudo(c.id)}<span class="font-semibold">${c.nombre}</span></div></td><td class="text-slate-500">${c.id===CLUB_SESION?DB.plantel.length:'—'}</td><td><span class="text-xs bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full font-semibold">Activo</span></td></tr>`).join('')}</tbody></table>`;
+  document.getElementById('admin-resultados-body').innerHTML=porJornadaAdmin();
+  document.getElementById('admin-tabla-full').innerHTML=`<div class="p-3">${tablaHTML(tabla,false)}</div>`;
+}
+function porJornadaAdmin(){
+  const js=[...new Set(DB.partidos.map(m=>m.j))].sort((a,b)=>a-b);
+  return js.map(j=>`<div class="bg-white rounded-2xl shadow-sm p-4 mb-3">
+    <p class="text-xs font-bold uppercase text-brand-600 mb-1">Jornada ${j}</p>
+    ${DB.partidos.filter(m=>m.j===j).map(m=>`<div class="flex items-center py-2 border-b last:border-0 text-sm">
+      <div class="flex-1 text-right">${club(m.l).nombre} ${escudo(m.l)}</div>
+      <button onclick="openResultado('${m.id}')" class="w-24 mx-1 text-center rounded-lg py-1 ${m.gl===null?'bg-slate-100 text-slate-400 hover:bg-brand-100 hover:text-brand-700':'bg-brand-50 text-brand-700 font-black'}">${m.gl===null?'Cargar':m.gl+' - '+m.gv}</button>
+      <div class="flex-1">${escudo(m.v)} ${club(m.v).nombre}</div>
+    </div>`).join('')}
+  </div>`).join('');
+}
+function renderAll(){ renderPublico(); renderClub(); renderAdmin(); }
+
+renderAll();
+showModule('publico');
+</script>
+</body>

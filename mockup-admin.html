@@ -1,0 +1,1697 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Liguify — Módulo Administrador (mockup)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>
+tailwind.config = { theme: { extend: {
+  colors: {
+    brand: {50:'#fef2f2',100:'#fde3e3',500:'#d9232e',600:'#c11d27',700:'#a11820'},
+    ink: {900:'#171e2e',800:'#1f2840',700:'#2b3550',500:'#5b6478',400:'#8b93a7'},
+    paper: '#faf9f7', line:'#e9e6e0'
+  },
+  fontFamily: { display:['"Bebas Neue"','sans-serif'], sans:['Inter','system-ui','sans-serif'] }
+}}}
+</script>
+<style>
+  body{background:#faf9f7}
+  .screen{display:none} .screen.active{display:block}
+  .fade{animation:f .22s ease} @keyframes f{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+  .nav-item.active{background:#d9232e;color:#fff}
+  .toggle{width:38px;height:22px;border-radius:99px;background:#d1d5db;position:relative;cursor:pointer;transition:.15s;flex-shrink:0}
+  .toggle::after{content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:99px;background:#fff;transition:.15s}
+  .toggle.on{background:#d9232e} .toggle.on::after{left:18px}
+  .menu{display:none;position:absolute;right:0;top:100%;z-index:30;background:#fff;border:1px solid #e9e6e0;border-radius:14px;box-shadow:0 12px 30px rgba(0,0,0,.12);min-width:220px;overflow:hidden}
+  .menu.open{display:block}
+  .menu button{display:block;width:100%;text-align:left;padding:9px 14px;font-size:13px;font-weight:600}
+  .menu button:hover{background:#faf9f7}
+  .live-dot{width:7px;height:7px;border-radius:99px;background:#d9232e;animation:pulse 1.2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  input,select,textarea{outline:none}
+  ::-webkit-scrollbar{height:8px;width:8px} ::-webkit-scrollbar-thumb{background:#d6d3cd;border-radius:8px}
+</style>
+
+<body class="text-ink-900 font-sans min-h-screen">
+<div class="flex min-h-screen">
+
+<!-- ============ SIDEBAR ============ -->
+<aside class="w-64 bg-ink-900 text-white flex-col shrink-0 hidden md:flex">
+  <div class="px-5 py-5 flex items-center gap-2.5 border-b border-white/10">
+    <span class="w-9 h-9 rounded-xl bg-brand-500 grid place-items-center font-display text-xl pt-0.5">L</span>
+    <div class="leading-tight"><p class="font-display text-xl tracking-wide">LIGUIFY</p><p class="text-[9px] text-white/40 font-semibold tracking-widest uppercase -mt-0.5">Panel Administrador</p></div>
+  </div>
+  <div class="px-4 py-4 text-[10px] uppercase tracking-widest text-white/40 font-bold">Marca · <span id="sb-marca-n">INTI CUP</span></div>
+  <nav class="px-3 space-y-0.5 text-sm flex-1">
+    <button onclick="go('a-torneos')" data-nav="a-torneos" class="nav-item w-full text-left rounded-xl px-3 py-2 font-semibold text-white/80">🏆 Torneos de la marca</button>
+    <p class="px-3 pt-3 py-1 text-white/60 font-bold text-xs">▸ INTI CUP ORO <span class="text-emerald-400">● en curso</span></p>
+    <button onclick="go('a-config')" data-nav="a-config" class="nav-item w-full text-left rounded-xl px-3 py-2 font-semibold text-white/80">⚙️ Configuración del torneo</button>
+    <p class="px-3 pt-3 pb-1 text-white/40 font-bold text-[11px] uppercase tracking-wider">Categorías</p>
+    <div id="sb-cats" class="space-y-0.5"></div>
+    <p class="px-3 pt-3 pb-1 text-white/40 font-bold text-[11px] uppercase tracking-wider">Gestión · Categoría 2017 / F7</p>
+    <button onclick="go('a-equipos')" data-nav="a-equipos" class="nav-item w-full text-left rounded-xl px-3 py-2 font-semibold text-white/80">🛡️ Equipos y zonas</button>
+    <button onclick="go('a-fixture')" data-nav="a-fixture" class="nav-item w-full text-left rounded-xl px-3 py-2 font-semibold text-white/80">📅 Fixture y resultados</button>
+    <button onclick="go('a-live')" data-nav="a-live" class="nav-item w-full text-left rounded-xl px-3 py-2 font-semibold text-white/80">🔴 Match Center en vivo</button>
+    <button onclick="go('a-acred')" data-nav="a-acred" class="nav-item w-full text-left rounded-xl px-3 py-2 font-semibold text-white/80">🪪 Acreditación en cancha</button>
+    <button onclick="go('a-share');genShare()" data-nav="a-share" class="nav-item w-full text-left rounded-xl px-3 py-2 font-semibold text-white/80">📣 Compartibles</button>
+    <button onclick="go('a-accesos')" data-nav="a-accesos" class="nav-item w-full text-left rounded-xl px-3 py-2 font-semibold text-white/80">🔑 Accesos</button>
+    <p class="px-3 pt-4 pb-1 text-white/25 font-bold text-xs">Otros torneos de la marca</p>
+    <div id="sb-torneos" class="px-3 py-1 text-white/30 text-xs space-y-1"></div>
+  </nav>
+  <div class="px-5 py-4 border-t border-white/10 text-xs">
+    <p class="font-bold">Luis Olarte</p>
+    <p class="text-white/40">Administrador de Marca</p>
+  </div>
+</aside>
+
+<!-- ============ MAIN ============ -->
+<div class="flex-1 min-w-0">
+  <header class="bg-white border-b border-line sticky top-0 z-40 px-5 h-14 flex items-center gap-3">
+    <span class="font-display text-xl tracking-wide">INTI CUP ORO</span>
+    <span class="text-xs text-ink-400 font-semibold hidden sm:inline">· Categoría 2017 / F7 · Temporada 2026</span>
+    <span class="ml-auto flex items-center gap-1.5 text-xs font-bold text-brand-600"><span class="live-dot"></span>1 partido en vivo</span>
+  </header>
+  <main class="p-5 max-w-5xl">
+
+  <!-- ============ A1: TORNEOS DE LA MARCA (pantalla inicial) ============ -->
+  <section id="a-torneos" class="screen">
+    <div class="bg-ink-900 text-white rounded-2xl p-5 mb-6 flex items-center gap-4 flex-wrap">
+      <span id="marca-logo-box" class="w-16 h-16 rounded-2xl grid place-items-center font-display text-2xl bg-brand-500 overflow-hidden relative shrink-0"></span>
+      <div class="flex-1 min-w-44">
+        <p class="text-[10px] uppercase tracking-widest text-white/40 font-bold">Marca organizadora</p>
+        <h1 id="marca-nombre-h" class="font-display text-4xl tracking-wide leading-none"></h1>
+        <p id="marca-datos" class="text-white/50 text-xs mt-1"></p>
+        <p class="text-xs mt-1.5">🔗 <code id="marca-url" class="bg-white/10 rounded px-1.5 py-0.5 text-emerald-300 font-semibold"></code></p>
+      </div>
+      <button onclick="compartirMarca()" class="bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-emerald-700">🔗 COMPARTIR PÁGINA</button>
+      <button onclick="editarMarca()" class="bg-white/10 border border-white/20 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/20">✏️ EDITAR MARCA</button>
+    </div>
+    <div class="flex items-center justify-between mb-1">
+      <h1 class="font-display text-3xl tracking-wide">TORNEOS DE LA MARCA</h1>
+      <button onclick="nuevoTorneo()" class="bg-brand-500 text-white font-bold px-5 py-2.5 rounded-xl text-sm hover:bg-brand-600">+ NUEVO TORNEO</button>
+    </div>
+    <p class="text-sm text-ink-400 mb-5"><span id="marca-sub"></span> · Temporada 2026 — selecciona un torneo para administrarlo</p>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4" id="torneos-grid"></div>
+  </section>
+
+  <!-- ============ A2: CONFIG TORNEO ============ -->
+  <section id="a-config" class="screen">
+    <div class="flex items-center justify-between mb-4">
+      <h1 class="font-display text-3xl tracking-wide">EDITAR TORNEO</h1>
+      <button onclick="guardarConfig()" class="bg-brand-500 text-white font-bold px-5 py-2.5 rounded-xl text-sm hover:bg-brand-600">GUARDAR</button>
+    </div>
+    <div class="grid lg:grid-cols-2 gap-4">
+      <div class="bg-white border border-line rounded-2xl p-5 space-y-4">
+        <p class="font-bold text-sm text-ink-500 uppercase tracking-wider text-xs">Identificación</p>
+        <div class="flex items-center gap-3">
+          <label class="w-16 h-16 rounded-xl bg-paper border-2 border-dashed border-line grid place-items-center text-[10px] text-ink-400 font-bold text-center cursor-pointer relative overflow-hidden hover:border-brand-500 shrink-0" title="Clic para subir el logo del torneo">
+            <img id="up-tlogo-cur" class="absolute inset-0 w-full h-full object-cover hidden"/>
+            <img id="up-tlogo-img" class="absolute inset-0 w-full h-full object-cover hidden"/>
+            <span id="up-tlogo-lb">LOGO 📷</span>
+            <input type="file" accept="image/*" class="hidden" onchange="loadUpload(this,'up-tlogo')"/>
+          </label>
+          <p class="text-xs text-ink-400 flex-1" id="tlogo-note"></p>
+        </div>
+        <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Año</span><input value="2026" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+        <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Nombre</span><input value="INTI CUP ORO" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+        <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Tipo de torneo (modalidad por defecto)</span>
+          <select class="w-full border-b border-line py-1.5 font-semibold bg-transparent"><option>FUTBOL 7</option><option>FUTBOL 9</option><option>FUTBOL 11</option></select></label>
+        <div class="flex items-center justify-between text-sm font-semibold">Mostrar excepciones por edad <span class="toggle" onclick="this.classList.toggle('on')"></span></div>
+        <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Orden de tablas de posiciones</span><input value="PJ, PUNTOS, DIF GOL, GF, GC" class="w-full border-b border-line py-1.5 font-semibold"/>
+          <span class="block text-[10px] text-ink-400 mt-1 font-normal">Define el <b>orden de las columnas</b> que muestra la tabla de posiciones pública (ej.: PJ, PUNTOS, DIF GOL, GF, GC).</span></label>
+        <div class="flex items-center justify-between text-sm font-semibold">Mostrar tabla general <span class="toggle on" onclick="this.classList.toggle('on')"></span></div>
+      </div>
+      <div class="bg-white border border-line rounded-2xl p-5 space-y-4">
+        <p class="font-bold text-ink-500 uppercase tracking-wider text-xs">Puntajes y walkover</p>
+        <p class="text-[10px] text-ink-400 -mt-2">Puntos que se suman a los equipos cuando se registra el resultado de su partido.</p>
+        <div class="grid grid-cols-3 gap-3">
+          <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Ganado</span><input id="cfg-pg" value="3" type="number" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+          <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Empatado</span><input id="cfg-pe" value="1" type="number" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+          <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Perdido</span><input id="cfg-pp" value="0" type="number" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+        </div>
+        <div class="flex items-center justify-between text-sm font-semibold">Sumar puntos por walkover <span class="toggle" onclick="this.classList.toggle('on')"></span></div>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Goles ganado sin jugar</span><input value="3" type="number" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+          <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Puntos perdido sin jugar</span><input value="0" type="number" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+        </div>
+        <p class="font-bold text-ink-500 uppercase tracking-wider text-xs pt-2">Disciplina</p>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Amarillas para suspensión</span><input value="Sin suspensión" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+          <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Fecha límite acum. amarillas</span><input placeholder="dd/mm/aaaa" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+        </div>
+      </div>
+      <div class="bg-white border border-line rounded-2xl p-5 space-y-4">
+        <p class="font-bold text-ink-500 uppercase tracking-wider text-xs">Lista de Buena Fe</p>
+        <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Jugadores/as en lista de buena fe</span><input value="30" type="number" class="w-full border-b border-line py-1.5 font-semibold"/>
+          <span class="block text-[10px] text-ink-400 mt-1 font-normal">Máximo de jugadores/as <b>por equipo</b> en su LBF. El valor se configura por categoría (cada categoría puede tener un tope distinto).</span></label>
+        <div class="text-sm font-semibold"><div class="flex items-center justify-between">Cargar jug. en lista de buena fe <span class="toggle on" onclick="this.classList.toggle('on')"></span></div>
+          <p class="text-[10px] text-ink-400 font-normal mt-1">Habilita la opción de agregar jugadores — no todos los torneos requieren carga de jugadores.</p></div>
+        <div class="flex items-center justify-between text-sm font-semibold">Crear jugadores/as únicamente con scan de DNI <span class="toggle" onclick="this.classList.toggle('on')"></span></div>
+      </div>
+      <div class="bg-white border border-line rounded-2xl p-5 space-y-4">
+        <p class="font-bold text-ink-500 uppercase tracking-wider text-xs">Delegados y carga de equipos</p>
+        <div class="text-sm font-semibold"><div class="flex items-center justify-between">Permitir delegados <span class="toggle on" onclick="this.classList.toggle('on')"></span></div>
+          <p class="text-[10px] text-ink-400 font-normal mt-1">Habilita el envío de usuario a los clubes para que agreguen jugadores y tengan acceso al <b>modo Club</b>.</p></div>
+        <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Fecha límite carga equipo</span><input value="13/07/2026" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+        <div class="flex items-center justify-between text-sm font-semibold">Permitir modificación equipo <span class="toggle on" onclick="this.classList.toggle('on')"></span></div>
+        <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Descripción / Modalidad del torneo</span><textarea rows="3" class="w-full border border-line rounded-xl p-2.5 mt-1 text-sm" placeholder="Descripción visible en el módulo público…"></textarea></label>
+      </div>
+    </div>
+    <div class="bg-white border border-line rounded-2xl p-5 mt-4">
+      <div class="flex items-center justify-between mb-1">
+        <p class="font-bold text-ink-500 uppercase tracking-wider text-xs">Categorías del torneo</p>
+        <button onclick="nuevaCategoria()" class="bg-brand-500 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-brand-600">+ NUEVA CATEGORÍA</button>
+      </div>
+      <p class="text-[10px] text-ink-400 mb-3">Llave: <b>año de nacimiento + modalidad</b> (puede existir 2016/F7 y 2016/F9 a la vez). Cada categoría hereda las reglas del torneo y puede sobreescribirlas.</p>
+      <div id="config-cats" class="flex flex-wrap gap-2"></div>
+    </div>
+    <p class="text-xs text-ink-400 mt-3">💡 Estas reglas son el <b>default del torneo</b>. Cada categoría (ej. 2017/F7) hereda y puede <b>sobreescribir cualquier campo</b>.</p>
+  </section>
+
+  <!-- ============ A3: EQUIPOS Y ZONAS ============ -->
+  <section id="a-equipos" class="screen">
+    <div class="flex items-center justify-between mb-4">
+      <h1 class="font-display text-3xl tracking-wide">EQUIPOS Y ZONAS</h1>
+      <div class="relative">
+        <button onclick="toggleMenu('menu-fab')" class="bg-brand-500 text-white font-bold px-5 py-2.5 rounded-xl text-sm hover:bg-brand-600">+ NUEVO</button>
+        <div id="menu-fab" class="menu">
+          <button onclick="nuevoTorneo()">🏆 Nuevo torneo</button>
+          <button onclick="nuevaCategoria()">📁 Nueva categoría</button>
+          <button onclick="nuevaZona()">📋 Nueva zona</button>
+          <button onclick="nuevoEquipo()">🛡️ Nuevo equipo</button>
+        </div>
+      </div>
+    </div>
+    <div id="zonas-body"></div>
+  </section>
+
+  <!-- ============ A4: EQUIPO ============ -->
+  <section id="a-equipo" class="screen">
+    <button onclick="go('a-equipos')" class="text-sm text-ink-500 mb-3 font-semibold">← Equipos y zonas</button>
+    <div id="equipo-head"></div>
+    <div class="bg-white border border-line rounded-2xl mt-4 overflow-hidden">
+      <div class="px-5 py-3 border-b border-line flex items-center justify-between">
+        <p class="font-display text-xl tracking-wide">PLANTEL / LISTA DE BUENA FE</p>
+        <button onclick="openImport()" class="bg-ink-900 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-ink-700">+ AGREGAR JUGADOR/A</button>
+      </div>
+      <div class="overflow-x-auto"><table class="w-full min-w-[680px]" id="plantel-table"></table></div>
+      <p class="text-[11px] text-ink-400 px-5 py-3">LBF máx. 30 · El jugador queda <b>pendiente</b> hasta que el admin valide apto médico y documentación.</p>
+    </div>
+  </section>
+
+  <!-- ============ A6: FIXTURE ============ -->
+  <section id="a-fixture" class="screen">
+    <div class="flex items-center justify-between mb-4">
+      <h1 class="font-display text-3xl tracking-wide">FIXTURE Y RESULTADOS</h1>
+      <button onclick="generarFixture()" class="bg-white border border-line font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-paper">⚙️ Generar fixture</button>
+    </div>
+    <div id="tablas-admin" class="grid md:grid-cols-2 gap-4 mb-4"></div>
+    <div id="fixture-admin"></div>
+  </section>
+
+  <!-- ============ A8: CARGAR RESULTADO ============ -->
+  <section id="a-resultado" class="screen">
+    <button onclick="go('a-fixture')" class="text-sm text-ink-500 mb-3 font-semibold">← Fixture</button>
+    <h1 class="font-display text-3xl tracking-wide mb-4">CARGAR PARTIDO</h1>
+    <div class="flex gap-1.5 mb-4">
+      <button class="rounded-xl px-4 py-2 text-sm font-bold bg-ink-900 text-white">Resultado</button>
+      <button onclick="toast('Multimedia: subir fotos/videos del partido (demo)')" class="rounded-xl px-4 py-2 text-sm font-bold border border-line bg-white text-ink-500">Multimedia</button>
+    </div>
+    <div id="resultado-body"></div>
+  </section>
+
+  <!-- ============ A9: MATCH CENTER ============ -->
+  <section id="a-live" class="screen">
+    <div class="flex items-center gap-3 mb-4">
+      <h1 class="font-display text-3xl tracking-wide">MATCH CENTER</h1>
+      <span class="flex items-center gap-1.5 text-xs font-bold text-brand-600"><span class="live-dot"></span>EN VIVO — se publica al módulo Público en tiempo real</span>
+    </div>
+    <div id="live-body"></div>
+  </section>
+
+  <!-- ============ A12: ACREDITACIÓN EN CANCHA ============ -->
+  <section id="a-acred" class="screen">
+    <div class="flex items-center gap-3 mb-1 flex-wrap">
+      <h1 class="font-display text-3xl tracking-wide">ACREDITACIÓN EN CANCHA</h1>
+      <span class="text-[10px] font-bold bg-ink-900 text-white rounded-full px-3 py-1">MEMBRESÍA PREMIUM · DNI + QR + NFC</span>
+    </div>
+    <p class="text-sm text-ink-400 mb-4">Check-in de la alineación del partido del día: verifica que el jugador está <b>correctamente inscrito</b> y actualiza su <b>participación (J)</b> en la planilla del partido.</p>
+    <div class="flex gap-2 mb-4 items-center flex-wrap">
+      <label class="text-sm font-semibold">Partido de hoy:</label>
+      <select id="acred-partido" onchange="renderAcred()" class="border border-line rounded-xl px-3 py-2 text-sm font-semibold bg-white"></select>
+    </div>
+    <div class="grid md:grid-cols-2 gap-4" id="acred-body"></div>
+  </section>
+
+  <!-- ============ A13: COMPARTIBLES PARA REDES ============ -->
+  <section id="a-share" class="screen">
+    <div class="flex items-center gap-3 mb-1 flex-wrap">
+      <h1 class="font-display text-3xl tracking-wide">COMPARTIBLES PARA REDES</h1>
+      <span class="text-[10px] font-bold bg-ink-900 text-white rounded-full px-3 py-1">1080×1080 · INSTAGRAM / WHATSAPP</span>
+    </div>
+    <p class="text-sm text-ink-400 mb-4">Imágenes con el branding de la marca, generadas automáticamente al finalizar cada partido o fecha — listas para publicar.</p>
+    <div class="grid lg:grid-cols-[300px_1fr] gap-4">
+      <div class="bg-white border border-line rounded-2xl p-4 space-y-3 self-start">
+        <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Plantilla</span>
+          <select id="sh-tipo" onchange="renderShareControls();genShare()" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
+            <option value="marcador">🏆 Marcador final</option>
+            <option value="tabla">📊 Tabla de posiciones</option>
+            <option value="goleador">⚽ Goleador de la fecha</option>
+          </select></label>
+        <div id="sh-controls" class="space-y-3"></div>
+        <button onclick="descargarShare()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl text-sm hover:bg-brand-600">⬇ DESCARGAR PNG</button>
+        <button onclick="compartirWhatsApp()" class="w-full bg-emerald-600 text-white font-bold py-2.5 rounded-xl text-sm hover:bg-emerald-700">🟢 COMPARTIR POR WHATSAPP</button>
+        <p class="text-[10px] text-ink-400">En producción, el compartible se genera solo al FINALIZAR el partido y le llega al admin listo para publicar.</p>
+      </div>
+      <div class="bg-white border border-line rounded-2xl p-4 grid place-items-center">
+        <canvas id="sh-canvas" width="1080" height="1080" class="w-full max-w-[430px] rounded-xl border border-line shadow-md"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ A11: ACCESOS ============ -->
+  <section id="a-accesos" class="screen">
+    <h1 class="font-display text-3xl tracking-wide mb-4">ACCESOS</h1>
+    <div class="grid lg:grid-cols-2 gap-4">
+      <div class="bg-white border border-line rounded-2xl p-5">
+        <p class="font-bold mb-1">Coordinadores de club (The Hub)</p>
+        <p class="text-xs text-ink-400 mb-4">Se invita por email con un link encriptado de un solo uso. Una cuenta ve todos sus torneos. <b>El correo del club es el login unificado</b>: el mismo acceso funciona en Liguify Torneos y Liguify Academias.</p>
+        <div class="flex gap-2 mb-4">
+          <input id="coord-email" placeholder="correo@club.com" class="flex-1 border border-line rounded-xl px-3 py-2 text-sm"/>
+          <button onclick="invitarCoord()" class="bg-brand-500 text-white text-sm font-bold px-4 rounded-xl hover:bg-brand-600">Invitar</button>
+        </div>
+        <div id="coords-list" class="space-y-2"></div>
+      </div>
+      <div class="bg-white border border-line rounded-2xl p-5">
+        <p class="font-bold mb-1">Delegados por equipo</p>
+        <p class="text-xs text-ink-400 mb-4">Acceso por código compartido, limitado a la carga del plantel de su equipo.</p>
+        <div id="delegados-list" class="space-y-2"></div>
+      </div>
+    </div>
+  </section>
+
+  </main>
+</div>
+</div>
+
+<!-- ============ MODAL ============ -->
+<div id="modal" class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-4" onclick="if(event.target===this)closeModal()">
+  <div class="bg-white rounded-2xl max-w-lg w-full max-h-[88vh] overflow-y-auto" id="modal-body"></div>
+</div>
+<!-- ============ TOAST ============ -->
+<div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 bg-ink-900 text-white text-sm font-semibold px-5 py-3 rounded-xl shadow-xl z-[60] hidden"></div>
+
+<script>
+/* ================= DATA ================= */
+// CLUB — único POR MARCA (cartera de clientes de INTI CUP): su escudo aplica a todos los torneos de la marca
+const CLUBES = {
+  acar:{n:'ACAR', c:'#1d4ed8', logo:null},
+  alsur:{n:'Alianza Lima Surquillo', c:'#d9232e', logo:null},
+  sbsa:{n:'Sport Boys Sor Ana', c:'#7c3aed', logo:null},
+  amsmp:{n:'Amigos SMP', c:'#0d9488', logo:null},
+  tigres:{n:'Los Tigres del Callao', c:'#16a34a', logo:null},
+  atmi:{n:'Atlético Micaela', c:'#ca8a04', logo:null},
+  tcan:{n:'Team Candela', c:'#9f1239', logo:null},
+};
+// EQUIPOS — instancias del club en la categoría (Tigres A y B comparten el MISMO club de la marca)
+const EQ = {
+  acar:{club:'acar',z:'A',deleg:'Carlos Ramírez',cod:'ACAR-7X2',aj:0},
+  alsur:{club:'alsur',z:'A',deleg:'María Torres',cod:'ALSU-9K1',aj:0},
+  sbsa:{club:'sbsa',z:'A',deleg:null,cod:'SBSA-3P4',aj:-2},
+  amsmp:{club:'amsmp',z:'A',deleg:'Jorge Díaz',cod:'AMIG-5T8',aj:0},
+  tiga:{club:'tigres',sub:'A',z:'B',deleg:'Pedro Vega',cod:'TIGA-2W6',aj:0},
+  tigb:{club:'tigres',sub:'B',z:'B',deleg:'Pedro Vega',cod:'TIGB-8R3',aj:0},
+  atmi:{club:'atmi',z:'B',deleg:null,cod:'ATMI-1Q9',aj:0},
+  tcan:{club:'tcan',z:'B',deleg:'Rosa Malca',cod:'TCAN-6Y5',aj:0},
+};
+let MARCA = {
+  n:'INTI CUP', slug:'inticup', membresia:'premium', logo:null, pais:'🇵🇪 Perú', ciudad:'Lima',
+  email:'contacto@inticup.pe', tel:'+51 999 888 777', ig:'@inticup',
+  desc:'Torneos de fútbol formativo y competitivo.'
+};
+const SLUGS_RESERVADOS=['admin','erp','academias','www','api'];
+let ZONAS = ['A','B'];
+let TORNEOS = [
+  {n:'INTI CUP ORO', estado:'en_curso', cats:5, activo:true},
+  {n:'INTI CUP PLATA NORTE', estado:'proximo', cats:5},
+  {n:'INTI CUP PLATA SUR', estado:'proximo', cats:5},
+  {n:'INTI CUP INTERNACIONAL', estado:'proximo', cats:7},
+  {n:'INTI CUP FORMATIVO', estado:'borrador', cats:6},
+];
+let CATEGORIAS = [
+  {n:'2019 / F7'},{n:'2018 / F7'},{n:'2017 / F7',activa:true},{n:'2016 / F9'},{n:'2015 / F9'}
+];
+let UPLOADS = {}; // buffers de imágenes subidas (dataURL) por slot
+// planteles POR EQUIPO — los equipos nuevos arrancan vacíos
+const PLANTELES = { acar: [
+  {id:'j1',doc:'80123455',n:'Gael Llallahui Diaz',d:9,nac:'2017-05-02',lbf:true,cap:true,apto:'01/07/2026',est:'activo',inhab:false,verif:true,cons:true},
+  {id:'j2',doc:'80234561',n:'Fabio Alvitez Quispe',d:8,nac:'2017-06-24',lbf:true,cap:false,apto:'01/07/2026',est:'activo',inhab:false,verif:true,cons:false},
+  {id:'j3',doc:'80345672',n:'Fabricio Gonzales Salazar',d:4,nac:'2017-01-19',lbf:true,cap:false,apto:'02/07/2026',est:'activo',inhab:false,verif:true,cons:true},
+  {id:'j4',doc:'80456783',n:'Jhosep Gonzales Tapia',d:1,nac:'2017-09-02',lbf:true,cap:false,apto:null,est:'pendiente',inhab:false,verif:true},
+  {id:'j5',doc:'80567894',n:'Serchi Andia Castro',d:3,nac:'2017-05-05',lbf:true,cap:false,apto:'01/07/2026',est:'activo',inhab:true,motivo:'Expulsión — roja directa Fecha 2 (1 partido)',verif:true},
+]};
+const PL = () => PLANTELES[curEq] = (PLANTELES[curEq] || []);
+// base maestra global (demo de importación inteligente)
+const MAESTRO = {
+  '78434568':{n:'Aymar Tantalean Villacrez',nac:'2017-01-13',gen:'Masculino',verif:true,inscrito:'Alianza Lima Surquillo (esta misma categoría)'},
+  '71234567':{n:'Santiago Rojas Paredes',nac:'2017-04-22',gen:'Masculino',verif:true,origen:'Liguify Academias — VOM SPORT',inscrito:null},
+  '80123455':{n:'Gael Llallahui Diaz',nac:'2017-05-02',gen:'Masculino',verif:true,inscrito:'ACAR (este equipo)'},
+};
+const PART = [
+  {id:'a1',fe:1,z:'A',l:'acar',v:'alsur',gl:2,gv:1,est:'finalizado',fecha:'13 jul',hora:'09:00',sede:'Arena 7 - Campo Azul 2',cancha:'Azul 2',arb:'Diego Haro'},
+  {id:'a2',fe:1,z:'A',l:'sbsa',v:'amsmp',gl:0,gv:0,est:'finalizado',fecha:'13 jul',hora:'10:00',sede:'Arena 7 - Campo Azul 1',cancha:'Azul 1',arb:'M. Garay'},
+  {id:'b1',fe:1,z:'B',l:'tiga',v:'atmi',gl:4,gv:0,est:'finalizado',fecha:'13 jul',hora:'11:00',sede:'Arena 7 - Campo Rojo 1',cancha:'Rojo 1',arb:'C. Palacios'},
+  {id:'b2',fe:1,z:'B',l:'tigb',v:'tcan',gl:1,gv:2,est:'finalizado',fecha:'13 jul',hora:'12:00',sede:'Arena 7 - Campo Rojo 2',cancha:'Rojo 2',arb:'L. Ríos'},
+  {id:'a3',fe:2,z:'A',l:'acar',v:'sbsa',gl:3,gv:0,est:'finalizado',fecha:'14 jul',hora:'09:00',sede:'Arena 7 - Campo Azul 2',cancha:'Azul 2',arb:'Diego Haro'},
+  {id:'a4',fe:2,z:'A',l:'alsur',v:'amsmp',gl:2,gv:1,est:'finalizado',fecha:'14 jul',hora:'10:00',sede:'Arena 7 - Campo Azul 1',cancha:'Azul 1',arb:'M. Garay'},
+  {id:'cf3',fe:'Copa Oro',etapa:'Tercer Puesto',l:'tcan',v:'alsur',gl:1,gv:1,est:'en_vivo',fecha:'19 jul',hora:'17:00',sede:'Arena 7 - Campo Azul 1',cancha:'Azul 1',arb:'M. Garay'},
+  {id:'cf4',fe:'Copa Oro',etapa:'Final',l:'acar',v:'tiga',gl:null,gv:null,est:'programado',fecha:'19 jul',hora:'19:00',sede:'Arena 7 - Campo Azul 1',cancha:'Azul 1',arb:'Diego Haro'},
+];
+const COORDS = [
+  {email:'coordinador@acar.pe',club:'ACAR',est:'activo'},
+  {email:'deportes@alsurquillo.com',club:'Alianza Lima Surquillo',est:'activo'},
+  {email:'info@teamcandela.pe',club:'Team Candela',est:'invitado'},
+];
+// match center en vivo (cf3)
+let LIVE = { per:2, min:12, gl:1, gv:1, evs:[
+  {t:'gol',eq:'tcan',jug:'Luis Vera Castillo',per:1,min:10},
+  {t:'gol',eq:'alsur',jug:'Diego Andre Masias',per:1,min:23,asis:'Aymar Tantalean'},
+]};
+
+/* ================= HELPERS ================= */
+const badge=(id,sz=8)=>{const e=EQ[id], cl=CLUBES[e.club];
+  const inner = cl.logo ? `<img src="${cl.logo}" class="absolute inset-0 w-full h-full object-cover rounded-lg"/>` : cl.n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  return `<span class="relative inline-grid place-items-center w-${sz} h-${sz} rounded-lg text-white text-[11px] font-bold shrink-0 overflow-hidden" style="background:${cl.c}">${inner}${e.sub?`<span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white" style="background:${e.sub==='A'?'#e5e7eb':'#f97316'}"></span>`:''}</span>`;};
+// nombre del equipo: LIBRE — override propio, o nombre del club (+ sufijo opcional)
+const nom=id=>EQ[id].nombre || (CLUBES[EQ[id].club].n+(EQ[id].sub?' '+EQ[id].sub:''));
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.remove('hidden');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.add('hidden'),3200);}
+function toggleMenu(id){document.querySelectorAll('.menu').forEach(m=>{if(m.id!==id)m.classList.remove('open')});document.getElementById(id).classList.toggle('open');}
+document.addEventListener('click',e=>{if(!e.target.closest('.menu')&&!e.target.closest('[onclick*="toggleMenu"]'))document.querySelectorAll('.menu').forEach(m=>m.classList.remove('open'));});
+function closeModal(){const m=document.getElementById('modal');m.classList.add('hidden');m.classList.remove('flex');}
+function openModal(html){document.getElementById('modal-body').innerHTML=html;const m=document.getElementById('modal');m.classList.remove('hidden');m.classList.add('flex');}
+
+/* ================= MARCA ================= */
+function renderMarca(){
+  document.getElementById('marca-logo-box').innerHTML = MARCA.logo
+    ? `<img src="${MARCA.logo}" class="absolute inset-0 w-full h-full object-cover"/>`
+    : MARCA.n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  document.getElementById('marca-nombre-h').textContent = MARCA.n.toUpperCase();
+  document.getElementById('marca-datos').textContent = `${MARCA.ciudad}, ${MARCA.pais.replace(/^\S+\s/,'')} · ${MARCA.email} · ${MARCA.tel} · ${MARCA.ig}`;
+  document.getElementById('marca-url').textContent = `${MARCA.slug}.liguify.com`;
+  document.getElementById('marca-sub').textContent = MARCA.n.toUpperCase();
+  document.getElementById('sb-marca-n').textContent = MARCA.n.toUpperCase();
+}
+function compartirMarca(){
+  const url=`https://${MARCA.slug}.liguify.com`;
+  const done=()=>toast(`Link copiado: ${url} — cuélgalo en las redes o la web de tu marca 🔗`);
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(url).then(done).catch(done); }
+  else done();
+}
+function editarMarca(){
+  UPLOADS={};
+  openModal(`<div class="p-5">
+    <div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">EDITAR MARCA</h3><button onclick="closeModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">Datos maestros de la marca (tenant). El nombre y logo se muestran en el módulo público de todos sus torneos.</p>
+    <div class="flex gap-4 mb-4 items-start">
+      <div class="text-center">
+        <label class="w-20 h-20 rounded-2xl bg-paper border-2 border-dashed border-line grid place-items-center text-xs text-ink-400 font-bold cursor-pointer relative overflow-hidden hover:border-brand-500">
+          ${MARCA.logo?`<img src="${MARCA.logo}" class="absolute inset-0 w-full h-full object-cover"/>`:''}
+          <img id="up-logo-img" class="absolute inset-0 w-full h-full object-cover hidden"/>
+          <span id="up-logo-lb" class="${MARCA.logo?'hidden':''}">LOGO 📷</span>
+          <input type="file" accept="image/*" class="hidden" onchange="loadUpload(this,'up-logo')"/>
+        </label>
+        <p class="text-[10px] text-ink-400 mt-1">Logo de la marca</p>
+      </div>
+      <div class="flex-1 grid gap-3 text-sm">
+        <label><span class="text-ink-400 font-semibold text-xs">Nombre de la marca</span><input id="mk-n" value="${MARCA.n}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+        <label><span class="text-ink-400 font-semibold text-xs">URL de tu página (slug)</span>
+          <span class="flex items-center gap-1">
+            <input id="mk-slug" value="${MARCA.slug}" maxlength="30" oninput="document.getElementById('mk-slug-eco').textContent=this.value.toLowerCase().replace(/[^a-z0-9]/g,'')" class="flex-1 border-b border-line py-1.5 font-semibold lowercase" style="min-width:0"/>
+            <span class="text-xs text-ink-400 font-semibold shrink-0">.liguify.com</span>
+          </span>
+          <span class="block text-[10px] text-ink-400 mt-0.5 font-normal">Solo minúsculas y números. Tu página también vive en liguify.com/<b id="mk-slug-eco">${MARCA.slug}</b></span></label>
+        <div class="grid grid-cols-2 gap-3">
+          <label><span class="text-ink-400 font-semibold text-xs">País</span>
+            <select id="mk-p" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
+              ${['🇵🇪 Perú','🇨🇴 Colombia','🇲🇽 México','🇨🇱 Chile','🇦🇷 Argentina','🇪🇨 Ecuador'].map(p=>`<option ${p===MARCA.pais?'selected':''}>${p}</option>`).join('')}
+            </select></label>
+          <label><span class="text-ink-400 font-semibold text-xs">Ciudad</span><input id="mk-c" value="${MARCA.ciudad}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+        </div>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-3 text-sm mb-3">
+      <label><span class="text-ink-400 font-semibold text-xs">Email de contacto</span><input id="mk-e" value="${MARCA.email}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Teléfono / WhatsApp</span><input id="mk-t" value="${MARCA.tel}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Instagram / redes</span><input id="mk-i" value="${MARCA.ig}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+    </div>
+    <label class="text-sm"><span class="text-ink-400 font-semibold text-xs">Descripción</span><textarea id="mk-d" rows="2" class="w-full border border-line rounded-xl p-2.5 mt-1 text-sm">${MARCA.desc}</textarea></label>
+    <button onclick="guardarMarca()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl mt-4 hover:bg-brand-600">GUARDAR MARCA</button>
+  </div>`);
+}
+function guardarMarca(){
+  const n=document.getElementById('mk-n').value.trim();
+  if(!n){ toast('Ingresa el nombre de la marca'); return; }
+  const slug=document.getElementById('mk-slug').value.toLowerCase().replace(/[^a-z0-9]/g,'');
+  if(!slug){ toast('⚠ Ingresa el slug de tu página (solo minúsculas y números)'); return; }
+  if(SLUGS_RESERVADOS.includes(slug)){ toast(`⚠ "${slug}" es un subdominio reservado del sistema — elige otro`); return; }
+  MARCA.slug=slug;
+  MARCA.n=n; MARCA.pais=document.getElementById('mk-p').value; MARCA.ciudad=document.getElementById('mk-c').value.trim();
+  MARCA.email=document.getElementById('mk-e').value.trim(); MARCA.tel=document.getElementById('mk-t').value.trim();
+  MARCA.ig=document.getElementById('mk-i').value.trim(); MARCA.desc=document.getElementById('mk-d').value.trim();
+  if(UPLOADS['up-logo']) MARCA.logo=UPLOADS['up-logo'];
+  renderMarca(); renderConfigLogo(); closeModal();
+  toast(`Marca "${MARCA.n.toUpperCase()}" actualizada — se refleja en el módulo público de todos sus torneos`);
+}
+
+/* ================= CONFIG TORNEO: LOGO + GUARDAR ================= */
+function renderConfigLogo(){
+  const t=TORNEOS.find(x=>x.activo);
+  const cur=document.getElementById('up-tlogo-cur'), lb=document.getElementById('up-tlogo-lb');
+  const src = t.logo || MARCA.logo;
+  if(src){ cur.src=src; cur.classList.remove('hidden'); lb.classList.add('hidden'); if(!t.logo) cur.classList.add('opacity-50'); else cur.classList.remove('opacity-50'); }
+  else { cur.classList.add('hidden'); lb.classList.remove('hidden'); }
+  document.getElementById('tlogo-note').innerHTML = t.logo
+    ? `Logo propio del torneo <b>${t.n}</b>. Clic en la imagen para reemplazarlo.`
+    : `Sin logo propio — por defecto se usa el logo de la marca <b>${MARCA.n.toUpperCase()}</b>. Clic en el recuadro para subir uno.`;
+}
+let CFG_PTS_PREV = {g:3,e:1,p:0};
+function guardarConfig(){
+  const t=TORNEOS.find(x=>x.activo);
+  const nuevos=cfgPts();
+  const cambioPuntajes = nuevos.g!==CFG_PTS_PREV.g || nuevos.e!==CFG_PTS_PREV.e || nuevos.p!==CFG_PTS_PREV.p;
+  const resultados=PART.filter(m=>(m.est==='finalizado'||m.est==='walkover')&&m.gl!==null).length;
+  if(cambioPuntajes && resultados){
+    const ok=confirm(`⚠ ADVERTENCIA — RECÁLCULO RETROACTIVO\n\nEstás cambiando los puntajes (${CFG_PTS_PREV.g}/${CFG_PTS_PREV.e}/${CFG_PTS_PREV.p} → ${nuevos.g}/${nuevos.e}/${nuevos.p}) con ${resultados} resultados ya cargados.\n\nLa tabla de posiciones se recalculará RETROACTIVAMENTE para todo el torneo: los puntos de TODOS los partidos jugados se reasignarán con los nuevos valores.\n\n¿Confirmas el cambio?`);
+    if(!ok){
+      document.getElementById('cfg-pg').value=CFG_PTS_PREV.g;
+      document.getElementById('cfg-pe').value=CFG_PTS_PREV.e;
+      document.getElementById('cfg-pp').value=CFG_PTS_PREV.p;
+      toast('Cambio de puntajes cancelado — la configuración anterior se mantiene');
+      return;
+    }
+  }
+  CFG_PTS_PREV=nuevos;
+  if(UPLOADS['up-tlogo']){ t.logo=UPLOADS['up-tlogo']; delete UPLOADS['up-tlogo']; }
+  renderConfigLogo(); renderTorneosHome(); renderTablasAdmin();
+  toast('Configuración guardada. '+(cambioPuntajes&&resultados?`⚠ Puntajes cambiados: tabla recalculada RETROACTIVAMENTE sobre ${resultados} resultados. `:'')+'Las categorías heredan estas reglas y pueden sobreescribirlas.'+(t.logo?' Logo del torneo actualizado 📷':''));
+}
+
+/* ================= ALTAS: TORNEO / CATEGORÍA / ZONA / EQUIPO ================= */
+function renderSidebar(){
+  document.getElementById('sb-cats').innerHTML = CATEGORIAS.map(c=>`
+    <button onclick="${c.activa?`go('a-equipos')`:`toast('Demo: solo la Categoría 2017 / F7 tiene datos cargados.')`}"
+      class="w-full text-left rounded-xl px-3 py-1.5 text-xs font-semibold ${c.activa?'bg-brand-500 text-white':'text-white/50 hover:text-white/80'}">
+      ${c.n}${c.nueva?' <span class="text-[9px] bg-white/20 rounded px-1">nueva</span>':''}
+    </button>`).join('');
+  document.getElementById('sb-torneos').innerHTML = TORNEOS.filter(t=>!t.activo).map(t=>`<p>${t.n}</p>`).join('');
+}
+const EST_TORNEO = {
+  en_curso:{lb:'EN CURSO',cl:'bg-emerald-100 text-emerald-700'},
+  proximo:{lb:'PRÓXIMO',cl:'bg-amber-100 text-amber-700'},
+  borrador:{lb:'BORRADOR',cl:'bg-slate-200 text-slate-600'},
+};
+function renderTorneosHome(){
+  document.getElementById('torneos-grid').innerHTML = TORNEOS.map(t=>{
+    const e=EST_TORNEO[t.estado];
+    return `<button onclick="${t.activo?`go('a-equipos')`:`toast('Demo: solo INTI CUP ORO tiene datos cargados.')`}"
+      class="bg-white border ${t.activo?'border-brand-500 ring-1 ring-brand-500/30':'border-line'} rounded-2xl p-5 text-left hover:shadow-md hover:-translate-y-0.5 transition">
+      <div class="flex items-start justify-between mb-3">
+        <span class="w-12 h-12 rounded-xl grid place-items-center text-white font-display text-lg overflow-hidden relative ${t.activo?'bg-brand-500':'bg-ink-900'}">${t.logo?`<img src="${t.logo}" class="absolute inset-0 w-full h-full object-cover"/>`:(t.n.replace('INTI CUP','').trim().slice(0,4)||'INTI')}</span>
+        <span class="text-[10px] font-bold px-2 py-1 rounded-full ${e.cl}">${e.lb}</span>
+      </div>
+      <p class="font-bold text-sm leading-tight">${t.n}${t.nueva?' <span class="text-[9px] bg-brand-100 text-brand-700 rounded px-1">nuevo</span>':''}</p>
+      <p class="text-xs text-ink-400 mt-1">Temporada 2026 · ${t.cats||0} categoría${t.cats===1?'':'s'}</p>
+      ${t.activo?'<p class="text-xs text-brand-600 font-bold mt-2">Administrar →</p>':''}
+    </button>`;
+  }).join('');
+}
+function nuevoTorneo(){
+  openModal(`<div class="p-5">
+    <div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">NUEVO TORNEO</h3><button onclick="closeModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">Se crea bajo la marca <b>INTI CUP</b>. Sus reglas se configuran luego en "Configuración del torneo".</p>
+    <div class="grid grid-cols-2 gap-3 text-sm">
+      <label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Nombre</span><input id="nt-n" placeholder="INTI CUP VERANO" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Año</span><input id="nt-a" value="2026" type="number" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Modalidad por defecto</span>
+        <select id="nt-m" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"><option>FUTBOL 7</option><option>FUTBOL 9</option><option>FUTBOL 11</option></select></label>
+      <label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Sede / ámbito</span><input id="nt-s" placeholder="Lima · Circuito Verano" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+    </div>
+    <button onclick="crearTorneo()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl mt-4 hover:bg-brand-600">CREAR TORNEO</button>
+  </div>`);
+}
+function crearTorneo(){
+  const n=document.getElementById('nt-n').value.trim();
+  if(!n){ toast('Ingresa el nombre del torneo'); return; }
+  if(TORNEOS.some(t=>t.n===n.toUpperCase())){ toast(`⚠ El torneo "${n.toUpperCase()}" ya existe en la marca`); return; }
+  TORNEOS.push({n:n.toUpperCase(), estado:'borrador', cats:0, nueva:true});
+  renderSidebar(); renderTorneosHome(); closeModal(); go('a-torneos');
+  toast(`Torneo "${n.toUpperCase()}" creado bajo la marca INTI CUP — en estado BORRADOR, configúralo y agrega categorías`);
+}
+function nuevaCategoria(){
+  const anios=Array.from({length:12},(_,i)=>2020-i);
+  openModal(`<div class="p-5">
+    <div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">NUEVA CATEGORÍA</h3><button onclick="closeModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">La llave de la categoría es <b>año de nacimiento + modalidad</b>: puede existir 2016/F7 y 2016/F9 en el mismo torneo. Hereda las reglas del torneo y puede sobreescribirlas.</p>
+    <div class="grid grid-cols-2 gap-3 text-sm">
+      <label><span class="text-ink-400 font-semibold text-xs">Año de nacimiento</span>
+        <select id="nc-a" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${anios.map(a=>`<option>${a}</option>`).join('')}</select></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Modalidad</span>
+        <select id="nc-m" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"><option>F7</option><option>F9</option><option>F11</option></select></label>
+    </div>
+    <button onclick="crearCategoria()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl mt-4 hover:bg-brand-600">CREAR CATEGORÍA</button>
+  </div>`);
+}
+function crearCategoria(){
+  const n=`${document.getElementById('nc-a').value} / ${document.getElementById('nc-m').value}`;
+  if(CATEGORIAS.some(c=>c.n===n)){ toast(`⚠ La categoría ${n} ya existe en este torneo (llave año+modalidad)`); return; }
+  CATEGORIAS.push({n,nueva:true});
+  renderSidebar(); renderCatsConfig(); closeModal();
+  toast(`Categoría ${n} creada — hereda las reglas de INTI CUP ORO`);
+}
+function renderCatsConfig(){
+  document.getElementById('config-cats').innerHTML = CATEGORIAS.map(c=>`
+    <span class="inline-flex items-center gap-1.5 border ${c.activa?'border-brand-500 bg-brand-50 text-brand-700':'border-line bg-paper text-ink-500'} rounded-full px-3 py-1.5 text-xs font-bold">
+      ${c.n}${c.activa?' · en gestión':''}${c.nueva?' <span class="bg-brand-500 text-white rounded px-1 text-[9px]">nueva</span>':''}
+    </span>`).join('');
+}
+function nuevaZona(){
+  openModal(`<div class="p-5">
+    <div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">NUEVA ZONA</h3><button onclick="closeModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">Grupo dentro de la Categoría 2017 / F7. El fixture se genera por zona (round-robin).</p>
+    <label class="text-sm"><span class="text-ink-400 font-semibold text-xs">Nombre de la zona</span><input id="nz-n" placeholder="C" maxlength="12" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+    <button onclick="crearZona()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl mt-4 hover:bg-brand-600">CREAR ZONA</button>
+  </div>`);
+}
+function crearZona(){
+  const z=document.getElementById('nz-n').value.trim().toUpperCase();
+  if(!z){ toast('Ingresa el nombre de la zona'); return; }
+  if(ZONAS.includes(z)){ toast(`⚠ La zona ${z} ya existe`); return; }
+  ZONAS.push(z);
+  renderZonas(); closeModal(); go('a-equipos');
+  toast(`Zona ${z} creada — agrega equipos con ⋮ → Nuevo equipo`);
+}
+function nuevoEquipo(zona){
+  UPLOADS={};
+  openModal(`<div class="p-5">
+    <div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">NUEVO EQUIPO</h3><button onclick="closeModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">El equipo es la instancia de un <b>club de tu marca</b> (único en INTI CUP: nombre + escudo) en la Categoría 2017 / F7. El nombre del equipo es <b>libre</b>: puede ser el del club, llevar sufijo (A, B, AZUL) o ser distinto (ej. SELECTIVO).</p>
+    <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Club</span>
+      <select id="ne-club" onchange="document.getElementById('ne-newclub').classList.toggle('hidden', this.value!=='__new__')" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
+        <option value="__new__">➕ Crear club nuevo</option>
+        ${Object.entries(CLUBES).map(([id,c])=>`<option value="${id}">${c.n}</option>`).join('')}
+      </select></label>
+    <div id="ne-newclub" class="flex gap-4 mb-3 bg-paper border border-line rounded-xl p-3">
+      <div class="text-center">
+        <label class="w-16 h-16 rounded-2xl bg-white border-2 border-dashed border-line grid place-items-center text-[10px] text-ink-400 font-bold cursor-pointer relative overflow-hidden hover:border-brand-500">
+          <img id="up-esc-img" class="absolute inset-0 w-full h-full object-cover hidden"/>
+          <span id="up-esc-lb">ESCUDO 📷</span>
+          <input type="file" accept="image/*" class="hidden" onchange="loadUpload(this,'up-esc')"/>
+        </label>
+        <p class="text-[9px] text-ink-400 mt-1">único en tu marca</p>
+      </div>
+      <div class="flex-1 grid gap-2 text-sm">
+        <label><span class="text-ink-400 font-semibold text-xs">Nombre del club nuevo</span><input id="ne-cn" placeholder="Sporting Cristal" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
+        <label><span class="text-ink-400 font-semibold text-xs">Color (si no hay escudo)</span><input id="ne-c" type="color" value="#0d9488" class="w-full h-8 border border-line rounded-lg cursor-pointer bg-white"/></label>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-3 text-sm mb-4">
+      <label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Nombre del equipo (opcional)</span><input id="ne-n" placeholder="Vacío = nombre del club · ej: ALIANZA LIMA A · SELECTIVO" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Zona</span>
+        <select id="ne-z" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${ZONAS.map(z=>`<option ${z===zona?'selected':''}>${z}</option>`).join('')}</select></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Sede</span><input id="ne-s" placeholder="San Miguel" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+    </div>
+    <button onclick="crearEquipo()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">CREAR EQUIPO</button>
+  </div>`);
+}
+function crearEquipo(){
+  const clubSel=document.getElementById('ne-club').value;
+  const nombreEq=document.getElementById('ne-n').value.trim();
+  let cid;
+  if(clubSel==='__new__'){
+    const cn=document.getElementById('ne-cn').value.trim();
+    if(!cn){ toast('Ingresa el nombre del club nuevo (o elige un club existente)'); return; }
+    if(Object.values(CLUBES).some(c=>c.n.toLowerCase()===cn.toLowerCase())){ toast(`⚠ El club "${cn}" ya existe — selecciónalo de la lista (el club es único en el sistema)`); return; }
+    cid='c'+Date.now();
+    CLUBES[cid]={ n:cn, c:document.getElementById('ne-c').value, logo:UPLOADS['up-esc']||null };
+  } else { cid=clubSel; }
+  const display=nombreEq || CLUBES[cid].n;
+  if(Object.keys(EQ).some(k=>nom(k).toLowerCase()===display.toLowerCase())){ toast(`⚠ Ya existe un equipo llamado "${display}" en esta categoría — usa un sufijo (A, B) u otro nombre`); return; }
+  const id='e'+Date.now();
+  EQ[id]={ club:cid, nombre:nombreEq||null, z:document.getElementById('ne-z').value, deleg:null,
+    cod:(display.replace(/\W/g,'').slice(0,4).toUpperCase()||'EQPO')+'-'+Math.floor(Math.random()*90+10)+String.fromCharCode(65+Math.floor(Math.random()*26)), aj:0 };
+  renderZonas(); renderAccesos(); closeModal(); go('a-equipos');
+  toast(`Equipo "${display}" creado en Zona ${EQ[id].z} (club: ${CLUBES[cid].n}) — el escudo mostrado siempre es el del club`);
+}
+function editarEscudo(cid){
+  UPLOADS={};
+  const cl=CLUBES[cid];
+  const equipos=Object.keys(EQ).filter(k=>EQ[k].club===cid);
+  openModal(`<div class="p-5">
+    <div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">ESCUDO DEL CLUB</h3><button onclick="closeModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">El club es <b>único en tu marca</b>: su escudo aplica a <b>todos los torneos de INTI CUP</b> (otras marcas no lo ven ni lo comparten). En esta categoría lo usan: <b>${equipos.map(nom).join(' · ')}</b>.</p>
+    <div class="flex items-center gap-4 mb-4">
+      <label class="w-24 h-24 rounded-2xl grid place-items-center text-white font-display text-2xl cursor-pointer relative overflow-hidden border-2 border-dashed border-line hover:border-brand-500" style="background:${cl.c}" title="Clic para subir el nuevo escudo">
+        ${cl.logo?`<img src="${cl.logo}" class="absolute inset-0 w-full h-full object-cover"/>`:cl.n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}
+        <img id="up-esc-img" class="absolute inset-0 w-full h-full object-cover hidden"/>
+        <span id="up-esc-lb" class="hidden"></span>
+        <input type="file" accept="image/*" class="hidden" onchange="loadUpload(this,'up-esc')"/>
+      </label>
+      <div class="text-sm">
+        <p class="font-bold">${cl.n}</p>
+        <p class="text-xs text-ink-400 mt-1">Clic en el recuadro para ${cl.logo?'reemplazar':'subir'} el escudo.</p>
+      </div>
+    </div>
+    <button onclick="guardarEscudo('${cid}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR ESCUDO</button>
+  </div>`);
+}
+function guardarEscudo(cid){
+  if(!UPLOADS['up-esc']){ toast('Sube una imagen para el escudo'); return; }
+  CLUBES[cid].logo=UPLOADS['up-esc'];
+  renderZonas(); renderAccesos(); renderFixtureAdmin(); renderLive();
+  if(document.getElementById('a-equipo').classList.contains('active')) openEquipo(curEq);
+  closeModal();
+  toast(`Escudo de ${CLUBES[cid].n} actualizado — se refleja en todos los torneos de tu marca`);
+}
+
+/* ================= A3: ZONAS ================= */
+function renderZonas(){
+  document.getElementById('zonas-body').innerHTML=ZONAS.map(z=>{
+    const zid=z.replace(/\W/g,'');
+    const eqs=Object.keys(EQ).filter(k=>EQ[k].z===z);
+    const cuerpo = eqs.length ? '' : `<p class="px-5 py-8 text-center text-sm text-ink-400">Zona sin equipos — usa ⋮ → <b>Nuevo equipo</b> para agregar el primero.</p>`;
+    return `<div class="bg-white border border-line rounded-2xl mb-4 overflow-visible">
+      <div class="bg-ink-900 text-white rounded-t-2xl px-5 py-3 flex items-center justify-between relative">
+        <p class="font-display text-xl tracking-wide">ZONA ${z}</p>
+        <button onclick="toggleMenu('menu-z${zid}')" class="text-white/70 hover:text-white font-bold px-2">⋮</button>
+        <div id="menu-z${zid}" class="menu text-ink-900">
+          <button onclick="toast('Editar zona (demo)')">✏️ Editar zona</button>
+          <button onclick="nuevoEquipo('${z}')">➕ Nuevo equipo</button>
+          <button onclick="toast('Importar equipo desde otro torneo de la marca (demo)')">📥 Importar equipo</button>
+          <button onclick="generarFixture('${z}')">⚙️ Generar fixture</button>
+          <button onclick="toast('Zona ocultada del módulo público (demo)')">🙈 Mostrar/ocultar zona</button>
+        </div>
+      </div>
+      ${cuerpo}
+      <table class="w-full ${eqs.length?'':'hidden'}">
+        <thead><tr class="text-[10px] uppercase text-ink-400 border-b border-line tracking-wider text-left"><th class="py-2 pl-5">Equipo</th><th class="text-center">Delegado</th><th class="text-center">Ajuste pts</th><th class="w-12"></th></tr></thead>
+        <tbody>${eqs.map(id=>`<tr class="border-b border-line last:border-0 hover:bg-paper">
+          <td class="py-2.5 pl-5"><button onclick="openEquipo('${id}')" class="flex items-center gap-2.5 font-semibold text-sm hover:text-brand-600">${badge(id)}${nom(id)}</button></td>
+          <td class="text-center">${EQ[id].deleg?`<span class="text-emerald-600 font-bold text-sm" title="${EQ[id].deleg}">✔</span>`:`<span class="text-ink-400 text-sm">—</span>`}</td>
+          <td class="text-center text-sm font-bold ${EQ[id].aj<0?'text-brand-600':EQ[id].aj>0?'text-emerald-600':'text-ink-400'}">${EQ[id].aj>0?'+':''}${EQ[id].aj||'—'}</td>
+          <td class="relative pr-4 text-right">
+            <button onclick="toggleMenu('menu-eq-${id}')" class="text-ink-400 hover:text-ink-900 font-bold px-2">⋮</button>
+            <div id="menu-eq-${id}" class="menu">
+              <button onclick="openEquipo('${id}')">🛡️ Abrir equipo</button>
+              <button onclick="toast('Reemplazar con equipo nuevo (demo)')">🔁 Reemplazar con equipo nuevo</button>
+              <button onclick="toast('Reemplazar con equipo existente (demo)')">🔁 Reemplazar con equipo existente</button>
+              <button onclick="ajustarPuntos('${id}')">± Sumar / Quitar puntos</button>
+              <button onclick="asignarPremio('${id}')">🏆 Asignar premio</button>
+              <button onclick="toast('Reasignar delegado (demo)')">👤 Reasignar delegado</button>
+              <button onclick="toast('Código ${EQ[id].cod} copiado para compartir al delegado')">🔑 Compartir código al delegado</button>
+              <button onclick="toast('Borrar jugadores del equipo (demo)')">🗑 Borrar jugadores</button>
+            </div>
+          </td></tr>`).join('')}</tbody>
+      </table></div>`;
+  }).join('');
+}
+function ajustarPuntos(id){
+  const v=prompt(`Ajuste de puntos para ${nom(id)} (ej: -2 o +1):`, EQ[id].aj||0);
+  if(v===null)return; EQ[id].aj=parseInt(v)||0; renderZonas(); renderTablasAdmin();
+  toast(`Ajuste aplicado: ${nom(id)} ${EQ[id].aj>=0?'+':''}${EQ[id].aj} pts. La tabla pública se recalcula al instante.`);
+}
+function asignarPremio(id){
+  openModal(`<div class="p-5">
+    <div class="flex items-center justify-between mb-4"><h3 class="font-display text-2xl tracking-wide">ASIGNAR PREMIO</h3><button onclick="closeModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-sm font-semibold mb-3 flex items-center gap-2">${badge(id)} ${nom(id)}</p>
+    <select id="premio-sel" class="w-full border border-line rounded-xl px-3 py-2.5 text-sm font-semibold mb-2">
+      <option>Campeón</option><option>Subcampeón</option><option>Tercer puesto</option><option>Fair Play</option><option>Goleador del torneo</option><option>Valla menos vencida</option><option>Otro (texto libre)</option>
+    </select>
+    <input id="premio-libre" placeholder="Texto libre (si elegiste Otro)" class="w-full border border-line rounded-xl px-3 py-2.5 text-sm mb-4"/>
+    <button onclick="closeModal();toast('Premio asignado a ${nom(id)}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR</button>
+  </div>`);
+}
+
+/* ================= A4: EQUIPO + PLANTEL ================= */
+let curEq='acar';
+function openEquipo(id){
+  curEq=id; const e=EQ[id];
+  document.getElementById('equipo-head').innerHTML=`
+    <div class="bg-ink-900 text-white rounded-2xl p-5 flex items-center gap-4 flex-wrap">
+      <button onclick="editarEscudo('${e.club}')" title="Editar escudo del club" class="hover:opacity-80 transition">${badge(id,9)}</button>
+      <div class="flex-1 min-w-40"><h1 class="font-display text-3xl tracking-wide">${nom(id).toUpperCase()}</h1>
+      <p class="text-white/50 text-sm">Zona ${e.z} · Categoría 2017/F7${e.sub?` · Sub-equipo ${e.sub}`:''} · Delegado: ${e.deleg||'— sin asignar'} · Código: <b class="text-white/80">${e.cod}</b></p></div>
+      <button onclick="editarEscudo('${e.club}')" class="bg-white/10 border border-white/20 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-white/20">🛡️ ESCUDO DEL CLUB</button>
+      <button onclick="toast('Quitar del torneo: el equipo se inactiva, nunca se elimina (trazabilidad) — demo')" class="bg-brand-500/20 text-brand-100 border border-brand-500/40 text-xs font-bold px-4 py-2 rounded-xl">QUITAR DEL TORNEO</button>
+    </div>`;
+  renderPlantel(); go('a-equipo', true);
+}
+function renderPlantel(){
+  const js = PL();
+  if(!js.length){
+    document.getElementById('plantel-table').innerHTML=`<tbody><tr><td class="px-5 py-10 text-center text-sm text-ink-400">Plantel vacío — usa <b>+ AGREGAR JUGADOR/A</b> para cargar la Lista de Buena Fe.</td></tr></tbody>`;
+    return;
+  }
+  const thumb = p => p.foto
+    ? `<img src="${p.foto}" class="w-8 h-8 rounded-full object-cover"/>`
+    : `<span class="w-8 h-8 rounded-full bg-ink-900 text-white grid place-items-center text-[10px] font-bold">${p.n.split(' ').map(w=>w[0]).join('').slice(0,2)}</span>`;
+  document.getElementById('plantel-table').innerHTML=`
+    <thead><tr class="text-[10px] uppercase text-ink-400 border-b border-line tracking-wider text-left">
+      <th class="py-2 pl-5 w-10">#</th><th class="w-12"></th><th>Jugador/a</th><th>Documento</th><th>Apto médico</th><th class="text-center">LBF</th><th class="text-center">Estado</th><th class="w-10"></th></tr></thead>
+    <tbody>${js.map((p,i)=>`<tr class="border-b border-line last:border-0 hover:bg-paper ${p.inhab?'bg-red-50/60':''}">
+      <td class="py-2.5 pl-5 font-bold text-ink-400">${p.d}</td>
+      <td>${thumb(p)}</td>
+      <td class="font-semibold text-sm cursor-pointer hover:text-brand-600" onclick="openJugador(${i})">${p.n} ${p.cap?'<span class="text-[9px] bg-ink-900 text-white rounded px-1.5 py-0.5 ml-1 font-bold">C</span>':''} ${p.verif?'<span class="text-emerald-500" title="Identidad verificada">✔</span>':''} ${p.origen==='academia'?'<span class="text-[9px] bg-emerald-100 text-emerald-700 rounded-full px-1.5 py-0.5 font-bold" title="Importado desde Liguify Academias">🎓 Academias</span>':''} ${p.docsPend?'<span class="text-[9px] bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5 font-bold" title="Sin scan de DNI: falta completar la documentación">📄 falta DNI</span>':''} ${p.excepcion?'<span class="text-[9px] bg-amber-100 text-amber-700 rounded-full px-1.5 py-0.5 font-bold" title="Año de nacimiento distinto a la categoría">Exc. edad</span>':''}</td>
+      <td class="text-sm text-ink-500">🇵🇪 DNI ${p.doc}</td>
+      <td class="text-sm ${p.apto?'text-ink-500':'text-amber-600 font-semibold'}">${p.apto||'⚠ pendiente'}</td>
+      <td class="text-center"><span class="toggle ${p.lbf?'on':''} inline-block align-middle" onclick="PL()[${i}].lbf=!PL()[${i}].lbf;renderPlantel()"></span></td>
+      <td class="text-center"><span class="text-[10px] font-bold px-2 py-1 rounded-full ${p.inhab?'bg-brand-100 text-brand-700':p.est==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${p.inhab?'INHABILITADO':p.est.toUpperCase()}</span></td>
+      <td class="pr-4"><button onclick="openJugador(${i})" class="text-ink-400 hover:text-ink-900">✏️</button></td>
+    </tr>`).join('')}</tbody>`;
+}
+
+/* ================= A5: FICHA JUGADOR ================= */
+function openJugador(i){
+  const p=PL()[i];
+  UPLOADS={};
+  const foto = p.foto?`<img src="${p.foto}" class="absolute inset-0 w-full h-full object-cover"/>`:`<span class="text-xl font-bold">${p.n.split(' ').map(w=>w[0]).join('').slice(0,2)}</span>`;
+  const dniImg = src => src?`<img src="${src}" class="absolute inset-0 w-full h-full object-cover"/>`:'';
+  openModal(`<div class="p-5">
+    <div class="flex items-center justify-between mb-4"><h3 class="font-display text-2xl tracking-wide">FICHA DEL JUGADOR</h3><button onclick="closeModal()" class="text-ink-400 text-xl">✕</button></div>
+    <div class="flex gap-4 mb-4">
+      <div class="text-center"><label class="w-20 h-20 rounded-2xl bg-ink-900 text-white grid place-items-center cursor-pointer relative overflow-hidden block" title="Clic para cambiar la foto">
+        ${foto}<img id="up-foto-img" class="absolute inset-0 w-full h-full object-cover hidden"/><span id="up-foto-lb" class="hidden"></span>
+        <input type="file" accept="image/*" class="hidden" onchange="loadUpload(this,'up-foto')"/></label>
+        <p class="text-[10px] text-ink-400 mt-1">Foto del jugador/a 📷</p></div>
+      <div class="flex gap-2">
+        <label class="w-16 h-20 rounded-xl bg-paper border border-line grid place-items-center text-xs text-ink-400 text-center cursor-pointer relative overflow-hidden" title="Clic para subir">
+          ${dniImg(p.dnif)}<img id="up-dnif-img" class="absolute inset-0 w-full h-full object-cover hidden"/><span id="up-dnif-lb" class="${p.dnif?'hidden':''}">DNI<br>frente 📷</span>
+          <input type="file" accept="image/*" class="hidden" onchange="loadUpload(this,'up-dnif')"/></label>
+        <label class="w-16 h-20 rounded-xl bg-paper border border-line grid place-items-center text-xs text-ink-400 text-center cursor-pointer relative overflow-hidden" title="Clic para subir">
+          ${dniImg(p.dnir)}<img id="up-dnir-img" class="absolute inset-0 w-full h-full object-cover hidden"/><span id="up-dnir-lb" class="${p.dnir?'hidden':''}">DNI<br>reverso 📷</span>
+          <input type="file" accept="image/*" class="hidden" onchange="loadUpload(this,'up-dnir')"/></label>
+      </div>
+    </div>
+    ${p.verif?`<div class="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-xl px-3 py-2 mb-4">✔ Identidad verificada en base maestra global — nombre y foto bloqueados para edición</div>`:''}
+    <div class="grid grid-cols-2 gap-3 text-sm">
+      <label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Nombre y Apellido</span><input value="${p.n}" ${p.verif?'disabled class="w-full border-b border-line py-1.5 font-semibold bg-paper text-ink-500"':'class="w-full border-b border-line py-1.5 font-semibold"'}/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Documento (llave única)</span><input value="🇵🇪 DNI ${p.doc}" disabled class="w-full border-b border-line py-1.5 font-semibold bg-paper text-ink-500"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Fecha de nacimiento</span><input value="${p.nac}" ${p.verif?'disabled class="w-full border-b border-line py-1.5 font-semibold bg-paper text-ink-500"':'class="w-full border-b border-line py-1.5 font-semibold"'}/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Dorsal</span><input value="${p.d}" type="number" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Fecha de fichaje</span><input value="10/07/2026" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Cobertura médica</span><input placeholder="—" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Fecha apto médico</span><input value="${p.apto||''}" placeholder="dd/mm/aaaa" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+    </div>
+    <div class="flex items-center justify-between text-sm font-semibold mt-4">Capitán <span class="toggle ${p.cap?'on':''}" onclick="this.classList.toggle('on')"></span></div>
+    <div class="flex items-center justify-between text-sm font-semibold mt-3">Inhabilitado <span class="toggle ${p.inhab?'on':''}" onclick="this.classList.toggle('on')"></span></div>
+    <textarea rows="2" class="w-full border border-line rounded-xl p-2.5 mt-2 text-sm" placeholder="Motivo de inhabilitación">${p.motivo||''}</textarea>
+    <p class="text-[11px] text-ink-400 mt-2">La inhabilitación aplica solo a este torneo, salvo fallo global de oficio.</p>
+    <div class="flex gap-2 mt-4">
+      <button onclick="guardarFicha(${i})" class="flex-1 bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR</button>
+      ${p.est==='pendiente'?`<button onclick="PL()[${i}].est='activo';PL()[${i}].apto='19/07/2026';renderPlantel();closeModal();toast('Jugador ACTIVADO: apto médico y documentación validados ✔')" class="flex-1 bg-emerald-600 text-white font-bold py-2.5 rounded-xl hover:bg-emerald-700">✔ ACTIVAR</button>`:''}
+    </div>
+  </div>`);
+}
+function guardarFicha(i){
+  const p=PL()[i];
+  if(UPLOADS['up-foto']) p.foto=UPLOADS['up-foto'];
+  if(UPLOADS['up-dnif']) p.dnif=UPLOADS['up-dnif'];
+  if(UPLOADS['up-dnir']) p.dnir=UPLOADS['up-dnir'];
+  renderPlantel(); closeModal(); toast('Ficha guardada'+(UPLOADS['up-foto']||UPLOADS['up-dnif']||UPLOADS['up-dnir']?' — imágenes actualizadas 📷':''));
+}
+/* subida de imágenes (dataURL) con preview */
+function loadUpload(input,id){
+  const f=input.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=e=>{
+    UPLOADS[id]=e.target.result;
+    const img=document.getElementById(id+'-img'), lb=document.getElementById(id+'-lb');
+    if(img){ img.src=e.target.result; img.classList.remove('hidden'); }
+    if(lb) lb.classList.add('hidden');
+  };
+  r.readAsDataURL(f);
+}
+function upSlot(id,label){
+  return `<label class="w-16 h-20 shrink-0 rounded-xl bg-white border-2 border-dashed border-amber-300 grid place-items-center text-[10px] text-amber-600 text-center font-bold cursor-pointer relative overflow-hidden hover:border-amber-500">
+    <img id="${id}-img" class="absolute inset-0 w-full h-full object-cover hidden"/>
+    <span id="${id}-lb">${label}</span>
+    <input type="file" accept="image/*" class="hidden" onchange="loadUpload(this,'${id}')"/>
+  </label>`;
+}
+
+/* ================= IMPORTACIÓN INTELIGENTE ================= */
+function openImport(){
+  UPLOADS={};
+  openModal(`<div class="p-5">
+    <div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">AGREGAR JUGADOR/A</h3><button onclick="closeModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">Digita el documento. El sistema busca en la <b>base maestra global</b> (llave: país + número).</p>
+    <div class="flex gap-2 mb-3">
+      <select id="imp-tipo" class="border border-line rounded-xl px-3 py-2.5 text-sm font-semibold"><option>🇵🇪 DNI</option><option>🇦🇷 DNI</option><option>🇨🇱 RUN</option><option>🌐 Pasaporte</option></select>
+      <input id="imp-doc" placeholder="Nro de documento" class="flex-1 border border-line rounded-xl px-3 py-2.5 text-sm font-semibold" onkeydown="if(event.key==='Enter')buscarDoc()"/>
+      <button onclick="buscarDoc()" class="bg-ink-900 text-white text-sm font-bold px-4 rounded-xl hover:bg-ink-700">BUSCAR</button>
+    </div>
+    <p class="text-[10px] text-ink-400 mb-2">Prueba en la demo: <b>78434568</b> (bloqueado: ya inscrito en la categoría) · <b>71234567</b> (existe en maestra, importable) · otro nº (alta nueva)</p>
+    <div id="imp-result"></div>
+    <div class="flex items-center gap-2 my-4"><span class="flex-1 h-px bg-line"></span><span class="text-[10px] text-ink-400 font-bold">O</span><span class="flex-1 h-px bg-line"></span></div>
+    <button onclick="openImportAcademia()" class="w-full bg-white border-2 border-emerald-600 text-emerald-700 font-bold py-2.5 rounded-xl text-sm hover:bg-emerald-50">🎓 IMPORTAR DESDE LIGUIFY ACADEMIAS</button>
+    <p class="text-[10px] text-ink-400 mt-2">El club usa el <b>mismo correo</b> como login en Torneos y Academias. Sus alumnos se importan con nombres, apellidos, DNI, fecha de nacimiento y fotos (alumno + DNI).</p>
+  </div>`);
+}
+/* ===== Integración Liguify Academias: pool de alumnos del club (mismo login por email) ===== */
+let ACADEMIA_POOL = [
+  {nombres:'Santiago', apellidos:'Rojas Paredes', doc:'71234567', nac:'2017-04-22', academia:'VOM SPORT', fotos:true},
+  {nombres:'Emilio', apellidos:'Castro Vega', doc:'72345678', nac:'2017-08-30', academia:'VOM SPORT', fotos:true},
+  {nombres:'Dilan', apellidos:'Flores Ramos', doc:'73456789', nac:'2017-11-05', academia:'VOM SPORT', fotos:true},
+  {nombres:'Joaquín', apellidos:'Bravo Salas', doc:'74567890', nac:'2016-02-18', academia:'VOM SPORT', fotos:false},
+];
+function openImportAcademia(){
+  const disponibles=ACADEMIA_POOL.filter(a=>!PL().some(p=>p.doc===a.doc));
+  openModal(`<div class="p-5">
+    <div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">🎓 IMPORTAR DESDE ACADEMIAS</h3><button onclick="closeModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">Alumnos de las academias vinculadas al correo del club. Vienen con <b>identidad ya verificada</b>: nombres, apellidos, DNI, fecha de nacimiento y fotos (alumno + DNI).</p>
+    ${disponibles.length?`<div class="space-y-2 mb-4">${disponibles.map((a,i)=>`
+      <label class="flex items-center gap-3 border border-line rounded-xl p-3 hover:bg-emerald-50 cursor-pointer">
+        <input type="checkbox" class="imp-acad w-4 h-4 accent-emerald-600" data-doc="${a.doc}"/>
+        <span class="w-9 h-9 rounded-full bg-emerald-700 text-white grid place-items-center text-xs font-bold">${(a.nombres[0]+a.apellidos[0])}</span>
+        <span class="flex-1"><span class="font-semibold text-sm block">${a.nombres} ${a.apellidos}</span>
+          <span class="text-xs text-ink-400">🇵🇪 DNI ${a.doc} · nac. ${a.nac} · <b class="text-emerald-700">${a.academia}</b>${a.fotos?' · 📷 foto + DNI':' · ⚠ sin scan de DNI'}</span></span>
+        <span class="flex flex-col gap-1 items-end">
+        ${MAESTRO[a.doc]?'<span class="text-[9px] font-bold bg-emerald-100 text-emerald-700 rounded px-1.5 py-0.5" title="El DNI ya existe en Liguify: se usarán los datos de la base maestra, no los de Academias">YA EN LIGUIFY</span>':''}
+        ${!MAESTRO[a.doc]&&!a.fotos?'<span class="text-[9px] font-bold bg-amber-100 text-amber-700 rounded px-1.5 py-0.5">PEND. DOCUMENTACIÓN</span>':''}
+        ${new Date(a.nac).getFullYear()!==2017?'<span class="text-[9px] font-bold bg-amber-100 text-amber-700 rounded px-1.5 py-0.5">EXCEPCIÓN EDAD</span>':''}
+        </span>
+      </label>`).join('')}</div>
+    <button onclick="doImportAcademia()" class="w-full bg-emerald-600 text-white font-bold py-2.5 rounded-xl hover:bg-emerald-700">IMPORTAR SELECCIONADOS</button>`
+    :'<p class="text-sm text-ink-400 py-6 text-center">No hay alumnos disponibles para importar (ya están en el plantel).</p>'}
+  </div>`);
+}
+function doImportAcademia(){
+  const sel=[...document.querySelectorAll('.imp-acad:checked')].map(c=>ACADEMIA_POOL.find(a=>a.doc===c.dataset.doc))
+    .filter(a=>!inscritoEnCategoria(a.doc)); // anti-suplantación también en el import masivo
+  if(!sel.length){ toast('Selecciona al menos un alumno (los ya inscritos en la categoría se omiten)'); return; }
+  if(PL().length+sel.length>LBF_MAX){ toast(`⚠ LBF llena: máximo ${LBF_MAX} por equipo — tienes ${PL().length} y seleccionaste ${sel.length}`); return; }
+  let d=Math.max(0,...PL().map(p=>p.d))+1, deMaestro=0, pendDoc=0;
+  sel.forEach(a=>{
+    const m=MAESTRO[a.doc]; // REGLA: si el DNI ya existe en Liguify, mandan los datos de la base maestra (no se importan los de Academias)
+    const n = m ? m.n : `${a.nombres} ${a.apellidos}`;
+    const nac = m ? m.nac : a.nac;
+    const verif = m ? true : !!a.fotos; // sin scan de DNI en Academias → pendiente de documentación
+    if(m) deMaestro++; else if(!verif) pendDoc++;
+    PL().push({id:'x'+Date.now()+a.doc, doc:a.doc, n, nombres:m?null:a.nombres, apellidos:m?null:a.apellidos,
+      d:d++, nac, lbf:true, cap:false, apto:null, est:'pendiente', inhab:false, verif, origen:'academia', docsPend:!verif,
+      excepcion:new Date(nac+'T00:00:00').getFullYear()!==2017, foto:null, dnif:null, dnir:null});
+  });
+  renderPlantel(); closeModal();
+  const partes=[`${sel.length} importado${sel.length>1?'s':''} desde Academias 🎓`];
+  if(deMaestro) partes.push(`${deMaestro} ya existía(n) en Liguify: se usaron los datos de la base maestra`);
+  if(pendDoc) partes.push(`${pendDoc} sin scan de DNI: entra(n) como PENDIENTE DE DOCUMENTACIÓN 📄`);
+  toast(partes.join(' · ')+' — todos PENDIENTES de validación del admin');
+}
+// anti-suplantación DINÁMICO: busca el doc en todos los planteles de la categoría
+function inscritoEnCategoria(doc){
+  for(const [eqid,pl] of Object.entries(PLANTELES)){ if((pl||[]).some(p=>p.doc===doc)) return eqid; }
+  return null;
+}
+const LBF_MAX=30;
+function buscarDoc(){
+  const doc=document.getElementById('imp-doc').value.trim();
+  const r=document.getElementById('imp-result');
+  if(!doc){r.innerHTML='';return;}
+  // 1) regla dinámica: ¿ya está inscrito en un equipo de ESTA categoría?
+  const eqIns=inscritoEnCategoria(doc);
+  if(eqIns){
+    const p=PLANTELES[eqIns].find(x=>x.doc===doc);
+    r.innerHTML=`<div class="bg-brand-50 border border-brand-100 rounded-xl p-4">
+      <p class="font-bold text-brand-700 text-sm mb-1">⛔ Inscripción bloqueada — Anti-suplantación</p>
+      <p class="text-sm"><b>${p.n}</b> (DNI ${doc}) ya está inscrito en <b>${nom(eqIns)}${eqIns===curEq?' (este mismo equipo)':''}</b> en esta categoría.</p>
+      <p class="text-xs text-ink-500 mt-2">Un mismo documento no puede estar en dos equipos de la misma categoría del mismo torneo.</p>
+    </div>`;
+    return;
+  }
+  const m=MAESTRO[doc];
+  if(m && m.inscrito){
+    r.innerHTML=`<div class="bg-brand-50 border border-brand-100 rounded-xl p-4">
+      <p class="font-bold text-brand-700 text-sm mb-1">⛔ Inscripción bloqueada — Anti-suplantación</p>
+      <p class="text-sm"><b>${m.n}</b> (DNI ${doc}) ya está inscrito en <b>${m.inscrito}</b>.</p>
+      <p class="text-xs text-ink-500 mt-2">Un mismo documento no puede estar en dos sub-equipos de la misma categoría del mismo torneo. Sí puede jugar otros torneos en paralelo.</p>
+    </div>`;
+  } else if(m){
+    const censurado=m.n.split(' ').map(w=>w[0]+'*'.repeat(Math.max(w.length-1,2))).join(' ');
+    r.innerHTML=`<div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+      <p class="font-bold text-emerald-700 text-sm mb-2">✔ Coincidencia en base maestra global${m.origen?` · origen: ${m.origen}`:''}</p>
+      <div class="flex items-center gap-3 mb-2">
+        <span class="w-12 h-12 rounded-xl bg-ink-900 text-white grid place-items-center font-bold">🔒</span>
+        <div><p class="font-semibold text-sm">${censurado}</p><p class="text-xs text-ink-500">Nac. ${m.nac.slice(0,4)}-**-** · ${m.gen}</p></div>
+      </div>
+      <p class="text-[11px] text-ink-500 mb-3">🔒 <b>Privacidad de menores:</b> los datos completos (nombre y foto verificados) se revelan únicamente <b>al confirmar la inscripción</b> a tu LBF.</p>
+      <div class="flex gap-2"><input placeholder="Dorsal" type="number" id="imp-dorsal" class="w-24 border border-line rounded-xl px-3 py-2 text-sm"/>
+      <button onclick="importarJugador('${doc}')" class="flex-1 bg-emerald-600 text-white text-sm font-bold rounded-xl hover:bg-emerald-700">CONFIRMAR INSCRIPCIÓN A LA LBF</button></div>
+    </div>`;
+  } else {
+    r.innerHTML=`<div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+      <p class="font-bold text-amber-700 text-sm mb-2">Documento no registrado — alta nueva</p>
+      <div class="grid grid-cols-2 gap-3 text-sm mb-3">
+        <label><span class="text-ink-400 font-semibold text-xs">Nombres *</span><input id="alta-nom" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
+        <label><span class="text-ink-400 font-semibold text-xs">Apellidos *</span><input id="alta-ape" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
+        <label><span class="text-ink-400 font-semibold text-xs">Fecha de nacimiento *</span><input id="alta-nac" type="date" min="2005-01-01" max="2022-12-31" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/>
+          <span class="block text-[9px] text-amber-700 mt-0.5 font-normal">Dato clave: determina la categoría (esta es 2017)</span></label>
+        <label><span class="text-ink-400 font-semibold text-xs">Dorsal</span><input id="alta-d" type="number" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
+      </div>
+      <div class="flex gap-2 mb-3 items-stretch">
+        ${upSlot('up-foto','FOTO<br>JUGADOR/A 📷')}
+        ${upSlot('up-dnif','SCAN DNI<br>FRENTE * 📷')}
+        ${upSlot('up-dnir','SCAN DNI<br>REVERSO * 📷')}
+        <p class="text-xs text-amber-700 self-center flex-1">Toca cada recuadro para subir la imagen. El escaneo de DNI (frente y reverso) es <b>obligatorio</b> para crear el registro maestro.</p>
+      </div>
+      <button onclick="altaJugador('${doc}')" class="w-full bg-amber-600 text-white text-sm font-bold py-2.5 rounded-xl hover:bg-amber-700">CREAR Y AGREGAR (queda PENDIENTE)</button>
+    </div>`;
+  }
+}
+function importarJugador(doc){
+  if(PL().length>=LBF_MAX){ toast(`⚠ LBF llena: este equipo ya tiene el máximo de ${LBF_MAX} jugadores de la categoría`); return; }
+  const m=MAESTRO[doc], d=+document.getElementById('imp-dorsal')?.value||0;
+  const excepcion=new Date(m.nac+'T00:00:00').getFullYear()!==2017;
+  PL().push({id:'x'+Date.now(),doc,n:m.n,d,nac:m.nac,lbf:true,cap:false,apto:null,est:'pendiente',inhab:false,verif:true,excepcion});
+  renderPlantel(); closeModal();
+  toast(`${m.n} inscrito en la LBF${excepcion?' ⚠ como EXCEPCIÓN POR EDAD (no nació en 2017)':''} — queda PENDIENTE de validación del admin`);
+}
+function altaJugador(doc){
+  const nom=document.getElementById('alta-nom').value.trim(), ape=document.getElementById('alta-ape').value.trim();
+  if(!nom||!ape){ toast('Ingresa nombres y apellidos del jugador/a'); return; }
+  const n=`${nom} ${ape}`;
+  const nac=document.getElementById('alta-nac').value;
+  if(!nac){ toast('⚠ La fecha de nacimiento es obligatoria — determina la categoría del jugador/a'); return; }
+  if(!UPLOADS['up-dnif'] || !UPLOADS['up-dnir']){ toast('⚠ Falta el scan del DNI (frente y reverso) — es obligatorio para el alta'); return; }
+  if(PL().length>=LBF_MAX){ toast(`⚠ LBF llena: este equipo ya tiene el máximo de ${LBF_MAX} jugadores de la categoría`); return; }
+  const anio=new Date(nac+'T00:00:00').getFullYear();
+  const excepcion = anio!==2017;
+  PL().push({id:'x'+Date.now(),doc,n,nombres:nom,apellidos:ape,d:+document.getElementById('alta-d').value||0,nac,lbf:true,cap:false,apto:null,est:'pendiente',inhab:false,verif:false,excepcion,
+    foto:UPLOADS['up-foto']||null, dnif:UPLOADS['up-dnif'], dnir:UPLOADS['up-dnir']});
+  renderPlantel(); closeModal();
+  toast(excepcion
+    ? `⚠ ${n} nació en ${anio} (categoría 2017): queda registrado como EXCEPCIÓN POR EDAD, sujeto a las reglas del torneo — PENDIENTE de validación`
+    : `${n} creado en la base maestra global con su documentación 📷 — PENDIENTE de validación`);
+}
+
+/* ================= A6: FIXTURE ADMIN ================= */
+function renderFixtureAdmin(){
+  const grupos={};
+  PART.forEach(m=>{const k=typeof m.fe==='number'?`FECHA ${m.fe}`:m.fe; (grupos[k]=grupos[k]||[]).push(m);});
+  document.getElementById('fixture-admin').innerHTML=Object.entries(grupos).map(([g,ms])=>{
+    const fkey=g.replace(/\W/g,'');
+    return `
+    <div class="bg-white border border-line rounded-2xl mb-4 overflow-visible">
+      <div class="bg-ink-900 text-white rounded-t-2xl px-5 py-2.5 flex items-center justify-between relative">
+        <p class="font-display text-lg tracking-wide">${g.toUpperCase()}</p>
+        <button onclick="toggleMenu('menu-f-${fkey}')" class="text-white/70 hover:text-white font-bold px-2">⋮</button>
+        <div id="menu-f-${fkey}" class="menu text-ink-900">
+          <button onclick="toast('Editar fecha: nombre, fecha/hora, visibilidad e impacto en tablas (demo)')">✏️ Editar información</button>
+          <button onclick="nuevoPartido('${g}')">➕ Nuevo partido</button>
+          <button onclick="toast('Mover todos los partidos a otra fecha (demo)')">📆 Mover todo a otra fecha</button>
+          <button onclick="toast('Fecha ocultada/mostrada en el módulo público (demo)')">🙈 Mostrar/ocultar fecha</button>
+          <button onclick="toast('Fecha pospuesta — los partidos pasan a reprogramación (demo)')">⏸ Posponer fecha</button>
+          <button onclick="toast('Planillas de la fecha generadas en Excel (demo)')">📊 Generar planillas en Excel</button>
+          <button onclick="toast('Planillas de la fecha generadas en PDF (demo)')">🖨 Generar planillas en PDF</button>
+          <button onclick="toast('Eliminar fecha (demo)')">🗑 Eliminar fecha</button>
+        </div>
+      </div>
+      ${ms.map(m=>{
+        const fin=m.est==='finalizado', vivo=m.est==='en_vivo';
+        return `<div class="flex items-center px-4 py-2.5 border-b border-line last:border-0 hover:bg-paper relative">
+        <div class="flex-1 flex items-center justify-end gap-2 text-sm font-semibold">${nom(m.l)} ${badge(m.l,7)}</div>
+        <div class="w-28 text-center">
+          ${vivo?`<span class="text-[9px] font-bold text-brand-600 block">● EN VIVO</span>`:`<span class="text-[9px] font-bold ${fin?'text-emerald-600':'text-ink-400'} uppercase block">${fin?'Finalizado':'Programado'}</span>`}
+          ${fin||vivo?`<span class="font-display text-2xl">${m.gl} : ${m.gv}</span>`:`<span class="text-xs text-ink-400 font-semibold">${m.fecha} · ${m.hora}</span>`}
+        </div>
+        <div class="flex-1 flex items-center gap-2 text-sm font-semibold">${badge(m.v,7)} ${nom(m.v)}</div>
+        <button onclick="toggleMenu('menu-p-${m.id}')" class="text-ink-400 hover:text-ink-900 font-bold px-2">⋮</button>
+        <div id="menu-p-${m.id}" class="menu">
+          <button onclick="editPartido('${m.id}')">✏️ Editar información</button>
+          <button onclick="toast('Cargar planilla: seleccionar titulares y suplentes de la LBF (demo)')">📋 Cargar planilla</button>
+          <button onclick="openResultado('${m.id}')">⚽ Cargar resultado</button>
+          <button onclick="toast('Mover a otra fecha (demo)')">📆 Mover a otra fecha</button>
+          <button onclick="toast('Acta arbitral F7 generada en PDF: planilla oficial con LBF de ambos equipos (demo)')">🖨 Generar planilla de partido</button>
+          <button onclick="toast('Eliminar partido (demo)')">🗑 Eliminar partido</button>
+        </div>
+      </div>`;}).join('')}
+    </div>`;}).join('');
+}
+function nuevoPartido(grupo){
+  const esFecha = grupo.startsWith('FECHA ');
+  openModal(`<div class="p-5">
+    <div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">NUEVO PARTIDO</h3><button onclick="closeModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">Se agrega a <b>${grupo.toUpperCase()}</b> · Categoría 2017 / F7.</p>
+    <div class="grid grid-cols-2 gap-3 text-sm">
+      <label><span class="text-ink-400 font-semibold text-xs">Equipo 1 (local)</span>
+        <select id="np-l" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${Object.keys(EQ).map(id=>`<option value="${id}">${nom(id)}</option>`).join('')}</select></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Equipo 2 (visita)</span>
+        <select id="np-v" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${Object.keys(EQ).map((id,i)=>`<option value="${id}" ${i===1?'selected':''}>${nom(id)}</option>`).join('')}</select></label>
+      ${esFecha
+        ? `<label><span class="text-ink-400 font-semibold text-xs">Zona</span>
+            <select id="np-z" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${ZONAS.map(z=>`<option>${z}</option>`).join('')}</select></label>`
+        : `<label><span class="text-ink-400 font-semibold text-xs">Etapa / llave</span><input id="np-etapa" placeholder="Cuartos #1 Copa Oro" class="w-full border-b border-line py-1.5 font-semibold"/></label>`}
+      <label><span class="text-ink-400 font-semibold text-xs">Fecha</span><input id="np-f" type="date" value="2026-07-20" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Hora</span><input id="np-h" type="time" value="15:00" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Sede</span><input id="np-s" value="Arena 7" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Cancha</span><input id="np-c" placeholder="Campo Azul 1" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Árbitro</span><input id="np-a" placeholder="—" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+    </div>
+    <button onclick="crearPartido('${grupo}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl mt-4 hover:bg-brand-600">AGREGAR PARTIDO</button>
+  </div>`);
+}
+function crearPartido(grupo){
+  const l=document.getElementById('np-l').value, v=document.getElementById('np-v').value;
+  if(l===v){ toast('⚠ Un equipo no puede jugar contra sí mismo — elige dos equipos distintos'); return; }
+  if(grupo.startsWith('FECHA ')){
+    const zSel=document.getElementById('np-z').value;
+    if(EQ[l].z!==zSel || EQ[v].z!==zSel){ toast(`⚠ Ambos equipos deben pertenecer a la Zona ${zSel} (${nom(l)} es de Zona ${EQ[l].z}, ${nom(v)} de Zona ${EQ[v].z})`); return; }
+  }
+  const fval=document.getElementById('np-f').value;
+  if(!fval){ toast('Selecciona la fecha del partido'); return; }
+  const fechaTxt=new Date(fval+'T00:00:00').toLocaleDateString('es-PE',{day:'2-digit',month:'short'}).replace('.','');
+  const esFecha=grupo.startsWith('FECHA ');
+  const p={ id:'p'+Date.now(), l, v, gl:null, gv:null, est:'programado',
+    fecha:fechaTxt, hora:document.getElementById('np-h').value||'15:00',
+    sede:(document.getElementById('np-s').value.trim()||'Por definir')+(document.getElementById('np-c').value.trim()?' - '+document.getElementById('np-c').value.trim():''),
+    cancha:document.getElementById('np-c').value.trim()||'—', arb:document.getElementById('np-a').value.trim()||'Por asignar' };
+  if(esFecha){ p.fe=+grupo.slice(6); p.z=document.getElementById('np-z').value; }
+  else { p.fe='Copa Oro'; p.etapa=document.getElementById('np-etapa').value.trim()||'Partido adicional'; }
+  PART.push(p);
+  renderFixtureAdmin(); closeModal();
+  toast(`Partido ${nom(l)} vs ${nom(v)} agregado a ${grupo} — PROGRAMADO, ya visible en el módulo público`);
+}
+/* ===== GENERAR FIXTURE: round-robin (método del círculo) ===== */
+// N equipos → N-1 fechas, todos contra todos sin repetición; si N es impar, un equipo descansa por fecha
+function roundRobin(ids){
+  const teams=[...ids];
+  if(teams.length%2) teams.push(null); // comodín: descanso
+  const n=teams.length, mitad=n/2, rondas=n-1;
+  const fechas=[];
+  let arr=[...teams];
+  for(let r=0;r<rondas;r++){
+    const pares=[];
+    for(let i=0;i<mitad;i++){
+      const a=arr[i], b=arr[n-1-i];
+      if(a!==null&&b!==null) pares.push(r%2 ? [b,a] : [a,b]); // alterna localía entre rondas
+    }
+    fechas.push(pares);
+    arr=[arr[0], arr[n-1], ...arr.slice(1,n-1)]; // rotación con el primero fijo
+  }
+  return fechas;
+}
+function generarFixture(zona){
+  openModal(`<div class="p-5">
+    <div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⚙️ GENERAR FIXTURE</h3><button onclick="closeModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">Algoritmo <b>todos contra todos</b> por zona: N equipos → N−1 fechas, sin cruces repetidos. Las <b>fechas son compartidas</b>: en cada fecha se programan los partidos de todas las zonas (ej. 2 zonas de 4 → 4 partidos por fecha, 2 de cada zona). Si una zona es impar, un equipo descansa por fecha.</p>
+    <div class="grid grid-cols-2 gap-3 text-sm mb-3">
+      <label><span class="text-ink-400 font-semibold text-xs">Alcance</span>
+        <select id="gf-z" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
+          <option value="__all__" ${!zona?'selected':''}>Todas las zonas (fechas compartidas)</option>
+          ${ZONAS.map(z=>{const c=Object.keys(EQ).filter(k=>EQ[k].z===z).length;return `<option value="${z}" ${z===zona?'selected':''}>Solo Zona ${z} (${c} equipos → ${Math.max(c-1,0)} fechas)</option>`;}).join('')}
+        </select></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Fecha de inicio</span><input id="gf-f" type="date" value="2026-07-20" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Hora del primer partido</span><input id="gf-h" type="time" value="09:00" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Sede</span><input id="gf-s" value="Arena 7" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+    </div>
+    <label class="flex items-center justify-between text-sm font-semibold border border-line rounded-xl px-3 py-2.5 mb-4">
+      <span>Reemplazar partidos existentes de la zona<br><span class="text-[10px] text-brand-600 font-normal">⚠ Borra sus partidos y resultados de la fase de grupos</span></span>
+      <span class="toggle" id="gf-rep" onclick="this.classList.toggle('on')"></span>
+    </label>
+    <button onclick="crearFixtureZona()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GENERAR</button>
+  </div>`);
+}
+function crearFixtureZona(){
+  const sel=document.getElementById('gf-z').value;
+  const zonasSel = sel==='__all__'
+    ? ZONAS.filter(z=>Object.keys(EQ).filter(k=>EQ[k].z===z).length>=2)
+    : [sel];
+  if(!zonasSel.length || (sel!=='__all__' && Object.keys(EQ).filter(k=>EQ[k].z===sel).length<2)){
+    toast('⚠ Se necesitan al menos 2 equipos en la zona para generar fixture'); return;
+  }
+  const existentes=PART.filter(m=>typeof m.fe==='number'&&zonasSel.includes(m.z));
+  const reemplazar=document.getElementById('gf-rep').classList.contains('on');
+  if(existentes.length && !reemplazar){
+    toast(`⚠ ${sel==='__all__'?'Las zonas ya tienen':'La Zona '+sel+' ya tiene'} ${existentes.length} partidos (incluye resultados). Activa "Reemplazar" para regenerar desde cero.`);
+    return;
+  }
+  if(existentes.length){ existentes.forEach(m=>PART.splice(PART.indexOf(m),1)); }
+  const fInicio=document.getElementById('gf-f').value||'2026-07-20';
+  const hBase=document.getElementById('gf-h').value||'09:00';
+  const sede=document.getElementById('gf-s').value.trim()||'Por definir';
+  // round-robin por zona; la ronda r de TODAS las zonas cae en la misma FECHA r+1
+  const rr={}; zonasSel.forEach(z=>rr[z]=roundRobin(Object.keys(EQ).filter(k=>EQ[k].z===z)));
+  const totalFechas=Math.max(...zonasSel.map(z=>rr[z].length));
+  let creados=0;
+  for(let r=0;r<totalFechas;r++){
+    const dia=new Date(fInicio+'T00:00:00'); dia.setDate(dia.getDate()+r);
+    const fechaTxt=dia.toLocaleDateString('es-PE',{day:'2-digit',month:'short'}).replace('.','');
+    let slot=0; // las horas se escalonan entre TODOS los partidos de la fecha (todas las zonas)
+    zonasSel.forEach(z=>{
+      (rr[z][r]||[]).forEach(([l,v])=>{
+        const h=(+hBase.slice(0,2))+slot;
+        PART.push({ id:'g'+Date.now()+'_'+z+r+'_'+slot, fe:r+1, z, l, v, gl:null, gv:null, est:'programado',
+          fecha:fechaTxt, hora:String(h).padStart(2,'0')+':'+hBase.slice(3), sede, cancha:'—', arb:'Por asignar' });
+        slot++; creados++;
+      });
+    });
+  }
+  renderFixtureAdmin(); renderTablasAdmin(); closeModal(); go('a-fixture');
+  const porFecha=Math.round(creados/totalFechas*10)/10;
+  toast(sel==='__all__'
+    ? `Fixture generado: ${zonasSel.length} zonas → ${totalFechas} fechas compartidas, ${creados} partidos (~${porFecha} por fecha, con partidos de todas las zonas en cada fecha)`
+    : `Fixture Zona ${sel} generado: ${totalFechas} fechas, ${creados} partidos (todos contra todos, sin repetición)`);
+}
+
+/* ===== Tabla de posiciones auto-recalculada (los puntos salen de la config del torneo) ===== */
+function cfgPts(){
+  return { g:+(document.getElementById('cfg-pg')?.value??3), e:+(document.getElementById('cfg-pe')?.value??1), p:+(document.getElementById('cfg-pp')?.value??0) };
+}
+function calcTablaZona(z){
+  const pts=cfgPts();
+  const ids=Object.keys(EQ).filter(k=>EQ[k].z===z);
+  const t={}; ids.forEach(id=>t[id]={id,pj:0,pg:0,pe:0,pp:0,gf:0,gc:0,pts:EQ[id].aj||0});
+  // computa finalizados Y walkovers (el WO lo marca manualmente el admin con su marcador según config)
+  PART.filter(m=>typeof m.fe==='number'&&m.z===z&&(m.est==='finalizado'||m.est==='walkover')&&m.gl!==null).forEach(m=>{
+    const L=t[m.l],V=t[m.v]; if(!L||!V)return;
+    L.pj++;V.pj++;L.gf+=m.gl;L.gc+=m.gv;V.gf+=m.gv;V.gc+=m.gl;
+    if(m.gl>m.gv){L.pg++;L.pts+=pts.g;V.pp++;V.pts+=pts.p;}
+    else if(m.gl<m.gv){V.pg++;V.pts+=pts.g;L.pp++;L.pts+=pts.p;}
+    else {L.pe++;V.pe++;L.pts+=pts.e;V.pts+=pts.e;}
+  });
+  return Object.values(t).map(x=>({...x,dg:x.gf-x.gc})).sort((a,b)=>b.pts-a.pts||b.dg-a.dg||b.gf-a.gf);
+}
+function renderTablasAdmin(){
+  const el=document.getElementById('tablas-admin'); if(!el) return;
+  el.innerHTML=ZONAS.map(z=>{
+    const rows=calcTablaZona(z); if(!rows.length) return '';
+    return `<div class="bg-white border border-line rounded-2xl overflow-hidden">
+      <div class="px-4 py-2 border-b border-line flex items-center justify-between">
+        <p class="font-display text-lg tracking-wide">TABLA · ZONA ${z}</p>
+        <span class="text-[9px] text-emerald-600 font-bold uppercase">⟳ auto-recalculada</span>
+      </div>
+      <table class="w-full text-sm">
+        <thead><tr class="text-[9px] uppercase text-ink-400 border-b border-line tracking-wider"><th class="py-1.5"></th><th class="text-left">Equipo</th><th class="w-8">PJ</th><th class="w-10">DG</th><th class="w-10">PTS</th></tr></thead>
+        <tbody>${rows.map((r,i)=>`<tr class="border-b border-line last:border-0">
+          <td class="py-1.5 pl-3 text-ink-400 font-bold text-center w-7">${i+1}</td>
+          <td><span class="flex items-center gap-2 font-semibold">${badge(r.id,6)}${nom(r.id)}${EQ[r.id].aj?`<span class="text-[9px] ${EQ[r.id].aj<0?'text-brand-600':'text-emerald-600'} font-bold">(${EQ[r.id].aj>0?'+':''}${EQ[r.id].aj} aj.)</span>`:''}</span></td>
+          <td class="text-center text-ink-400">${r.pj}</td>
+          <td class="text-center ${r.dg>0?'text-emerald-600':r.dg<0?'text-brand-600':'text-ink-400'} font-semibold">${r.dg>0?'+':''}${r.dg}</td>
+          <td class="text-center font-extrabold">${r.pts}</td></tr>`).join('')}</tbody>
+      </table></div>`;
+  }).join('');
+}
+function guardarResultado(id){
+  const m=PART.find(x=>x.id===id);
+  const gl=document.getElementById('res-gl').value, gv=document.getElementById('res-gv').value;
+  if(gl===''||gv===''){ toast('Ingresa ambos marcadores'); return; }
+  const anterior = m.gl!==null ? `${m.gl}-${m.gv}` : null;
+  m.gl=+gl; m.gv=+gv;
+  m.est=document.getElementById('res-est').value.replace(' ','_').toLowerCase();
+  const penOn=document.getElementById('res-pen').classList.contains('on');
+  m.pen=penOn;
+  if(penOn){ m.pl=+document.getElementById('res-pl').value||0; m.pv=+document.getElementById('res-pv').value||0; } else { delete m.pl; delete m.pv; }
+  // T2: el resultado cargado por el admin es la fuente PRINCIPAL — los eventos del en vivo se borran
+  const evsBorrados=limpiarEnVivo(id);
+  renderFixtureAdmin(); renderTablasAdmin(); go('a-fixture');
+  const pts=cfgPts();
+  const resumen = m.gl>m.gv?`${nom(m.l)} +${pts.g} · ${nom(m.v)} +${pts.p}`:m.gl<m.gv?`${nom(m.v)} +${pts.g} · ${nom(m.l)} +${pts.p}`:`empate: ambos +${pts.e}`;
+  toast((anterior
+    ? `Resultado MODIFICADO (${anterior} → ${m.gl}-${m.gv}): puntos anteriores eliminados y reasignados — ${resumen}. Tabla recalculada ⟳`
+    : `Resultado guardado (${m.gl}-${m.gv}) — puntos según configuración: ${resumen}. Tabla recalculada ⟳`)
+    +(evsBorrados?` · ${evsBorrados} eventos del EN VIVO borrados (el resultado cargado es la fuente principal)`:''));
+}
+function borrarResultado(id){
+  const m=PART.find(x=>x.id===id);
+  m.gl=null; m.gv=null; m.est='programado'; m.pen=false; delete m.pl; delete m.pv;
+  const evsBorrados=limpiarEnVivo(id);
+  renderFixtureAdmin(); renderTablasAdmin(); go('a-fixture');
+  toast('Resultado borrado — puntos revertidos y tabla recalculada ⟳. El partido vuelve a PROGRAMADO.'+(evsBorrados?` ${evsBorrados} eventos del EN VIVO borrados.`:''));
+}
+// T2: cascada — al modificar/borrar un resultado, la cronología en vivo de ese partido se elimina
+function limpiarEnVivo(id){
+  if(id!=='cf3' || !LIVE.evs.length) return 0;
+  const n=LIVE.evs.length;
+  LIVE.evs=[]; LIVE.gl=PART.find(x=>x.id==='cf3').gl??0; LIVE.gv=PART.find(x=>x.id==='cf3').gv??0;
+  renderLive();
+  return n;
+}
+function editPartido(id){
+  const m=PART.find(x=>x.id===id);
+  openModal(`<div class="p-5">
+    <div class="flex items-center justify-between mb-4"><h3 class="font-display text-2xl tracking-wide">EDITAR INFORMACIÓN</h3><button onclick="closeModal()" class="text-ink-400 text-xl">✕</button></div>
+    <div class="grid grid-cols-2 gap-3 text-sm">
+      <label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Equipo 1</span><input value="${nom(m.l)}" disabled class="w-full border-b border-line py-1.5 font-semibold bg-paper text-ink-500"/></label>
+      <label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Equipo 2</span><input value="${nom(m.v)}" disabled class="w-full border-b border-line py-1.5 font-semibold bg-paper text-ink-500"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Zona</span><input value="${m.z||'—'}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Fecha</span><input value="${m.fecha} 2026" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Hora</span><input value="${m.hora}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Sede</span><input value="${m.sede}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Cancha</span><input value="${m.cancha}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Árbitro</span><input value="${m.arb}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Estado</span>
+        <select class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
+          ${['PROGRAMADO','EN VIVO','FINALIZADO','SUSPENDIDO','WALKOVER'].map(s=>`<option ${m.est.replace('_',' ').toUpperCase()===s?'selected':''}>${s}</option>`).join('')}
+        </select></label>
+      <label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Comentario</span><textarea rows="2" class="w-full border border-line rounded-xl p-2.5 mt-1"></textarea></label>
+    </div>
+    <button onclick="closeModal();toast('Información del partido guardada')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl mt-4 hover:bg-brand-600">GUARDAR</button>
+  </div>`);
+}
+
+/* ================= A8: CARGAR RESULTADO ================= */
+let curPar=null;
+function openResultado(id){
+  curPar=PART.find(x=>x.id===id);
+  const m=curPar;
+  const grilla=(eqid)=>{
+    // solo jugadores alineables: en LBF y NO inhabilitados (los pendientes van con aviso)
+    const base = (PLANTELES[eqid]&&PLANTELES[eqid].length) ? PLANTELES[eqid].filter(p=>p.lbf!==false && !p.inhab) : [{n:'Aymar Tantalean Villacrez',d:5},{n:'Abraham Chumbes Sajam',d:1},{n:'Diego Andre Masias',d:9},{n:'Endo Yasuaki Ipushima Mori',d:10},{n:'Thiago Rivas Ponce',d:7}];
+    const js = base;
+    const excluidos = (PLANTELES[eqid]||[]).filter(p=>p.inhab).length;
+    return `<div class="bg-white border border-line rounded-2xl mb-4 overflow-hidden">
+      <div class="bg-ink-900 text-white px-5 py-2.5 font-display text-lg tracking-wide">${nom(eqid).toUpperCase()}</div>
+      <div class="overflow-x-auto"><table class="w-full min-w-[560px]">
+      <thead><tr class="text-[10px] uppercase text-ink-400 border-b border-line tracking-wider"><th class="py-2 pl-5 text-left">Jugador/a</th><th class="w-16">G</th><th class="w-12">🟨</th><th class="w-12">🟥</th><th class="w-16">F</th><th class="w-14">J</th></tr></thead>
+      <tbody>${js.map(p=>`<tr class="border-b border-line last:border-0">
+        <td class="py-2 pl-5 text-sm font-semibold">${p.n}</td>
+        <td class="text-center"><input type="number" min="0" value="0" class="w-12 border border-line rounded-lg text-center py-1 text-sm font-bold"/></td>
+        <td class="text-center"><input type="checkbox" class="w-4 h-4 accent-yellow-500"/></td>
+        <td class="text-center"><input type="checkbox" class="w-4 h-4 accent-red-600"/></td>
+        <td class="text-center"><input type="number" min="0" value="0" class="w-12 border border-line rounded-lg text-center py-1 text-sm"/></td>
+        <td class="text-center"><span class="toggle ${(typeof ACRED!=='undefined'&&ACRED[m.id]&&p.doc&&ACRED[m.id][p.doc])?'on':''} inline-block align-middle" onclick="this.classList.toggle('on')" title="${(typeof ACRED!=='undefined'&&ACRED[m.id]&&p.doc&&ACRED[m.id][p.doc])?'Marcado por acreditación en cancha ('+ACRED[m.id][p.doc].metodo+')':''}"></span></td>
+      </tr>`).join('')}</tbody></table></div>
+      ${excluidos?`<p class="text-[11px] text-brand-600 px-5 py-2 font-semibold">🚫 ${excluidos} jugador(es) INHABILITADO(s) excluido(s) de la alineación.</p>`:''}</div>`;
+  };
+  document.getElementById('resultado-body').innerHTML=`
+    <div class="bg-white border border-line rounded-2xl p-5 mb-4">
+      <p class="text-[11px] text-ink-400 uppercase tracking-widest font-bold text-center mb-3">${typeof m.fe==='number'?'Fecha '+m.fe+' · Zona '+m.z:m.etapa+' · Copa Oro'} · ${m.sede}</p>
+      <div class="flex items-center justify-center gap-4">
+        <div class="text-center w-40">${badge(m.l,9)}<p class="font-bold text-sm mt-1">${nom(m.l)}</p></div>
+        <input type="number" min="0" value="${m.gl??''}" id="res-gl" class="w-16 border-2 border-line rounded-xl text-center font-display text-4xl py-1"/>
+        <span class="font-display text-2xl text-ink-400">:</span>
+        <input type="number" min="0" value="${m.gv??''}" id="res-gv" class="w-16 border-2 border-line rounded-xl text-center font-display text-4xl py-1"/>
+        <div class="text-center w-40">${badge(m.v,9)}<p class="font-bold text-sm mt-1">${nom(m.v)}</p></div>
+      </div>
+      <div class="flex items-center justify-center gap-6 mt-4 text-sm font-semibold">
+        <span class="flex items-center gap-2">Penales <span class="toggle ${m.pen?'on':''}" id="res-pen" onclick="this.classList.toggle('on');document.getElementById('pen-inputs').classList.toggle('hidden')"></span></span>
+        <span id="pen-inputs" class="${m.pen?'':'hidden'} flex items-center gap-2"><input id="res-pl" type="number" min="0" placeholder="L" value="${m.pl??''}" class="w-12 border border-line rounded-lg text-center py-1"/> x <input id="res-pv" type="number" min="0" placeholder="V" value="${m.pv??''}" class="w-12 border border-line rounded-lg text-center py-1"/></span>
+        <label class="flex items-center gap-2">Estado <select id="res-est" class="border border-line rounded-lg px-2 py-1 font-semibold bg-white"><option ${m.est!=='suspendido'?'selected':''}>FINALIZADO</option><option>PROGRAMADO</option><option ${m.est==='suspendido'?'selected':''}>SUSPENDIDO</option><option>WALKOVER</option></select></label>
+      </div>
+    </div>
+    ${grilla(m.l)}${grilla(m.v)}
+    <p class="text-xs text-ink-400 mb-3">💡 Las <b>asistencias</b> no se cargan aquí: solo se registran vía <b>Match Center en vivo</b>. Al guardar, los puntos se asignan automáticamente según la configuración del torneo y la tabla se <b>recalcula desde cero</b> — si modificas el resultado, los puntos anteriores se eliminan y se asignan los nuevos.</p>
+    <div class="flex gap-2">
+      <button onclick="guardarResultado('${m.id}')" class="flex-1 bg-brand-500 text-white font-bold py-3 rounded-xl hover:bg-brand-600">GUARDAR</button>
+      <button onclick="borrarResultado('${m.id}')" class="px-6 bg-white border border-brand-500 text-brand-600 font-bold py-3 rounded-xl hover:bg-brand-50">BORRAR RESULTADO</button>
+    </div>`;
+  go('a-resultado', true);
+}
+
+/* ================= A9: MATCH CENTER ================= */
+const LIVE_JUGS = { tcan:['Luis Vera Castillo','Piero Salas Núñez','Dayiro Ancalla Calderón'], alsur:['Aymar Tantalean Villacrez','Diego Andre Masias','Endo Yasuaki Ipushima Mori'] };
+let ONLINE=true;
+function toggleOnline(){
+  ONLINE=!ONLINE;
+  if(ONLINE){
+    const n=LIVE.evs.filter(e=>e.pend).length;
+    LIVE.evs.forEach(e=>delete e.pend);
+    toast(n?`📶 Señal recuperada — ${n} evento(s) de la cola local SINCRONIZADOS y publicados al módulo público ⚡`:'📶 Señal recuperada — en línea');
+  } else {
+    toast('📵 SIN SEÑAL — el Match Center sigue operativo: los eventos se guardan en la cola local del dispositivo');
+  }
+  renderLive();
+}
+function renderLive(){
+  const m=PART.find(x=>x.id==='cf3');
+  const pend=LIVE.evs.filter(e=>e.pend).length;
+  document.getElementById('live-body').innerHTML=`
+    <div class="bg-ink-900 text-white rounded-2xl p-6 mb-4">
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-[10px] font-bold px-2.5 py-1 rounded-full ${ONLINE?'bg-emerald-500/20 text-emerald-300':'bg-brand-500/20 text-brand-300'}">
+          ${ONLINE?'📶 EN LÍNEA':'📵 SIN SEÑAL'}${pend?` · ⏳ ${pend} en cola local`:''}
+        </span>
+        <button onclick="toggleOnline()" class="text-[10px] font-bold text-white/50 hover:text-white border border-white/20 rounded-full px-2.5 py-1">${ONLINE?'Simular pérdida de señal':'Simular señal recuperada'}</button>
+      </div>
+      <p class="text-[11px] text-white/50 uppercase tracking-widest font-bold text-center mb-3">TERCER PUESTO COPA ORO · ${m.sede} · ÁRB. ${m.arb}</p>
+      <div class="flex items-center justify-center gap-6">
+        <div class="text-center w-44">${badge('tcan',9)}<p class="font-bold text-sm mt-1">Team Candela</p></div>
+        <div class="text-center">
+          <p class="flex items-center justify-center gap-1.5 text-[11px] font-bold text-brand-500 mb-1"><span class="live-dot"></span>EN VIVO · <span id="live-clock">${LIVE.per}º ${LIVE.min}'0"</span></p>
+          <p class="font-display text-6xl tracking-wider"><span id="live-gl">${LIVE.gl}</span> : <span id="live-gv">${LIVE.gv}</span></p>
+        </div>
+        <div class="text-center w-44">${badge('alsur',9)}<p class="font-bold text-sm mt-1">Alianza Lima Surquillo</p></div>
+      </div>
+    </div>
+    <div class="grid lg:grid-cols-2 gap-4">
+      <div class="bg-white border border-line rounded-2xl p-5">
+        <p class="font-display text-xl tracking-wide mb-3">REGISTRAR JUGADA</p>
+        <div class="grid grid-cols-2 gap-2 mb-3">
+          <select id="lv-eq" class="border border-line rounded-xl px-3 py-2 text-sm font-semibold" onchange="fillJugs()"><option value="tcan">Team Candela</option><option value="alsur">Alianza Lima Surquillo</option></select>
+          <select id="lv-jug" class="border border-line rounded-xl px-3 py-2 text-sm font-semibold"></select>
+        </div>
+        <div class="grid grid-cols-2 gap-2 mb-3">
+          <label class="text-sm font-semibold flex items-center gap-2">Periodo <select id="lv-per" class="border border-line rounded-lg px-2 py-1.5 flex-1"><option>1</option><option selected>2</option></select></label>
+          <label class="text-sm font-semibold flex items-center gap-2">Minuto <input id="lv-min" type="number" value="${LIVE.min}" min="0" class="border border-line rounded-lg px-2 py-1.5 w-full"/></label>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="regJugada('gol')" class="bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-700">⚽ GOL</button>
+          <button onclick="regJugada('asistencia')" class="bg-sky-600 text-white font-bold py-3 rounded-xl hover:bg-sky-700">🎯 ASISTENCIA</button>
+          <button onclick="regJugada('amarilla')" class="bg-yellow-400 text-yellow-950 font-bold py-3 rounded-xl hover:bg-yellow-500">🟨 AMARILLA</button>
+          <button onclick="regJugada('roja')" class="bg-brand-500 text-white font-bold py-3 rounded-xl hover:bg-brand-600">🟥 ROJA</button>
+        </div>
+        <div class="flex gap-2 mt-3">
+          <button onclick="toast('Definición por penales activada (demo)')" class="flex-1 bg-white border border-line font-bold py-2 rounded-xl text-sm hover:bg-paper">Penales</button>
+          <button onclick="toast('Walkover aplicado según reglas del torneo (demo)')" class="flex-1 bg-white border border-line font-bold py-2 rounded-xl text-sm hover:bg-paper">Walkover</button>
+          <button onclick="toast('Partido FINALIZADO — resultado consolidado y publicado ✔')" class="flex-1 bg-ink-900 text-white font-bold py-2 rounded-xl text-sm hover:bg-ink-700">Finalizar</button>
+        </div>
+        <p class="text-[10px] text-ink-400 mt-2">📵 <b>Modo offline:</b> si se pierde la señal, el Match Center sigue operativo — los eventos se guardan en el dispositivo (cola local) y se sincronizan automáticamente al reconectar.</p>
+      </div>
+      <div class="bg-white border border-line rounded-2xl p-5">
+        <p class="font-display text-xl tracking-wide mb-3">CRONOLOGÍA <span class="text-xs font-sans text-ink-400 font-semibold" id="lv-count"></span></p>
+        <div id="lv-feed" class="space-y-1"></div>
+      </div>
+    </div>`;
+  fillJugs(); renderFeed();
+}
+function fillJugs(){
+  const eq=document.getElementById('lv-eq').value;
+  document.getElementById('lv-jug').innerHTML=LIVE_JUGS[eq].map(j=>`<option>${j}</option>`).join('');
+}
+function renderFeed(){
+  const feed=[...LIVE.evs].sort((a,b)=>b.per-a.per||b.min-a.min);
+  document.getElementById('lv-count').textContent=`${feed.length} eventos`;
+  document.getElementById('lv-feed').innerHTML=feed.map(e=>{
+    const ic=e.t==='gol'?'⚽':e.t==='amarilla'?'🟨':e.t==='roja'?'🟥':'🎯';
+    const lb=e.t==='gol'?'<b class="text-emerald-600">GOOL!</b>':e.t==='asistencia'?'<b class="text-sky-600">ASISTENCIA</b>':e.t==='amarilla'?'<b class="text-yellow-600">TARJETA</b>':'<b class="text-brand-600">TARJETA ROJA</b>';
+    return `<div class="flex items-center gap-3 py-2 border-b border-line last:border-0 text-sm">
+      <span class="text-xs font-bold text-ink-400 w-14">⏱ ${e.per}º ${e.min}'0"</span>
+      <span class="text-xl">${ic}</span>
+      <span class="flex-1">${lb}<br><span class="font-semibold">${e.jug}</span> <span class="text-xs text-ink-400">· ${nom(e.eq)}</span>${e.asis?`<span class="text-xs text-ink-400"> · Asist: ${e.asis}</span>`:''}</span>
+      ${e.pend?'<span class="text-[9px] bg-amber-100 text-amber-700 font-bold rounded-full px-2 py-0.5 whitespace-nowrap" title="Guardado en el dispositivo — pendiente de sincronizar">⏳ cola local</span>':''}
+    </div>`;
+  }).join('') || '<p class="text-sm text-ink-400">Sin eventos aún.</p>';
+}
+function regJugada(t){
+  const eq=document.getElementById('lv-eq').value, jug=document.getElementById('lv-jug').value;
+  const per=+document.getElementById('lv-per').value, min=+document.getElementById('lv-min').value;
+  const ev={t,eq,jug,per,min};
+  if(!ONLINE) ev.pend=true; // sin señal: va a la cola local del dispositivo
+  LIVE.evs.push(ev);
+  if(t==='gol'){ eq==='tcan'?LIVE.gl++:LIVE.gv++; }
+  renderLive(); // re-render completo para actualizar chip de conexión y contador de cola
+  toast(ONLINE
+    ? `${t.toUpperCase()} registrado — publicado al módulo Público en tiempo real ⚡`
+    : `${t.toUpperCase()} guardado en la COLA LOCAL ⏳ (sin señal) — se sincronizará automáticamente al reconectar`);
+}
+
+/* ================= A11: ACCESOS ================= */
+function renderAccesos(){
+  document.getElementById('coords-list').innerHTML=COORDS.map(c=>`
+    <div class="flex items-center gap-3 border border-line rounded-xl px-3 py-2.5">
+      <span class="w-8 h-8 rounded-full bg-ink-900 text-white grid place-items-center text-xs font-bold">${c.email[0].toUpperCase()}</span>
+      <div class="flex-1 min-w-0"><p class="text-sm font-semibold truncate">${c.email}</p><p class="text-[11px] text-ink-400">${c.club}</p></div>
+      <span class="text-[10px] font-bold px-2 py-1 rounded-full ${c.est==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${c.est==='activo'?'ACTIVO':'INVITACIÓN ENVIADA'}</span>
+    </div>`).join('');
+  document.getElementById('delegados-list').innerHTML=Object.keys(EQ).map(id=>`
+    <div class="flex items-center gap-3 border border-line rounded-xl px-3 py-2">
+      ${badge(id,7)}
+      <div class="flex-1 min-w-0"><p class="text-sm font-semibold truncate">${nom(id)}</p><p class="text-[11px] ${EQ[id].deleg?'text-ink-400':'text-amber-600 font-semibold'}">${EQ[id].deleg||'Sin delegado asignado'}</p></div>
+      <code class="text-xs bg-paper border border-line rounded-lg px-2 py-1 font-bold">${EQ[id].cod}</code>
+      <button onclick="toast('Código ${EQ[id].cod} copiado — compártelo con el delegado')" class="text-xs font-bold text-brand-600 hover:underline">Compartir</button>
+    </div>`).join('');
+}
+function invitarCoord(){
+  const e=document.getElementById('coord-email').value.trim();
+  if(!e){toast('Ingresa un correo');return;}
+  COORDS.push({email:e,club:'— por vincular',est:'invitado'});
+  document.getElementById('coord-email').value='';
+  renderAccesos(); toast(`Invitación enviada a ${e} con link encriptado de un solo uso ✉`);
+}
+
+/* ================= A12: ACREDITACIÓN EN CANCHA ================= */
+// registro de acreditaciones por partido: ACRED[partidoId][doc] = {metodo, hora}
+let ACRED = {};
+const METODOS = { DNI:{ic:'📄',tier:'Básico'}, QR:{ic:'📱',tier:'Intermedio'}, NFC:{ic:'💳',tier:'Premium'} };
+function qrFake(seed){
+  let h=0; for(const c of seed) h=(h*31+c.charCodeAt(0))>>>0;
+  let cells='';
+  for(let i=0;i<64;i++){ h=(h*1103515245+12345)>>>0; cells+=`<span style="background:${h%3?'#111':'#fff'}"></span>`; }
+  return `<span class="grid grid-cols-8 w-16 h-16 bg-white p-0.5 gap-px rounded">${cells}</span>`;
+}
+function avatarAcred(p,sz='w-10 h-10'){
+  const gris = p.cons ? '' : 'filter:grayscale(1);';
+  return p.foto
+    ? `<img src="${p.foto}" class="${sz} rounded-xl object-cover" style="${gris}"/>`
+    : `<span class="${sz} rounded-xl bg-ink-700 text-white grid place-items-center text-xs font-bold" style="${gris}opacity:${p.cons?1:.75}">${p.n.split(' ').map(w=>w[0]).join('').slice(0,2)}</span>`;
+}
+function partidosDeHoy(){ return PART.filter(m=>m.fecha==='19 jul'); }
+function renderAcredSelect(){
+  const sel=document.getElementById('acred-partido');
+  sel.innerHTML=partidosDeHoy().map(m=>`<option value="${m.id}">${nom(m.l)} vs ${nom(m.v)} · ${m.hora} ${m.est==='en_vivo'?'· EN VIVO':''}</option>`).join('');
+}
+function renderAcred(){
+  const mid=document.getElementById('acred-partido').value;
+  const m=PART.find(x=>x.id===mid); if(!m) return;
+  ACRED[mid]=ACRED[mid]||{};
+  document.getElementById('acred-body').innerHTML=[m.l,m.v].map(eqid=>{
+    const pl=PLANTELES[eqid]||[];
+    const alineables=pl.filter(p=>!p.inhab&&p.est==='activo').length;
+    const hechos=pl.filter(p=>ACRED[mid][p.doc]).length;
+    const filas = pl.length ? pl.map((p,i)=>{
+      const a=ACRED[mid][p.doc];
+      const bloqueado=p.inhab||p.est!=='activo';
+      return `<div class="flex items-center gap-3 px-4 py-2.5 border-b border-line last:border-0 ${p.inhab?'bg-red-50/60':''}">
+        ${avatarAcred(p)}
+        <span class="w-6 text-ink-400 font-bold text-sm">${p.d}</span>
+        <span class="flex-1 min-w-0"><span class="font-semibold text-sm block truncate">${p.n}</span>
+          <span class="text-[10px] ${p.inhab?'text-brand-600 font-bold':p.est==='activo'?'text-emerald-600':'text-amber-600 font-bold'}">${p.inhab?'INHABILITADO':p.est.toUpperCase()}${p.excepcion?' · EXC. EDAD':''}${p.cons?'':' · foto B/N'}</span></span>
+        ${a
+          ? `<span class="text-xs font-bold text-emerald-600 whitespace-nowrap">✔ ${METODOS[a.metodo].ic} ${a.metodo} · ${a.hora}</span>
+             <button onclick="desacreditar('${mid}','${p.doc}')" title="Quitar acreditación" class="text-ink-400 hover:text-brand-600 text-sm">↺</button>`
+          : `<button onclick="abrirCarnet('${eqid}',${i})" class="${bloqueado?'bg-white border border-brand-500 text-brand-600':'bg-ink-900 text-white'} text-[11px] font-bold px-3 py-1.5 rounded-lg hover:opacity-80 whitespace-nowrap">${bloqueado?'VER FICHA':'ACREDITAR'}</button>`}
+      </div>`;
+    }).join('') : `<p class="px-4 py-8 text-center text-sm text-ink-400">Sin LBF cargada para este equipo (demo).</p>`;
+    return `<div class="bg-white border border-line rounded-2xl overflow-hidden">
+      <div class="bg-ink-900 text-white px-4 py-2.5 flex items-center gap-2.5">
+        ${badge(eqid,7)}<span class="font-display text-lg tracking-wide flex-1">${nom(eqid).toUpperCase()}</span>
+        <span class="text-[10px] font-bold ${hechos>=alineables&&alineables?'text-emerald-400':'text-white/50'}">${hechos}/${pl.length} acreditados</span>
+      </div>${filas}</div>`;
+  }).join('');
+}
+function abrirCarnet(eqid,i){
+  const mid=document.getElementById('acred-partido').value;
+  const m=PART.find(x=>x.id===mid);
+  const p=(PLANTELES[eqid]||[])[i]; if(!p) return;
+  const problemas=[];
+  if(p.inhab) problemas.push(`⛔ INHABILITADO — ${p.motivo||'sanción vigente'}`);
+  if(!p.inhab&&p.est!=='activo') problemas.push('⚠ Sin ACTIVAR: apto médico / documentación pendiente de validación del admin');
+  if(p.lbf===false) problemas.push('⚠ Fuera de la Lista de Buena Fe');
+  const ok=!problemas.length;
+  const check=(cond,label)=>`<div class="flex items-center justify-between py-1.5 border-b border-line last:border-0 text-sm"><span class="text-ink-500">${label}</span><span class="font-bold ${cond?'text-emerald-600':'text-brand-600'}">${cond?'✔':'✖'}</span></div>`;
+  openModal(`<div class="p-5">
+    <div class="flex items-center justify-between mb-3"><h3 class="font-display text-2xl tracking-wide">CARNET DIGITAL</h3><button onclick="closeModal()" class="text-ink-400 text-xl">✕</button></div>
+    <div class="bg-ink-900 text-white rounded-2xl p-4 mb-4">
+      <div class="flex items-center gap-2 text-[10px] uppercase tracking-widest text-white/50 font-bold mb-3">
+        <span class="w-5 h-5 rounded bg-brand-500 grid place-items-center text-white font-display text-xs">${MARCA.n[0]}</span>
+        ${MARCA.n} · INTI CUP ORO · CATEGORÍA 2017/F7
+      </div>
+      <div class="flex items-center gap-4">
+        ${avatarAcred(p,'w-20 h-20')}
+        <div class="flex-1 min-w-0">
+          <p class="font-bold leading-tight">${p.n.toUpperCase()}</p>
+          <p class="font-display text-3xl text-brand-500">${p.d}</p>
+          <p class="text-xs text-white/60">${nom(eqid)} · 🇵🇪 DNI ${p.doc}</p>
+          <p class="text-[10px] ${p.cons?'text-emerald-400':'text-white/40'} mt-1">${p.cons?'📷 Foto a color — consentimiento del tutor ✔':'📷 Foto en B/N — sin consentimiento del tutor (T3)'}</p>
+        </div>
+        <div class="text-center">${qrFake(p.doc)}<p class="text-[8px] text-white/40 mt-1">QR firmado · rotativo</p></div>
+      </div>
+    </div>
+    <p class="font-bold text-ink-500 uppercase tracking-wider text-xs mb-1">Verificación de inscripción</p>
+    <div class="border border-line rounded-xl px-4 py-1 mb-3">
+      ${check(p.verif,'Identidad verificada (documento)')}
+      ${check(p.lbf!==false,'En Lista de Buena Fe')}
+      ${check(p.est==='activo','Habilitado (apto médico validado)')}
+      ${check(!p.inhab,'Sin sanciones vigentes')}
+      ${p.excepcion?'<div class="py-1.5 text-sm text-amber-600 font-semibold">⚠ Excepción por edad (autorizada según reglas del torneo)</div>':''}
+    </div>
+    ${ok
+      ? `<div class="bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm font-bold rounded-xl px-4 py-2.5 mb-3">✅ CORRECTAMENTE INSCRITO — apto para alinear en ${nom(m.l)} vs ${nom(m.v)}</div>
+         <p class="text-[10px] text-ink-400 mb-2">Acreditar por (según membresía de la marca):</p>
+         <div class="grid grid-cols-3 gap-2">
+           ${Object.entries(METODOS).map(([met,x])=>`<button onclick="acreditar('${eqid}','${p.doc}','${met}')" class="bg-ink-900 text-white rounded-xl py-2.5 font-bold text-sm hover:bg-ink-700">${x.ic} ${met}<span class="block text-[8px] font-normal text-white/50">${x.tier}</span></button>`).join('')}
+         </div>`
+      : `<div class="bg-brand-50 border border-brand-100 rounded-xl px-4 py-3">
+           <p class="text-brand-700 font-bold text-sm mb-1">⛔ NO PUEDE SER ALINEADO</p>
+           ${problemas.map(x=>`<p class="text-xs text-ink-600">${x}</p>`).join('')}
+         </div>`}
+  </div>`);
+}
+function acreditar(eqid,doc,metodo){
+  const mid=document.getElementById('acred-partido').value;
+  ACRED[mid]=ACRED[mid]||{};
+  ACRED[mid][doc]={metodo, hora:new Date().toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'})};
+  const p=(PLANTELES[eqid]||[]).find(x=>x.doc===doc);
+  closeModal(); renderAcred();
+  toast(`${p?p.n:doc} acreditado por ${METODOS[metodo].ic} ${metodo} — participación (J) actualizada en la planilla del partido ✔`);
+}
+function desacreditar(mid,doc){
+  delete ACRED[mid][doc]; renderAcred();
+  toast('Acreditación retirada — la participación (J) del jugador se desmarcó en la planilla');
+}
+
+/* ================= A13: COMPARTIBLES (canvas 1080×1080) ================= */
+function renderShareControls(){
+  const t=document.getElementById('sh-tipo').value, c=document.getElementById('sh-controls');
+  if(t==='marcador'){
+    const jugados=PART.filter(m=>m.gl!==null);
+    c.innerHTML=`<label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Partido</span>
+      <select id="sh-partido" onchange="genShare()" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
+        ${jugados.map(m=>`<option value="${m.id}">${nom(m.l)} ${m.gl}-${m.gv} ${nom(m.v)}</option>`).join('')}
+      </select></label>`;
+  } else if(t==='tabla'){
+    c.innerHTML=`<label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Zona</span>
+      <select id="sh-zona" onchange="genShare()" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
+        ${ZONAS.map(z=>`<option>${z}</option>`).join('')}
+      </select></label>`;
+  } else {
+    const jugs=Object.entries(PLANTELES).flatMap(([eq,pl])=>(pl||[]).filter(p=>!p.inhab).map(p=>({eq,n:p.n})));
+    c.innerHTML=`<label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Jugador</span>
+      <select id="sh-jug" onchange="genShare()" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
+        ${jugs.map(j=>`<option value="${j.eq}|${j.n}">${j.n} (${nom(j.eq)})</option>`).join('')}
+      </select></label>
+      <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Goles en la fecha</span>
+      <input id="sh-goles" type="number" min="1" value="3" onchange="genShare()" class="w-full border-b border-line py-1.5 font-semibold"/></label>`;
+  }
+}
+function shBase(ctx,subt){
+  ctx.clearRect(0,0,1080,1080);
+  ctx.fillStyle='#171e2e'; ctx.fillRect(0,0,1080,1080);
+  ctx.fillStyle='#d9232e'; ctx.fillRect(0,0,1080,14);
+  // cabecera de marca
+  ctx.beginPath(); ctx.roundRect(60,60,96,96,20); ctx.fillStyle='#d9232e'; ctx.fill();
+  ctx.fillStyle='#fff'; ctx.font='52px "Bebas Neue"'; ctx.textAlign='center';
+  ctx.fillText(MARCA.n.split(' ').map(w=>w[0]).join('').slice(0,2), 108, 128);
+  if(MARCA.logo){ const im=new Image(); im.onload=()=>{ ctx.save(); ctx.beginPath(); ctx.roundRect(60,60,96,96,20); ctx.clip(); ctx.drawImage(im,60,60,96,96); ctx.restore(); }; im.src=MARCA.logo; }
+  ctx.textAlign='left'; ctx.fillStyle='#fff'; ctx.font='64px "Bebas Neue"';
+  ctx.fillText(MARCA.n.toUpperCase(), 180, 120);
+  ctx.fillStyle='rgba(255,255,255,.5)'; ctx.font='600 26px Inter';
+  ctx.fillText(subt, 182, 152);
+  // marca de agua
+  ctx.textAlign='center'; ctx.fillStyle='rgba(255,255,255,.35)'; ctx.font='600 28px Inter';
+  ctx.fillText('⚡ Powered by LIGUIFY · liguify.com/'+MARCA.slug, 540, 1042);
+}
+function shBadge(ctx,x,y,s,cid){
+  const cl=CLUBES[cid];
+  ctx.beginPath(); ctx.roundRect(x,y,s,s,28); ctx.fillStyle=cl.c; ctx.fill();
+  ctx.fillStyle='#fff'; ctx.font=(s*.42)+'px "Bebas Neue"'; ctx.textAlign='center';
+  ctx.fillText(cl.n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase(), x+s/2, y+s*.62);
+  if(cl.logo){ const im=new Image(); im.onload=()=>{ ctx.save(); ctx.beginPath(); ctx.roundRect(x,y,s,s,28); ctx.clip(); ctx.drawImage(im,x,y,s,s); ctx.restore(); }; im.src=cl.logo; }
+}
+function shNombre(ctx,txt,x,y,maxW){
+  let f=44; ctx.font='700 '+f+'px Inter';
+  while(ctx.measureText(txt).width>maxW && f>24){ f-=2; ctx.font='700 '+f+'px Inter'; }
+  ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.fillText(txt,x,y);
+}
+function genShare(){
+  const cv=document.getElementById('sh-canvas'); if(!cv) return;
+  const ctx=cv.getContext('2d');
+  const t=document.getElementById('sh-tipo').value;
+  if(t==='marcador'){
+    const m=PART.find(x=>x.id===document.getElementById('sh-partido')?.value)||PART.find(x=>x.gl!==null);
+    if(!m) return;
+    shBase(ctx,'INTI CUP ORO · CATEGORÍA 2017/F7');
+    // pill de estado
+    const est=m.est==='en_vivo'?'● EN VIVO':m.est==='walkover'?'WALKOVER':'FINALIZADO';
+    ctx.beginPath(); ctx.roundRect(430,250,220,54,27);
+    ctx.fillStyle=m.est==='en_vivo'?'#d9232e':'#059669'; ctx.fill();
+    ctx.fillStyle='#fff'; ctx.font='700 26px Inter'; ctx.textAlign='center'; ctx.fillText(est,540,286);
+    // escudos + marcador
+    shBadge(ctx,150,380,220,EQ[m.l].club);
+    shBadge(ctx,710,380,220,EQ[m.v].club);
+    ctx.fillStyle='#fff'; ctx.font='190px "Bebas Neue"'; ctx.textAlign='center';
+    ctx.fillText(`${m.gl} : ${m.gv}`,540,540);
+    if(m.pen){ ctx.fillStyle='rgba(255,255,255,.6)'; ctx.font='600 32px Inter'; ctx.fillText(`Penales ${m.pl} × ${m.pv}`,540,595); }
+    shNombre(ctx,nom(m.l).toUpperCase(),260,690,300);
+    shNombre(ctx,nom(m.v).toUpperCase(),820,690,300);
+    ctx.fillStyle='rgba(255,255,255,.55)'; ctx.font='600 30px Inter'; ctx.textAlign='center';
+    ctx.fillText(m.etapa?`🏆 ${m.etapa}`:`Fase de Grupos · Zona ${m.z} · Fecha ${m.fe}`,540,790);
+    ctx.fillText(`${m.fecha} · ${m.hora} · ${m.sede}`,540,835);
+  } else if(t==='tabla'){
+    const z=document.getElementById('sh-zona')?.value||'A';
+    shBase(ctx,'INTI CUP ORO · CATEGORÍA 2017/F7');
+    ctx.fillStyle='#fff'; ctx.font='84px "Bebas Neue"'; ctx.textAlign='center';
+    ctx.fillText('TABLA DE POSICIONES',540,290);
+    ctx.fillStyle='rgba(255,255,255,.5)'; ctx.font='600 30px Inter';
+    ctx.fillText(`ZONA ${z} · FASE DE GRUPOS`,540,335);
+    const rows=calcTablaZona(z).slice(0,8);
+    // encabezados
+    ctx.font='700 24px Inter'; ctx.fillStyle='rgba(255,255,255,.4)'; ctx.textAlign='right';
+    ctx.fillText('PJ',790,405); ctx.fillText('DG',890,405); ctx.fillText('PTS',990,405);
+    rows.forEach((r,i)=>{
+      const y=440+i*68;
+      if(i<2){ ctx.fillStyle='#059669'; ctx.fillRect(70,y-6,10,56); } // clasifican
+      ctx.fillStyle='rgba(255,255,255,.5)'; ctx.font='700 34px Inter'; ctx.textAlign='left';
+      ctx.fillText(String(i+1),100,y+32);
+      ctx.beginPath(); ctx.roundRect(150,y,48,48,12); ctx.fillStyle=CLUBES[EQ[r.id].club].c; ctx.fill();
+      ctx.fillStyle='#fff'; ctx.font='700 32px Inter'; ctx.textAlign='left';
+      let nm=nom(r.id); if(nm.length>22) nm=nm.slice(0,21)+'…';
+      ctx.fillText(nm,220,y+34);
+      ctx.textAlign='right'; ctx.fillStyle='rgba(255,255,255,.7)';
+      ctx.fillText(String(r.pj),790,y+34);
+      ctx.fillStyle=r.dg>0?'#34d399':r.dg<0?'#f87171':'rgba(255,255,255,.7)';
+      ctx.fillText((r.dg>0?'+':'')+r.dg,890,y+34);
+      ctx.fillStyle='#fff'; ctx.font='800 38px Inter';
+      ctx.fillText(String(r.pts),990,y+36);
+    });
+  } else {
+    const sel=(document.getElementById('sh-jug')?.value||'').split('|');
+    const eqid=sel[0]||'acar', jn=sel[1]||(PLANTELES.acar[0]&&PLANTELES.acar[0].n)||'Jugador';
+    const goles=+(document.getElementById('sh-goles')?.value||3);
+    const p=(PLANTELES[eqid]||[]).find(x=>x.n===jn)||{n:jn,d:9,cons:false};
+    shBase(ctx,'INTI CUP ORO · CATEGORÍA 2017/F7');
+    ctx.fillStyle='rgba(255,255,255,.5)'; ctx.font='600 34px Inter'; ctx.textAlign='center';
+    ctx.fillText('⚽ GOLEADOR DE LA FECHA',540,280);
+    // avatar circular (B/N si no hay consentimiento — T3)
+    ctx.save(); ctx.beginPath(); ctx.arc(540,500,150,0,7); ctx.fillStyle=p.cons?CLUBES[EQ[eqid].club].c:'#5b6478'; ctx.fill(); ctx.restore();
+    ctx.fillStyle='#fff'; ctx.font='120px "Bebas Neue"'; ctx.textAlign='center';
+    ctx.fillText(p.n.split(' ').map(w=>w[0]).join('').slice(0,2),540,545);
+    if(!p.cons){ ctx.fillStyle='rgba(255,255,255,.45)'; ctx.font='600 22px Inter'; ctx.fillText('foto B/N · sin consentimiento del tutor',540,690); }
+    ctx.fillStyle='#fff'; ctx.font='84px "Bebas Neue"';
+    ctx.fillText(p.n.toUpperCase(),540,780);
+    ctx.fillStyle='rgba(255,255,255,.6)'; ctx.font='600 34px Inter';
+    ctx.fillText(`${nom(eqid)} · Dorsal ${p.d}`,540,830);
+    ctx.fillStyle='#d9232e'; ctx.font='96px "Bebas Neue"';
+    ctx.fillText(`${goles} GOLES`,540,930);
+  }
+}
+function descargarShare(){
+  const a=document.createElement('a');
+  a.href=document.getElementById('sh-canvas').toDataURL('image/png');
+  a.download=`liguify-${MARCA.slug}-${document.getElementById('sh-tipo').value}.png`;
+  a.click();
+  toast('PNG 1080×1080 descargado — listo para Instagram/WhatsApp 📣');
+}
+function compartirWhatsApp(){
+  const t=document.getElementById('sh-tipo').value;
+  let txt=`🏆 ${MARCA.n.toUpperCase()} · INTI CUP ORO · Categoría 2017/F7\n`;
+  if(t==='marcador'){ const m=PART.find(x=>x.id===document.getElementById('sh-partido')?.value); if(m) txt+=`${nom(m.l)} ${m.gl} - ${m.gv} ${nom(m.v)}${m.pen?` (pen. ${m.pl}×${m.pv})`:''}\n`; }
+  txt+=`Resultados y tablas en vivo: liguify.com/${MARCA.slug} ⚡`;
+  window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
+  toast('Abriendo WhatsApp con el texto del compartible (adjunta el PNG descargado) 🟢');
+}
+
+/* ================= NAV ================= */
+function go(id, skipNav){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  const el=document.getElementById(id); el.classList.add('active','fade');
+  setTimeout(()=>el.classList.remove('fade'),240);
+  document.querySelectorAll('[data-nav]').forEach(b=>b.classList.toggle('active',b.dataset.nav===id));
+  window.scrollTo({top:0});
+}
+
+/* ================= INIT ================= */
+renderMarca(); renderConfigLogo(); renderSidebar(); renderCatsConfig(); renderTorneosHome(); renderZonas(); renderFixtureAdmin(); renderTablasAdmin(); renderLive(); renderAccesos(); renderAcredSelect(); renderAcred();
+renderShareControls();
+if(document.fonts && document.fonts.ready) document.fonts.ready.then(genShare); else genShare();
+go('a-torneos');
+</script>
+</body>

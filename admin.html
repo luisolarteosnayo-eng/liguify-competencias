@@ -1,0 +1,435 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Liguify — Panel Administrador</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script>
+tailwind.config={theme:{extend:{
+  colors:{brand:{50:'#fef2f2',100:'#fde3e3',500:'#d9232e',600:'#c11d27'},ink:{900:'#171e2e',700:'#2b3550',500:'#5b6478',400:'#8b93a7'},paper:'#faf9f7',line:'#e9e6e0'},
+  fontFamily:{display:['"Bebas Neue"','sans-serif'],sans:['Inter','system-ui','sans-serif']}
+}}}
+</script>
+<style>
+  body{background:#faf9f7}
+  .screen{display:none}.screen.active{display:block}
+  .tabbtn.active{background:#171e2e;color:#fff}
+  input,select{outline:none}
+</style>
+<body class="text-ink-900 font-sans min-h-screen">
+
+<header class="bg-ink-900 text-white sticky top-0 z-40">
+  <div class="max-w-5xl mx-auto px-4 h-14 flex items-center gap-3">
+    <span class="w-8 h-8 rounded-lg bg-brand-500 grid place-items-center font-display text-lg pt-0.5">L</span>
+    <span class="font-display text-xl tracking-wide">LIGUIFY <span class="text-white/50">ADMIN</span></span>
+    <span id="hdr-user" class="ml-auto text-xs text-white/60"></span>
+    <button id="hdr-out" onclick="salir()" class="hidden text-xs font-bold border border-white/20 rounded-lg px-3 py-1.5 hover:bg-white/10">SALIR</button>
+  </div>
+</header>
+
+<main class="max-w-5xl mx-auto px-4 py-6">
+  <div id="msg" class="hidden text-sm font-semibold rounded-2xl px-4 py-3 mb-4"></div>
+
+  <!-- LOGIN -->
+  <section id="s-login" class="screen">
+    <div class="max-w-sm mx-auto bg-white border border-line rounded-2xl p-6 mt-10">
+      <h1 class="font-display text-3xl tracking-wide mb-1">INGRESAR</h1>
+      <p class="text-xs text-ink-400 mb-5">Acceso para administradores y mesa de control. La escritura está protegida por roles (RLS).</p>
+      <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Email</span>
+        <input id="lg-e" class="w-full border-b border-line py-1.5 font-semibold" placeholder="admin@tumarca.pe"/></label>
+      <label class="block text-sm mb-5"><span class="text-ink-400 font-semibold text-xs">Contraseña</span>
+        <input id="lg-p" type="password" class="w-full border-b border-line py-1.5 font-semibold" onkeydown="if(event.key==='Enter')entrar()"/></label>
+      <button onclick="entrar()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">ENTRAR</button>
+    </div>
+  </section>
+
+  <!-- MIS TORNEOS -->
+  <section id="s-torneos" class="screen">
+    <div id="marca-card"></div>
+    <div class="flex items-center justify-between mb-3 mt-6">
+      <h2 class="font-display text-2xl tracking-wide">TORNEOS DE LA MARCA</h2>
+    </div>
+    <div class="space-y-2" id="lista-torneos"></div>
+  </section>
+
+  <!-- TORNEO → CATEGORÍAS -->
+  <section id="s-torneo" class="screen">
+    <button onclick="show('s-torneos')" class="text-sm text-ink-500 mb-3 font-semibold">← Torneos</button>
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-4">
+      <h1 id="t-titulo" class="font-display text-4xl tracking-wide"></h1>
+      <button onclick="modalCategoria()" class="bg-brand-500 text-white font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-brand-600">+ NUEVA CATEGORÍA</button>
+    </div>
+    <div class="space-y-2" id="lista-categorias"></div>
+  </section>
+
+  <!-- CATEGORÍA -->
+  <section id="s-categoria" class="screen">
+    <button onclick="show('s-torneo')" class="text-sm text-ink-500 mb-3 font-semibold" id="bc-t"></button>
+    <h1 id="c-titulo" class="font-display text-4xl tracking-wide mb-4"></h1>
+    <div class="flex gap-1.5 mb-5" id="c-tabs"></div>
+    <div id="tab-equipos" class="ctab"></div>
+    <div id="tab-fixture" class="ctab hidden"></div>
+    <div id="tab-tabla" class="ctab hidden"></div>
+  </section>
+
+  <!-- EQUIPO / LBF -->
+  <section id="s-lbf" class="screen">
+    <button onclick="abrirCategoria(CAT)" class="text-sm text-ink-500 mb-3 font-semibold">← Categoría</button>
+    <div id="lbf-head"></div>
+    <div class="bg-white border border-line rounded-2xl mt-4 overflow-hidden">
+      <div class="px-5 py-3 border-b border-line flex items-center justify-between">
+        <p class="font-display text-xl tracking-wide">PLANTEL · LISTA DE BUENA FE</p>
+        <button onclick="modalJugador()" class="bg-ink-900 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-ink-700">+ AGREGAR JUGADOR/A</button>
+      </div>
+      <div id="lbf-lista"></div>
+    </div>
+  </section>
+</main>
+
+<!-- MODAL -->
+<div id="modal" class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-4" onclick="if(event.target===this)cerrarModal()">
+  <div class="bg-white rounded-2xl max-w-md w-full max-h-[88vh] overflow-y-auto p-5" id="modal-body"></div>
+</div>
+<div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 bg-ink-900 text-white text-sm font-semibold px-5 py-3 rounded-xl shadow-xl z-[60] hidden max-w-lg text-center"></div>
+
+<script>
+const sb = supabase.createClient(
+  'https://bpsczjjomgzhnjxnzmhj.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwc2N6ampvbWd6aG5qeG56bWhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1MDg5MTgsImV4cCI6MjA5ODA4NDkxOH0.3O92Q-3xxdCmF1LStCQrlCtz1s_EfdlayXnL_mEElOw',
+  { db:{schema:'competencias'}, auth:{storageKey:'sb-competencias-admin'} }   // cajón propio; jamás toca ERP/Academias
+);
+const $=id=>document.getElementById(id);
+let MARCA=null, ROLES=[], TORNEO=null, CAT=null, EQUIPO=null;
+let CLUBES={}, EQUIPOS={}, ZONAS=[], FASES=[];
+
+function toast(m){const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.add('hidden'),4200);}
+function msg(texto,tipo){const e=$('msg'); if(!texto){e.classList.add('hidden');return;}
+  e.className='text-sm font-semibold rounded-2xl px-4 py-3 mb-4 '+(tipo==='err'?'bg-brand-50 border border-brand-100 text-brand-600':'bg-emerald-50 border border-emerald-200 text-emerald-700');
+  e.textContent=texto; e.classList.remove('hidden');}
+function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));$(id).classList.add('active');window.scrollTo({top:0});}
+function cerrarModal(){const m=$('modal');m.classList.add('hidden');m.classList.remove('flex');}
+function abrirModal(html){$('modal-body').innerHTML=html;const m=$('modal');m.classList.remove('hidden');m.classList.add('flex');}
+const iniciales=n=>(n||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+function badgeEq(e,sz=7){const cl=CLUBES[e.club_id]||{};return `<span class="inline-grid place-items-center w-${sz} h-${sz} rounded-lg text-white text-[10px] font-bold align-middle overflow-hidden relative" style="background:${cl.color||'#334155'}">${cl.escudo_url?`<img src="${cl.escudo_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(cl.nombre)}</span>`;}
+const nomEq=e=>e.nombre||(CLUBES[e.club_id]||{}).nombre||'—';
+// errores de BD → mensajes de negocio
+function errNegocio(error){
+  const m=error.message||'';
+  if(error.code==='23505'&&m.includes('inscripcion_lbf')) return '⛔ ANTI-SUPLANTACIÓN (constraint de la BD): este documento ya está inscrito en otro equipo de esta categoría.';
+  if(error.code==='23505'&&m.includes('jugador_maestro')) return '⚠ Este documento ya existe en la base maestra global.';
+  if(error.code==='23505'&&m.includes('categoria')) return '⚠ Ya existe esa categoría (año + modalidad) en este torneo.';
+  if(error.code==='23505'&&m.includes('club')) return '⚠ Ya existe un club con ese nombre en tu marca (el club es único por marca).';
+  if(error.code==='42501'||m.includes('policy')) return '⛔ Sin permiso: tu rol no puede hacer esta acción (RLS).';
+  return '⚠ '+m;
+}
+
+/* ============ AUTH ============ */
+async function entrar(){
+  const {error}=await sb.auth.signInWithPassword({email:$('lg-e').value.trim(),password:$('lg-p').value});
+  if(error){msg('Login: '+error.message,'err');return;}
+  msg(null); await iniciar();
+}
+async function salir(){ await sb.auth.signOut({scope:'local'}); location.reload(); }
+async function iniciar(){
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session){show('s-login');return;}
+  $('hdr-user').textContent=session.user.email;
+  $('hdr-out').classList.remove('hidden');
+  // mis membresías → mi marca
+  const um=await sb.from('usuario_marca').select('marca_id, rol');
+  if(um.error||!um.data.length){msg('Tu usuario no tiene roles asignados en ninguna marca.','err');show('s-login');return;}
+  ROLES=um.data;
+  const {data:mk}=await sb.from('marca').select('*').eq('id',um.data[0].marca_id).single();
+  MARCA=mk;
+  $('hdr-user').textContent=`${session.user.email} · ${[...new Set(ROLES.map(r=>r.rol))].join(' + ')}`;
+  await cargarTorneos();
+}
+const esAdmin=()=>ROLES.some(r=>r.rol==='admin_marca');
+
+/* ============ TORNEOS ============ */
+async function cargarTorneos(){
+  $('marca-card').innerHTML=`<div class="bg-ink-900 text-white rounded-2xl p-5 flex items-center gap-4">
+    <span class="w-14 h-14 rounded-2xl grid place-items-center font-display text-2xl overflow-hidden relative" style="background:#d9232e">${MARCA.logo_url?`<img src="${MARCA.logo_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(MARCA.nombre)}</span>
+    <div class="flex-1"><p class="text-[10px] uppercase tracking-widest text-white/40 font-bold">Marca organizadora · membresía ${MARCA.membresia}</p>
+    <h1 class="font-display text-4xl tracking-wide leading-none">${MARCA.nombre.toUpperCase()}</h1>
+    <p class="text-emerald-300 text-xs mt-1">🔗 ${MARCA.slug}.liguify.com</p></div>
+    ${esAdmin()?'':'<span class="text-[10px] font-bold bg-amber-500/20 text-amber-300 rounded-full px-3 py-1">MODO MESA: solo resultados</span>'}
+  </div>`;
+  const {data:ts,error}=await sb.from('torneo').select('*').eq('marca_id',MARCA.id).order('created_at');
+  if(error){msg(errNegocio(error),'err');return;}
+  $('lista-torneos').innerHTML=ts.map(t=>`
+    <button onclick='abrirTorneo(${JSON.stringify(t)})' class="w-full bg-white border border-line rounded-2xl px-5 py-4 flex items-center gap-4 hover:shadow-md transition text-left">
+      <span class="w-11 h-11 rounded-xl bg-ink-900 text-white font-display grid place-items-center text-sm">${t.nombre.replace(MARCA.nombre,'').trim().slice(0,4)||iniciales(t.nombre)}</span>
+      <span class="flex-1"><span class="font-bold block">${t.nombre}</span>
+      <span class="text-xs text-ink-400">Temporada ${t.anio} · ${t.estado==='en_curso'?'<b class="text-emerald-600">EN CURSO</b>':t.estado}</span></span>
+      <span class="text-ink-400">→</span></button>`).join('');
+  show('s-torneos');
+}
+
+/* ============ TORNEO → CATEGORÍAS ============ */
+async function abrirTorneo(t){
+  TORNEO=t;
+  $('t-titulo').textContent=t.nombre.toUpperCase();
+  const {data:cs,error}=await sb.from('categoria').select('*').eq('torneo_id',t.id).order('anio_nacimiento',{ascending:false});
+  if(error){msg(errNegocio(error),'err');return;}
+  $('lista-categorias').innerHTML=cs.map(c=>`
+    <button onclick='abrirCategoria(${JSON.stringify(c)})' class="w-full bg-white border border-line rounded-2xl px-5 py-4 flex items-center gap-4 hover:shadow-md transition text-left">
+      <span class="w-11 h-11 rounded-xl bg-ink-900 text-white font-display grid place-items-center text-lg">${String(c.anio_nacimiento).slice(2)}</span>
+      <span class="flex-1"><span class="font-bold block">${c.nombre_display||('Categoría '+c.anio_nacimiento+' / '+c.modalidad)}</span>
+      <span class="text-xs text-ink-400">Modalidad ${c.modalidad}</span></span>
+      <span class="text-ink-400">→</span></button>`).join('') || '<p class="text-ink-400 text-sm">Sin categorías — crea la primera.</p>';
+  show('s-torneo');
+}
+function modalCategoria(){
+  const anios=Array.from({length:14},(_,i)=>2022-i);
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">NUEVA CATEGORÍA</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">Llave real de la BD: <b>UNIQUE (torneo, año, modalidad)</b> — un duplicado será rechazado por Postgres.</p>
+    <div class="grid grid-cols-2 gap-3 text-sm">
+      <label><span class="text-ink-400 font-semibold text-xs">Año de nacimiento</span>
+        <select id="nc-a" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${anios.map(a=>`<option>${a}</option>`).join('')}</select></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Modalidad</span>
+        <select id="nc-m" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"><option>F7</option><option>F9</option><option>F11</option></select></label>
+    </div>
+    <button onclick="crearCategoria()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl mt-4 hover:bg-brand-600">CREAR</button>`);
+}
+async function crearCategoria(){
+  const a=+$('nc-a').value, m=$('nc-m').value;
+  const {error}=await sb.from('categoria').insert({torneo_id:TORNEO.id,anio_nacimiento:a,modalidad:m,nombre_display:`Categoría ${a} / ${m}`});
+  if(error){toast(errNegocio(error));return;}
+  cerrarModal(); toast(`Categoría ${a}/${m} creada en la BD ✔`); abrirTorneo(TORNEO);
+}
+
+/* ============ CATEGORÍA ============ */
+async function abrirCategoria(c){
+  CAT=c;
+  $('bc-t').textContent='← '+TORNEO.nombre;
+  $('c-titulo').textContent=(c.nombre_display||('Categoría '+c.anio_nacimiento+' / '+c.modalidad)).toUpperCase();
+  const [cls,eqs,fs]=await Promise.all([
+    sb.from('club').select('*').eq('marca_id',MARCA.id),
+    sb.from('equipo').select('*').eq('categoria_id',c.id),
+    sb.from('fase').select('*').eq('categoria_id',c.id).order('orden')
+  ]);
+  CLUBES=Object.fromEntries((cls.data||[]).map(x=>[x.id,x]));
+  EQUIPOS=Object.fromEntries((eqs.data||[]).map(x=>[x.id,x]));
+  FASES=fs.data||[];
+  const zs=FASES.length?await sb.from('zona').select('*').in('fase_id',FASES.map(f=>f.id)):{data:[]};
+  ZONAS=zs.data||[];
+  tabs('equipos');
+  await Promise.all([renderEquipos(),renderFixture(),renderTabla()]);
+  show('s-categoria');
+}
+function tabs(act){
+  $('c-tabs').innerHTML=[['equipos','Equipos y LBF'],['fixture','Fixture / Resultados'],['tabla','Tabla']].map(([t,l])=>
+    `<button onclick="tabs('${t}')" class="tabbtn ${t===act?'active':''} rounded-xl px-4 py-2 text-sm font-bold border border-line ${t===act?'':'text-ink-500 bg-white'}">${l}</button>`).join('');
+  document.querySelectorAll('.ctab').forEach(x=>x.classList.add('hidden'));
+  $('tab-'+act).classList.remove('hidden');
+}
+
+/* ---- Equipos y zonas ---- */
+async function renderEquipos(){
+  const ez=ZONAS.length?await sb.from('equipo_en_zona').select('*').in('zona_id',ZONAS.map(z=>z.id)):{data:[]};
+  const porZona={}; (ez.data||[]).forEach(x=>{(porZona[x.zona_id]=porZona[x.zona_id]||[]).push(x.equipo_id);});
+  $('tab-equipos').innerHTML=
+    `<div class="flex justify-end mb-3">${esAdmin()?`<button onclick="modalEquipo()" class="bg-brand-500 text-white font-bold px-4 py-2 rounded-xl text-sm hover:bg-brand-600">+ NUEVO EQUIPO</button>`:''}</div>`+
+    ZONAS.map(z=>`<div class="bg-white border border-line rounded-2xl mb-4 overflow-hidden">
+      <div class="bg-ink-900 text-white px-5 py-2.5 font-display text-lg tracking-wide">ZONA ${z.nombre}</div>
+      ${(porZona[z.id]||[]).map(eqId=>{const e=EQUIPOS[eqId]; if(!e) return '';
+        return `<div class="flex items-center gap-3 px-5 py-2.5 border-b border-line last:border-0">
+          ${badgeEq(e)}<span class="flex-1 font-semibold text-sm">${nomEq(e)}</span>
+          <button onclick='abrirLBF("${e.id}")' class="text-xs font-bold text-brand-600 hover:underline">LBF →</button>
+        </div>`;}).join('')||'<p class="px-5 py-5 text-sm text-ink-400">Zona sin equipos.</p>'}
+    </div>`).join('');
+}
+function modalEquipo(){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">NUEVO EQUIPO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">El club es único por marca (constraint real). El nombre del equipo es libre.</p>
+    <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Club</span>
+      <select id="ne-club" onchange="$('ne-nuevo').classList.toggle('hidden',this.value!=='__new__')" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
+        <option value="__new__">➕ Crear club nuevo</option>
+        ${Object.values(CLUBES).map(c=>`<option value="${c.id}">${c.nombre}</option>`).join('')}
+      </select></label>
+    <div id="ne-nuevo" class="grid grid-cols-2 gap-3 text-sm mb-3 bg-paper border border-line rounded-xl p-3">
+      <label><span class="text-ink-400 font-semibold text-xs">Nombre del club</span><input id="ne-cn" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Color</span><input id="ne-cc" type="color" value="#0d9488" class="w-full h-9 border border-line rounded-lg bg-white"/></label>
+    </div>
+    <div class="grid grid-cols-2 gap-3 text-sm">
+      <label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Nombre del equipo (opcional)</span><input id="ne-n" placeholder="Vacío = nombre del club · ej. ALIANZA A" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Zona</span>
+        <select id="ne-z" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${ZONAS.map(z=>`<option value="${z.id}">Zona ${z.nombre}</option>`).join('')}</select></label>
+    </div>
+    <button onclick="crearEquipo()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl mt-4 hover:bg-brand-600">CREAR EQUIPO</button>`);
+}
+async function crearEquipo(){
+  let clubId=$('ne-club').value;
+  if(clubId==='__new__'){
+    const cn=$('ne-cn').value.trim(); if(!cn){toast('Ingresa el nombre del club');return;}
+    const ins=await sb.from('club').insert({marca_id:MARCA.id,nombre:cn,color:$('ne-cc').value}).select().single();
+    if(ins.error){toast(errNegocio(ins.error));return;}
+    clubId=ins.data.id; CLUBES[clubId]=ins.data;
+  }
+  const nombre=$('ne-n').value.trim()||null, zonaId=$('ne-z').value;
+  const eq=await sb.from('equipo').insert({categoria_id:CAT.id,club_id:clubId,nombre}).select().single();
+  if(eq.error){toast(errNegocio(eq.error));return;}
+  EQUIPOS[eq.data.id]=eq.data;
+  if(zonaId){ const ez=await sb.from('equipo_en_zona').insert({zona_id:zonaId,equipo_id:eq.data.id}); if(ez.error){toast(errNegocio(ez.error));return;} }
+  cerrarModal(); toast(`Equipo "${nomEq(eq.data)}" creado en la BD ✔`);
+  await renderEquipos(); await renderTabla();
+}
+
+/* ---- LBF ---- */
+async function abrirLBF(eqId){
+  EQUIPO=EQUIPOS[eqId];
+  $('lbf-head').innerHTML=`<div class="bg-ink-900 text-white rounded-2xl p-5 flex items-center gap-4">
+    ${badgeEq(EQUIPO,9)}<div><h1 class="font-display text-3xl tracking-wide">${nomEq(EQUIPO).toUpperCase()}</h1>
+    <p class="text-white/50 text-sm">${(CLUBES[EQUIPO.club_id]||{}).nombre||''} · ${CAT.nombre_display||''}</p></div></div>`;
+  await renderLBF(); show('s-lbf');
+}
+async function renderLBF(){
+  const {data:ins,error}=await sb.from('inscripcion_lbf').select('*').eq('equipo_id',EQUIPO.id).order('dorsal');
+  if(error){$('lbf-lista').innerHTML='';msg(errNegocio(error),'err');return;}
+  let jug={};
+  if(ins.length){
+    const js=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,fecha_nacimiento,verificado').in('id',ins.map(i=>i.jugador_id));
+    jug=Object.fromEntries((js.data||[]).map(j=>[j.id,j]));
+  }
+  $('lbf-lista').innerHTML=ins.length?ins.map(i=>{const j=jug[i.jugador_id]||{};
+    return `<div class="flex items-center gap-3 px-5 py-2.5 border-b border-line last:border-0 ${i.inhabilitado?'bg-red-50/60':''}">
+      <span class="w-6 text-ink-400 font-bold text-sm">${i.dorsal??''}</span>
+      <span class="flex-1 font-semibold text-sm">${j.nombres||'—'} ${j.apellidos||''} ${i.capitan?'<span class="text-[9px] bg-ink-900 text-white rounded px-1.5 py-0.5 ml-1 font-bold">C</span>':''} ${j.verificado?'<span class="text-emerald-500">✔</span>':''}</span>
+      <span class="text-xs text-ink-500">🇵🇪 ${j.nro_documento||''}</span>
+      <span class="text-[10px] font-bold px-2 py-1 rounded-full ${i.inhabilitado?'bg-brand-100 text-brand-600':i.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${i.inhabilitado?'INHABILITADO':i.estado.toUpperCase()}</span>
+      ${i.estado==='pendiente'&&esAdmin()?`<button onclick="activarIns('${i.id}')" class="text-[10px] font-bold text-emerald-700 border border-emerald-300 rounded-lg px-2 py-1 hover:bg-emerald-50">ACTIVAR</button>`:''}
+    </div>`;}).join(''):'<p class="px-5 py-8 text-sm text-ink-400 text-center">Plantel vacío — agrega el primer jugador.</p>';
+}
+async function activarIns(id){
+  const {error}=await sb.from('inscripcion_lbf').update({estado:'activo',fecha_apto_medico:new Date().toISOString().slice(0,10)}).eq('id',id);
+  if(error){toast(errNegocio(error));return;}
+  toast('Jugador ACTIVADO ✔'); renderLBF();
+}
+function modalJugador(){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">AGREGAR JUGADOR/A</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">La búsqueda en la maestra global es <b>censurada por el servidor</b> (I3): los datos completos se revelan al confirmar la inscripción.</p>
+    <div class="flex gap-2 mb-2">
+      <select id="bj-pais" class="border border-line rounded-xl px-2 py-2 text-sm font-semibold"><option value="PE">🇵🇪 DNI</option><option value="AR">🇦🇷 DNI</option><option value="CL">🇨🇱 RUN</option></select>
+      <input id="bj-doc" placeholder="Nro de documento" class="flex-1 border border-line rounded-xl px-3 py-2 text-sm font-semibold" onkeydown="if(event.key==='Enter')buscarJugador()"/>
+      <button onclick="buscarJugador()" class="bg-ink-900 text-white text-sm font-bold px-4 rounded-xl hover:bg-ink-700">BUSCAR</button>
+    </div>
+    <p class="text-[10px] text-ink-400 mb-2">Prueba: 80123455 (Gael, ya inscrito en ACAR) · 80234561 (Fabio) · otro nº = alta nueva</p>
+    <div id="bj-res"></div>`);
+}
+async function buscarJugador(){
+  const pais=$('bj-pais').value, doc=$('bj-doc').value.trim();
+  if(!doc) return;
+  const {data,error}=await sb.rpc('buscar_jugador_censurado',{p_pais:pais,p_doc:doc});
+  if(error){$('bj-res').innerHTML=`<p class="text-sm text-brand-600 font-semibold">${errNegocio(error)}</p>`;return;}
+  if(data&&data.length){
+    const j=data[0];
+    $('bj-res').innerHTML=`<div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+      <p class="font-bold text-emerald-700 text-sm mb-2">✔ Coincidencia en la maestra global (censurada por el servidor)</p>
+      <div class="flex items-center gap-3 mb-2"><span class="w-11 h-11 rounded-xl bg-ink-900 text-white grid place-items-center font-bold">🔒</span>
+      <div><p class="font-semibold text-sm">${j.nombre_censurado}</p><p class="text-xs text-ink-500">Nac. ${j.anio_nacimiento}-**-** · ${j.genero||''} ${j.verificado?'· verificado ✔':''}</p></div></div>
+      <div class="flex gap-2"><input id="bj-dorsal" type="number" placeholder="Dorsal" class="w-24 border border-line rounded-xl px-3 py-2 text-sm"/>
+      <button onclick="inscribir('${j.jugador_id}')" class="flex-1 bg-emerald-600 text-white text-sm font-bold rounded-xl hover:bg-emerald-700">CONFIRMAR INSCRIPCIÓN</button></div></div>`;
+  } else {
+    $('bj-res').innerHTML=`<div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+      <p class="font-bold text-amber-700 text-sm mb-2">Documento no registrado — alta nueva en la maestra global</p>
+      <div class="grid grid-cols-2 gap-3 text-sm mb-3">
+        <label><span class="text-ink-400 font-semibold text-xs">Nombres *</span><input id="al-n" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
+        <label><span class="text-ink-400 font-semibold text-xs">Apellidos *</span><input id="al-a" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
+        <label><span class="text-ink-400 font-semibold text-xs">Fecha de nacimiento *</span><input id="al-f" type="date" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
+        <label><span class="text-ink-400 font-semibold text-xs">Dorsal</span><input id="al-d" type="number" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
+      </div>
+      <button onclick="altaJugador('${pais}','${doc}')" class="w-full bg-amber-600 text-white text-sm font-bold py-2.5 rounded-xl hover:bg-amber-700">CREAR E INSCRIBIR (queda PENDIENTE)</button></div>`;
+  }
+}
+async function inscribir(jugadorId){
+  const {error}=await sb.from('inscripcion_lbf').insert({
+    equipo_id:EQUIPO.id, jugador_id:jugadorId, categoria_id:CAT.id,
+    dorsal:+($('bj-dorsal')?.value||0)||null, estado:'pendiente'});
+  if(error){$('bj-res').innerHTML=`<div class="bg-brand-50 border border-brand-100 rounded-xl p-4 text-sm font-semibold text-brand-700">${errNegocio(error)}</div>`;return;}
+  cerrarModal(); toast('Inscrito en la LBF — datos completos revelados, queda PENDIENTE de validación ✔'); renderLBF();
+}
+async function altaJugador(pais,doc){
+  const n=$('al-n').value.trim(), a=$('al-a').value.trim(), f=$('al-f').value;
+  if(!n||!a||!f){toast('Nombres, apellidos y fecha de nacimiento son obligatorios');return;}
+  const anio=new Date(f+'T00:00:00').getFullYear();
+  const jm=await sb.from('jugador_maestro').insert({pais_documento:pais,nro_documento:doc,nombres:n,apellidos:a,fecha_nacimiento:f}).select().single();
+  if(jm.error){toast(errNegocio(jm.error));return;}
+  const ins=await sb.from('inscripcion_lbf').insert({equipo_id:EQUIPO.id,jugador_id:jm.data.id,categoria_id:CAT.id,
+    dorsal:+($('al-d').value||0)||null,estado:'pendiente',es_excepcion:anio!==CAT.anio_nacimiento});
+  if(ins.error){toast(errNegocio(ins.error));return;}
+  cerrarModal();
+  toast(anio!==CAT.anio_nacimiento?`⚠ Creado e inscrito como EXCEPCIÓN POR EDAD (nació ${anio}, categoría ${CAT.anio_nacimiento})`:'Jugador creado en la maestra e inscrito — PENDIENTE ✔');
+  renderLBF();
+}
+
+/* ---- Fixture / Resultados ---- */
+async function renderFixture(){
+  const {data,error}=await sb.from('partido').select('*, jornada:jornada_id(numero)').eq('categoria_id',CAT.id).order('fecha').order('hora');
+  if(error){$('tab-fixture').innerHTML='';msg(errNegocio(error),'err');return;}
+  const grupos={};
+  data.forEach(m=>{const k=m.etapa||('FECHA '+((m.jornada&&m.jornada.numero)||'?'));(grupos[k]=grupos[k]||[]).push(m);});
+  $('tab-fixture').innerHTML=Object.entries(grupos).map(([g,ms])=>`
+    <div class="bg-white border border-line rounded-2xl mb-4">
+      <div class="px-4 py-2.5 border-b border-line font-display text-lg tracking-wide">${g.toUpperCase()}</div>
+      ${ms.map(m=>{const fin=m.estado==='finalizado'||m.estado==='walkover';
+        const L=EQUIPOS[m.local_id],V=EQUIPOS[m.visita_id];
+        return `<div class="flex items-center px-4 py-2.5 border-b border-line last:border-0 gap-2">
+          <div class="flex-1 flex items-center justify-end gap-2 text-sm font-semibold">${L?nomEq(L):'—'} ${L?badgeEq(L):''}</div>
+          <div class="w-24 text-center">
+            <span class="block text-[9px] font-bold uppercase ${fin?'text-emerald-600':'text-ink-400'}">${m.estado}</span>
+            <span class="font-display text-2xl">${m.goles_local??'–'} : ${m.goles_visita??'–'}</span>
+          </div>
+          <div class="flex-1 flex items-center gap-2 text-sm font-semibold">${V?badgeEq(V):''} ${V?nomEq(V):'—'}</div>
+          <button onclick='modalResultado(${JSON.stringify(m).replace(/'/g,"&#39;")})' class="text-xs font-bold text-brand-600 border border-brand-100 rounded-lg px-2.5 py-1.5 hover:bg-brand-50">CARGAR</button>
+        </div>`;}).join('')}
+    </div>`).join('') || '<p class="text-ink-400 text-sm">Sin partidos.</p>';
+}
+function modalResultado(m){
+  const L=EQUIPOS[m.local_id],V=EQUIPOS[m.visita_id];
+  abrirModal(`<div class="flex items-center justify-between mb-4"><h3 class="font-display text-2xl tracking-wide">CARGAR RESULTADO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <div class="flex items-center justify-center gap-3 mb-4">
+      <div class="text-center flex-1">${L?badgeEq(L,9):''}<p class="text-xs font-bold mt-1">${L?nomEq(L):''}</p></div>
+      <input id="rs-l" type="number" min="0" value="${m.goles_local??''}" class="w-14 border-2 border-line rounded-xl text-center font-display text-3xl py-1"/>
+      <span class="font-display text-xl text-ink-400">:</span>
+      <input id="rs-v" type="number" min="0" value="${m.goles_visita??''}" class="w-14 border-2 border-line rounded-xl text-center font-display text-3xl py-1"/>
+      <div class="text-center flex-1">${V?badgeEq(V,9):''}<p class="text-xs font-bold mt-1">${V?nomEq(V):''}</p></div>
+    </div>
+    <label class="flex items-center justify-center gap-2 text-sm font-semibold mb-4">Estado
+      <select id="rs-e" class="border border-line rounded-lg px-2 py-1 font-semibold bg-white">
+        ${['finalizado','programado','en_vivo','suspendido','walkover'].map(s=>`<option ${m.estado===s&&s!=='programado'?'selected':s==='finalizado'&&m.estado==='programado'?'selected':''}>${s}</option>`).join('')}
+      </select></label>
+    <button onclick="guardarResultado('${m.id}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR EN LA BD</button>
+    <p class="text-[10px] text-ink-400 mt-2 text-center">Al guardar: standings recalculados por Postgres + push Realtime al módulo público.</p>`);
+}
+async function guardarResultado(id){
+  const gl=$('rs-l').value, gv=$('rs-v').value;
+  if(gl===''||gv===''){toast('Ingresa ambos marcadores');return;}
+  const {error}=await sb.from('partido').update({goles_local:+gl,goles_visita:+gv,estado:$('rs-e').value}).eq('id',id);
+  if(error){toast(errNegocio(error));return;}
+  cerrarModal(); toast('Resultado guardado ✔ — tabla recalculada por la BD y publicada en vivo ⚡');
+  await renderFixture(); await renderTabla();
+}
+
+/* ---- Tabla ---- */
+async function renderTabla(){
+  const {data,error}=await sb.from('vista_tabla_zona').select('*').eq('categoria_id',CAT.id);
+  if(error){$('tab-tabla').innerHTML='';return;}
+  const zonas=[...new Set(data.map(r=>r.zona))].sort();
+  $('tab-tabla').innerHTML=zonas.map(z=>{
+    const rows=data.filter(r=>r.zona===z).sort((a,b)=>b.pts-a.pts||b.dg-a.dg||b.gf-a.gf);
+    return `<div class="bg-white rounded-2xl border border-line mb-4 overflow-x-auto">
+      <div class="px-4 py-3 border-b border-line flex items-center justify-between"><span class="font-display text-xl tracking-wide">ZONA ${z}</span><span class="text-[9px] text-emerald-600 font-bold uppercase">⟳ calculada por Postgres</span></div>
+      <table class="w-full min-w-[440px]"><thead><tr class="text-[10px] uppercase text-ink-400 border-b border-line"><th class="py-2 w-8"></th><th class="text-left">Equipo</th><th class="w-9">PJ</th><th class="w-9">DG</th><th class="w-10">PTS</th></tr></thead>
+      <tbody>${rows.map((r,i)=>`<tr class="border-b border-line last:border-0">
+        <td class="py-2 pl-2 text-ink-400 font-bold text-center">${i+1}</td>
+        <td class="font-semibold text-sm">${EQUIPOS[r.equipo_id]?badgeEq(EQUIPOS[r.equipo_id],5):''} ${r.equipo}</td>
+        <td class="text-center text-sm text-ink-400">${r.pj}</td>
+        <td class="text-center text-sm font-semibold ${r.dg>0?'text-emerald-600':r.dg<0?'text-brand-600':'text-ink-400'}">${r.dg>0?'+':''}${r.dg}</td>
+        <td class="text-center font-extrabold">${r.pts}</td></tr>`).join('')}</tbody></table></div>`;
+  }).join('');
+}
+
+iniciar();
+</script>
+</body>
