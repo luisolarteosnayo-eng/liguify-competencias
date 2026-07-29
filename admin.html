@@ -431,10 +431,23 @@ function tabs(act){
 async function renderEquipos(){
   const ez=ZONAS.length?await sb.from('equipo_en_zona').select('*').in('zona_id',ZONAS.map(z=>z.id)):{data:[]};
   const porZona={}; (ez.data||[]).forEach(x=>{(porZona[x.zona_id]=porZona[x.zona_id]||[]).push(x.equipo_id);});
+  const asignados=new Set((ez.data||[]).map(x=>x.equipo_id));
+  const sinZona=Object.values(EQUIPOS).filter(e=>!asignados.has(e.id));
+  const cardSinZona = sinZona.length ? `<div class="bg-white border-2 border-amber-300 rounded-2xl mb-4 overflow-hidden">
+      <div class="bg-amber-500 text-white px-5 py-2.5 font-display text-lg tracking-wide">⚠ EQUIPOS SIN ZONA <span class="text-xs font-sans font-semibold">— no aparecen en fixture ni tabla hasta asignarlos</span></div>
+      ${sinZona.map(e=>`<div class="flex items-center gap-3 px-5 py-2.5 border-b border-line last:border-0">
+        ${badgeEq(e)}<span class="flex-1 font-semibold text-sm">${nomEq(e)}</span>
+        ${esAdmin()&&ZONAS.length?`<select id="az-${e.id}" class="border border-line rounded-lg px-2 py-1.5 text-xs font-semibold bg-white">${ZONAS.map(z=>`<option value="${z.id}">Zona ${z.nombre}</option>`).join('')}</select>
+          <button onclick="asignarZona('${e.id}')" class="text-xs font-bold text-white bg-amber-500 rounded-lg px-3 py-1.5 hover:bg-amber-600">ASIGNAR</button>`
+          :ZONAS.length?'':'<span class="text-[10px] text-amber-600 font-bold">crea una zona primero</span>'}
+        <button onclick='abrirLBF("${e.id}")' class="text-xs font-bold text-brand-600 hover:underline">LBF →</button>
+      </div>`).join('')}
+    </div>` : '';
   $('tab-equipos').innerHTML=
     `<div class="flex justify-end gap-2 mb-3">${esAdmin()?`
       <button onclick="modalZona()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">+ NUEVA ZONA</button>
       <button onclick="modalEquipo()" class="bg-brand-500 text-white font-bold px-4 py-2 rounded-xl text-sm hover:bg-brand-600">+ NUEVO EQUIPO</button>`:''}</div>`+
+    cardSinZona+
     ZONAS.map(z=>`<div class="bg-white border border-line rounded-2xl mb-4 overflow-hidden">
       <div class="bg-ink-900 text-white px-5 py-2.5 font-display text-lg tracking-wide">ZONA ${z.nombre}</div>
       ${(porZona[z.id]||[]).map(eqId=>{const e=EQUIPOS[eqId]; if(!e) return '';
@@ -459,7 +472,7 @@ function modalEquipo(){
     <div class="grid grid-cols-2 gap-3 text-sm">
       <label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Nombre del equipo (opcional)</span><input id="ne-n" placeholder="Vacío = nombre del club · ej. ALIANZA A" class="w-full border-b border-line py-1.5 font-semibold"/></label>
       <label><span class="text-ink-400 font-semibold text-xs">Zona</span>
-        <select id="ne-z" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${ZONAS.map(z=>`<option value="${z.id}">Zona ${z.nombre}</option>`).join('')}</select></label>
+        <select id="ne-z" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${ZONAS.length?ZONAS.map(z=>`<option value="${z.id}">Zona ${z.nombre}</option>`).join(''):'<option value="__auto__">Zona A (se creará automáticamente)</option>'}</select></label>
     </div>
     <button onclick="crearEquipo()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl mt-4 hover:bg-brand-600">CREAR EQUIPO</button>`);
 }
@@ -471,7 +484,20 @@ async function crearEquipo(){
     if(ins.error){toast(errNegocio(ins.error));return;}
     clubId=ins.data.id; CLUBES[clubId]=ins.data;
   }
-  const nombre=$('ne-n').value.trim()||null, zonaId=$('ne-z').value;
+  const nombre=$('ne-n').value.trim()||null;
+  let zonaId=$('ne-z').value;
+  // si la categoría no tiene zonas, se crean Fase de Grupos + Zona A automáticamente
+  if(zonaId==='__auto__'){
+    let fase=FASES.find(f=>f.tipo==='grupos');
+    if(!fase){
+      const nf=await sb.from('fase').insert({categoria_id:CAT.id,nombre:'Fase de Grupos',tipo:'grupos',orden:1}).select().single();
+      if(nf.error){toast(errNegocio(nf.error));return;}
+      fase=nf.data; FASES.push(fase);
+    }
+    const nz=await sb.from('zona').insert({fase_id:fase.id,nombre:'A'}).select().single();
+    if(nz.error){toast(errNegocio(nz.error));return;}
+    ZONAS.push(nz.data); zonaId=nz.data.id;
+  }
   const eq=await sb.from('equipo').insert({categoria_id:CAT.id,club_id:clubId,nombre}).select().single();
   if(eq.error){toast(errNegocio(eq.error));return;}
   EQUIPOS[eq.data.id]=eq.data;
@@ -565,6 +591,14 @@ async function altaJugador(pais,doc){
   cerrarModal();
   toast(anio!==CAT.anio_nacimiento?`⚠ Creado e inscrito como EXCEPCIÓN POR EDAD (nació ${anio}, categoría ${CAT.anio_nacimiento})`:'Jugador creado en la maestra e inscrito — PENDIENTE ✔');
   renderLBF();
+}
+
+async function asignarZona(eqId){
+  const zonaId=$('az-'+eqId).value;
+  const {error}=await sb.from('equipo_en_zona').insert({zona_id:zonaId,equipo_id:eqId});
+  if(error){toast(errNegocio(error));return;}
+  toast(`${nomEq(EQUIPOS[eqId])} asignado a la zona ✔ — ya entra en fixture y tabla`);
+  await renderEquipos(); await renderTabla();
 }
 
 /* ---- Zonas (con su fase) ---- */
