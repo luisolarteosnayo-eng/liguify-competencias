@@ -917,6 +917,12 @@ async function modalLlaves(){
         <select id="ll-etapa" onchange="renderLlaveRows()" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
           ${Object.keys(ETAPAS_LLAVE).map(e=>`<option>${e}</option>`).join('')}
         </select></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Clasifican (sugerencias de cruce)</span>
+        <select id="ll-desde" onchange="renderLlaveRows()" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
+          <option value="0">1º y 2º de cada zona (ej. ORO)</option>
+          <option value="2">3º y 4º de cada zona (ej. PLATA)</option>
+          <option value="4">5º y 6º de cada zona</option>
+        </select></label>
       <label><span class="text-ink-400 font-semibold text-xs">Fecha</span><input id="ll-f" type="date" value="${new Date(Date.now()+3*864e5).toISOString().slice(0,10)}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
       <label><span class="text-ink-400 font-semibold text-xs">Hora del primer partido</span><input id="ll-h" type="time" value="09:00" class="w-full border-b border-line py-1.5 font-semibold"/></label>
       <label><span class="text-ink-400 font-semibold text-xs">Sede</span><input id="ll-s" placeholder="Arena 7" class="w-full border-b border-line py-1.5 font-semibold"/></label>
@@ -934,8 +940,9 @@ function llEquipoOpts(sel){
   return opts.map(([v,l])=>`<option value="${v}" ${v===sel?'selected':''}>${l}</option>`).join('');
 }
 function llSugeridos(etapa){
+  const o=+($('ll-desde')?.value||0);   // offset de clasificación: 0=1º-2º (ORO), 2=3º-4º (PLATA)…
   const A=LL_RANK[LL_ZONAS[0]]||[], B=LL_RANK[LL_ZONAS[1]]||[];
-  const t=(arr,i)=>(arr[i]||{}).equipo_id||'';
+  const t=(arr,i)=>(arr[o+i]||{}).equipo_id||'';
   const dosZonas=LL_ZONAS.length>=2;
   if(etapa==='Semifinal') return dosZonas?[[t(A,0),t(B,1)],[t(B,0),t(A,1)]]:[[t(A,0),t(A,3)],[t(A,1),t(A,2)]];
   if(etapa==='Cuartos de final') return dosZonas
@@ -989,7 +996,12 @@ async function renderFixture(){
   const {data,error}=await sb.from('partido').select('*, jornada:jornada_id(numero)').eq('categoria_id',CAT.id).order('fecha').order('hora');
   if(error){$('tab-fixture').innerHTML='';msg(errNegocio(error),'err');return;}
   const grupos={};
-  data.forEach(m=>{const k=m.etapa||('FECHA '+((m.jornada&&m.jornada.numero)||'?'));(grupos[k]=grupos[k]||[]).push(m);});
+  data.forEach(m=>{
+    const k=m.etapa
+      ? `🏆 ${(FASES.find(f=>f.id===m.fase_id)||{}).nombre||'Eliminatoria'} · ${m.etapa}`
+      : ('FECHA '+((m.jornada&&m.jornada.numero)||'?'));
+    (grupos[k]=grupos[k]||[]).push(m);
+  });
   $('tab-fixture').innerHTML=
   `<div class="flex justify-end gap-2 mb-3">${esAdmin()?`
     <button onclick="modalLlaves()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">🏆 GENERAR LLAVES</button>

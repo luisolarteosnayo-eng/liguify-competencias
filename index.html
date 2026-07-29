@@ -305,28 +305,39 @@ function cardLlave(m){
   </div>`;
 }
 async function renderLlaves(){
-  const {data,error}=await sb.from('partido').select('*')
+  const {data,error}=await sb.from('partido').select('*, fase:fase_id(nombre)')
     .eq('categoria_id',CAT.id).not('etapa','is',null).order('etapa');
   if(error){$('tab-llaves').innerHTML='';return;}
   if(!(data||[]).length){
     $('tab-llaves').innerHTML='<p class="text-ink-400 text-sm bg-white border border-line rounded-2xl p-6 text-center">La fase eliminatoria aún no está programada.</p>';
     return;
   }
-  // agrupar por etapa (prefijo antes de " #")
-  const grupos={};
-  data.forEach(m=>{const k=(m.etapa||'').split(' #')[0];(grupos[k]=grupos[k]||[]).push(m);});
-  const etapas=Object.keys(grupos).sort((a,b)=>{
-    const ia=ORDEN_ETAPAS.indexOf(a), ib=ORDEN_ETAPAS.indexOf(b);
-    return (ia<0?99:ia)-(ib<0?99:ib);
-  });
+  // SECCIONES por fase (ORO / PLATA / …) y dentro, columnas por etapa
+  const porFase={};
+  data.forEach(m=>{const f=(m.fase&&m.fase.nombre)||'Eliminatoria';(porFase[f]=porFase[f]||[]).push(m);});
+  const medalla=n=>/oro/i.test(n)?'🥇':/plata/i.test(n)?'🥈':/bronce/i.test(n)?'🥉':'🏆';
   $('tab-llaves').innerHTML=`
-    <p class="text-ink-500 text-sm mb-4">Fase eliminatoria — los resultados de las llaves no suman puntos a la tabla de grupos.</p>
-    <div class="grid gap-4 items-start" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
-      ${etapas.map(et=>`<div>
-        <p class="font-display text-xl tracking-wide mb-2 ${et==='Final'?'text-amber-600':''}">${et.toUpperCase()}</p>
-        <div class="space-y-3">${grupos[et].map(cardLlave).join('')}</div>
-      </div>`).join('')}
-    </div>`;
+    <p class="text-ink-500 text-sm mb-4">Fase eliminatoria — los resultados de las llaves no suman puntos a la tabla de grupos.</p>`+
+    Object.entries(porFase).map(([faseNom,ms])=>{
+      const grupos={};
+      ms.forEach(m=>{const k=(m.etapa||'').split(' #')[0];(grupos[k]=grupos[k]||[]).push(m);});
+      const etapas=Object.keys(grupos).sort((a,b)=>{
+        const ia=ORDEN_ETAPAS.indexOf(a), ib=ORDEN_ETAPAS.indexOf(b);
+        return (ia<0?99:ia)-(ib<0?99:ib);
+      });
+      return `<div class="mb-8">
+        <div class="bg-ink-900 text-white rounded-2xl px-5 py-3 mb-4 flex items-center gap-2">
+          <span class="text-xl">${medalla(faseNom)}</span>
+          <span class="font-display text-2xl tracking-wide">${faseNom.toUpperCase()}</span>
+        </div>
+        <div class="grid gap-4 items-start" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
+          ${etapas.map(et=>`<div>
+            <p class="font-display text-xl tracking-wide mb-2 ${et==='Final'?'text-amber-600':''}">${et.toUpperCase()}</p>
+            <div class="space-y-3">${grupos[et].map(cardLlave).join('')}</div>
+          </div>`).join('')}
+        </div>
+      </div>`;
+    }).join('');
 }
 
 /* Equipos de la categoría */
