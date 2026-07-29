@@ -53,6 +53,7 @@ tailwind.config={theme:{extend:{
     <div id="marca-card"></div>
     <div class="flex items-center justify-between mb-3 mt-6">
       <h2 class="font-display text-2xl tracking-wide">TORNEOS DE LA MARCA</h2>
+      <button onclick="modalNuevoTorneo()" id="btn-nuevo-torneo" class="hidden bg-brand-500 text-white font-bold px-4 py-2 rounded-xl text-sm hover:bg-brand-600">+ NUEVO TORNEO</button>
     </div>
     <div class="space-y-2" id="lista-torneos"></div>
   </section>
@@ -160,22 +161,161 @@ const esAdmin=()=>ROLES.some(r=>r.rol==='admin_marca');
 
 /* ============ TORNEOS ============ */
 async function cargarTorneos(){
-  $('marca-card').innerHTML=`<div class="bg-ink-900 text-white rounded-2xl p-5 flex items-center gap-4">
+  $('marca-card').innerHTML=`<div class="bg-ink-900 text-white rounded-2xl p-5 flex items-center gap-4 flex-wrap">
     <span class="w-14 h-14 rounded-2xl grid place-items-center font-display text-2xl overflow-hidden relative" style="background:#d9232e">${MARCA.logo_url?`<img src="${MARCA.logo_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(MARCA.nombre)}</span>
-    <div class="flex-1"><p class="text-[10px] uppercase tracking-widest text-white/40 font-bold">Marca organizadora · membresía ${MARCA.membresia}</p>
+    <div class="flex-1 min-w-40"><p class="text-[10px] uppercase tracking-widest text-white/40 font-bold">Marca organizadora · membresía ${MARCA.membresia}</p>
     <h1 class="font-display text-4xl tracking-wide leading-none">${MARCA.nombre.toUpperCase()}</h1>
     <p class="text-emerald-300 text-xs mt-1">🔗 ${MARCA.slug}.liguify.com</p></div>
-    ${esAdmin()?'':'<span class="text-[10px] font-bold bg-amber-500/20 text-amber-300 rounded-full px-3 py-1">MODO MESA: solo resultados</span>'}
+    ${esAdmin()?`<button onclick="modalMarca()" class="bg-white/10 border border-white/20 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/20">✏️ EDITAR MARCA</button>`
+      :'<span class="text-[10px] font-bold bg-amber-500/20 text-amber-300 rounded-full px-3 py-1">MODO MESA: solo resultados</span>'}
   </div>`;
+  $('btn-nuevo-torneo').classList.toggle('hidden', !esAdmin());
   const {data:ts,error}=await sb.from('torneo').select('*').eq('marca_id',MARCA.id).order('created_at');
   if(error){msg(errNegocio(error),'err');return;}
   $('lista-torneos').innerHTML=ts.map(t=>`
-    <button onclick='abrirTorneo(${JSON.stringify(t)})' class="w-full bg-white border border-line rounded-2xl px-5 py-4 flex items-center gap-4 hover:shadow-md transition text-left">
-      <span class="w-11 h-11 rounded-xl bg-ink-900 text-white font-display grid place-items-center text-sm">${t.nombre.replace(MARCA.nombre,'').trim().slice(0,4)||iniciales(t.nombre)}</span>
-      <span class="flex-1"><span class="font-bold block">${t.nombre}</span>
-      <span class="text-xs text-ink-400">Temporada ${t.anio} · ${t.estado==='en_curso'?'<b class="text-emerald-600">EN CURSO</b>':t.estado}</span></span>
-      <span class="text-ink-400">→</span></button>`).join('');
+    <div class="w-full bg-white border border-line rounded-2xl px-5 py-4 flex items-center gap-4 hover:shadow-md transition">
+      <span class="w-11 h-11 rounded-xl bg-ink-900 text-white font-display grid place-items-center text-sm overflow-hidden relative">${t.logo_url?`<img src="${t.logo_url}" class="absolute inset-0 w-full h-full object-cover"/>`:(t.nombre.replace(MARCA.nombre,'').trim().slice(0,4)||iniciales(t.nombre))}</span>
+      <button onclick='abrirTorneo(${JSON.stringify(t).replace(/'/g,"&#39;")})' class="flex-1 text-left">
+        <span class="font-bold block">${t.nombre}</span>
+        <span class="text-xs text-ink-400">Temporada ${t.anio} · ${t.estado==='en_curso'?'<b class="text-emerald-600">EN CURSO</b>':t.estado}</span></button>
+      ${esAdmin()?`<button onclick='modalTorneo(${JSON.stringify(t).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-500 border border-line rounded-lg px-3 py-2 hover:bg-paper" title="Configuración del torneo">⚙️ CONFIG</button>`:''}
+      <button onclick='abrirTorneo(${JSON.stringify(t).replace(/'/g,"&#39;")})' class="text-ink-400">→</button>
+    </div>`).join('');
   show('s-torneos');
+}
+
+/* ============ GESTIÓN: STORAGE + MARCA + TORNEO ============ */
+async function subirImagen(inputId, path){
+  const f=$(inputId)?.files?.[0];
+  if(!f) return null;                                     // sin archivo = sin cambio
+  const ext=(f.name.split('.').pop()||'png').toLowerCase();
+  const ruta=`${path}.${ext}`;
+  const {error}=await sb.storage.from('publico').upload(ruta, f, {upsert:true, contentType:f.type});
+  if(error) throw error;
+  return sb.storage.from('publico').getPublicUrl(ruta).data.publicUrl + '?v=' + Date.now();
+}
+const campo=(id,label,val,tipo='text',extra='')=>`<label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">${label}</span><input id="${id}" type="${tipo}" value="${val??''}" ${extra} class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>`;
+const toggleC=(id,label,on)=>`<label class="flex items-center justify-between text-sm font-semibold py-1">${label}<input id="${id}" type="checkbox" ${on?'checked':''} class="w-4 h-4 accent-[#d9232e]"/></label>`;
+
+function modalMarca(){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">EDITAR MARCA</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">El logo y los datos se reflejan en el módulo público de todos tus torneos.</p>
+    <div class="flex items-center gap-3 mb-3">
+      <span class="w-16 h-16 rounded-2xl grid place-items-center text-white font-display text-xl overflow-hidden relative shrink-0" style="background:#d9232e">${MARCA.logo_url?`<img src="${MARCA.logo_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(MARCA.nombre)}</span>
+      <label class="text-sm flex-1"><span class="text-ink-400 font-semibold text-xs">Logo de la marca (subir imagen)</span>
+        <input id="mk-logo" type="file" accept="image/*" class="w-full text-xs mt-1"/></label>
+    </div>
+    <div class="grid grid-cols-2 gap-3 mb-3">
+      ${campo('mk-n','Nombre',MARCA.nombre)}
+      ${campo('mk-slug','Slug (URL)',MARCA.slug,'text','maxlength="30"')}
+      ${campo('mk-ciudad','Ciudad',MARCA.ciudad)}
+      ${campo('mk-email','Email de contacto',MARCA.email)}
+      ${campo('mk-tel','Teléfono/WhatsApp',MARCA.telefono)}
+      ${campo('mk-redes','Instagram/redes',MARCA.redes)}
+    </div>
+    <label class="block text-sm mb-4"><span class="text-ink-400 font-semibold text-xs">Descripción</span>
+      <textarea id="mk-desc" rows="2" class="w-full border border-line rounded-xl p-2.5 mt-1 text-sm">${MARCA.descripcion||''}</textarea></label>
+    <button onclick="guardarMarca()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR MARCA</button>`);
+}
+async function guardarMarca(){
+  try{
+    const slug=$('mk-slug').value.toLowerCase().replace(/[^a-z0-9]/g,'');
+    if(!$('mk-n').value.trim()||!slug){toast('Nombre y slug son obligatorios');return;}
+    const logo=await subirImagen('mk-logo', `marcas/${MARCA.id}`);
+    const upd={nombre:$('mk-n').value.trim(), slug, ciudad:$('mk-ciudad').value.trim()||null,
+      email:$('mk-email').value.trim()||null, telefono:$('mk-tel').value.trim()||null,
+      redes:$('mk-redes').value.trim()||null, descripcion:$('mk-desc').value.trim()||null};
+    if(logo) upd.logo_url=logo;
+    const {data,error}=await sb.from('marca').update(upd).eq('id',MARCA.id).select().single();
+    if(error){toast(errNegocio(error));return;}
+    MARCA=data; cerrarModal(); toast('Marca actualizada ✔ — visible en el módulo público'); cargarTorneos();
+  }catch(e){toast('Logo: '+(e.message||e)+' — ¿creaste el bucket "publico" en Storage?');}
+}
+
+function modalTorneo(t){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">EDITAR TORNEO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <div class="flex items-center gap-3 mb-3">
+      <span class="w-14 h-14 rounded-xl grid place-items-center text-white font-display text-lg overflow-hidden relative shrink-0" style="background:#171e2e">${t.logo_url?`<img src="${t.logo_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(t.nombre)}</span>
+      <label class="text-sm flex-1"><span class="text-ink-400 font-semibold text-xs">Logo del torneo (vacío = usa el de la marca)</span>
+        <input id="tc-logo" type="file" accept="image/*" class="w-full text-xs mt-1"/></label>
+    </div>
+    <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1">Identificación</p>
+    <div class="grid grid-cols-2 gap-3 mb-3">
+      ${campo('tc-n','Nombre',t.nombre)}
+      ${campo('tc-anio','Año',t.anio,'number')}
+      ${campo('tc-sede','Sede',t.sede)}
+      <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Estado</span>
+        <select id="tc-est" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${['borrador','en_curso','finalizado','archivado'].map(s=>`<option ${t.estado===s?'selected':''}>${s}</option>`).join('')}</select></label>
+      <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Modalidad por defecto</span>
+        <select id="tc-mod" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${['F7','F9','F11'].map(m=>`<option ${t.modalidad_default===m?'selected':''}>${m}</option>`).join('')}</select></label>
+    </div>
+    <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1">Puntajes y walkover</p>
+    <div class="grid grid-cols-3 gap-3 mb-2">
+      ${campo('tc-pg','Ganado',t.puntos_ganado,'number')}
+      ${campo('tc-pe','Empatado',t.puntos_empate,'number')}
+      ${campo('tc-pp','Perdido',t.puntos_perdido,'number')}
+    </div>
+    ${toggleC('tc-wo','Sumar puntos por walkover',t.sumar_puntos_walkover)}
+    <div class="grid grid-cols-2 gap-3 mb-3">
+      ${campo('tc-wog','Goles ganado sin jugar',t.goles_ganado_walkover,'number')}
+      ${campo('tc-wop','Puntos perdido sin jugar',t.puntos_perdido_walkover,'number')}
+    </div>
+    <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1">Tabla</p>
+    ${campo('tc-orden','Orden de tabla (columnas + desempate)',(t.orden_tabla||[]).join(', '))}
+    <div class="mb-3 mt-1">${toggleC('tc-tg','Mostrar tabla general',t.mostrar_tabla_general)}${toggleC('tc-exc','Mostrar excepciones por edad',t.mostrar_excepciones_edad)}</div>
+    <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1">Disciplina · LBF · Delegados</p>
+    <div class="grid grid-cols-2 gap-3 mb-2">
+      ${campo('tc-ama','Amarillas para suspensión (vacío = sin)',t.amarillas_suspension)}
+      ${campo('tc-amaf','Fecha límite acum. amarillas',t.fecha_limite_amarillas,'date')}
+      ${campo('tc-lbf','Máx. jugadores LBF por equipo',t.lbf_max_jugadores,'number')}
+      ${campo('tc-flim','Fecha límite carga equipo',t.fecha_limite_carga_equipo,'date')}
+    </div>
+    ${toggleC('tc-clbf','Cargar jugadores en LBF',t.cargar_lbf)}
+    ${toggleC('tc-scan','Crear jugadores solo con scan de DNI',t.scan_dni_obligatorio)}
+    ${toggleC('tc-del','Permitir delegados (modo Club)',t.permitir_delegados)}
+    ${toggleC('tc-modif','Permitir modificación de equipo',t.permitir_modificacion_equipo)}
+    <label class="block text-sm my-3"><span class="text-ink-400 font-semibold text-xs">Descripción</span>
+      <textarea id="tc-desc" rows="2" class="w-full border border-line rounded-xl p-2.5 mt-1 text-sm">${t.descripcion||''}</textarea></label>
+    <button onclick="guardarTorneo('${t.id}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR TORNEO</button>`);
+}
+async function guardarTorneo(id){
+  try{
+    const logo=await subirImagen('tc-logo', `torneos/${id}`);
+    const orden=$('tc-orden').value.split(',').map(s=>s.trim().toUpperCase().replace(/ /g,'_')).filter(Boolean);
+    const upd={nombre:$('tc-n').value.trim(), anio:+$('tc-anio').value||2026, sede:$('tc-sede').value.trim()||null,
+      estado:$('tc-est').value, modalidad_default:$('tc-mod').value,
+      puntos_ganado:+$('tc-pg').value, puntos_empate:+$('tc-pe').value, puntos_perdido:+$('tc-pp').value,
+      sumar_puntos_walkover:$('tc-wo').checked, goles_ganado_walkover:+$('tc-wog').value, puntos_perdido_walkover:+$('tc-wop').value,
+      orden_tabla:orden.length?orden:['PJ','PUNTOS','DIF_GOL','GF','GC'],
+      mostrar_tabla_general:$('tc-tg').checked, mostrar_excepciones_edad:$('tc-exc').checked,
+      amarillas_suspension:$('tc-ama').value?+$('tc-ama').value:null, fecha_limite_amarillas:$('tc-amaf').value||null,
+      lbf_max_jugadores:+$('tc-lbf').value||30, fecha_limite_carga_equipo:$('tc-flim').value||null,
+      cargar_lbf:$('tc-clbf').checked, scan_dni_obligatorio:$('tc-scan').checked,
+      permitir_delegados:$('tc-del').checked, permitir_modificacion_equipo:$('tc-modif').checked,
+      descripcion:$('tc-desc').value.trim()||null};
+    if(logo) upd.logo_url=logo;
+    const {error}=await sb.from('torneo').update(upd).eq('id',id);
+    if(error){toast(errNegocio(error));return;}
+    cerrarModal(); toast('Torneo guardado ✔ — reglas y logo actualizados'); cargarTorneos();
+  }catch(e){toast('Logo: '+(e.message||e)+' — ¿creaste el bucket "publico" en Storage?');}
+}
+
+function modalNuevoTorneo(){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">NUEVO TORNEO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">Se crea en estado BORRADOR (no visible al público) con reglas por defecto — configúralo luego con ⚙️.</p>
+    <div class="grid grid-cols-2 gap-3">
+      ${campo('nt-n','Nombre','')}
+      ${campo('nt-anio','Año',new Date().getFullYear(),'number')}
+    </div>
+    <button onclick="crearTorneo()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl mt-4 hover:bg-brand-600">CREAR</button>`);
+}
+async function crearTorneo(){
+  const n=$('nt-n').value.trim();
+  if(!n){toast('Ingresa el nombre');return;}
+  const slug=n.toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,30)||('t'+Date.now());
+  const {error}=await sb.from('torneo').insert({marca_id:MARCA.id,nombre:n,slug,anio:+$('nt-anio').value||2026});
+  if(error){toast(errNegocio(error));return;}
+  cerrarModal(); toast(`Torneo "${n}" creado en BORRADOR ✔`); cargarTorneos();
 }
 
 /* ============ TORNEO → CATEGORÍAS ============ */
