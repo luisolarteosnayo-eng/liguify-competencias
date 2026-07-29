@@ -12,4 +12,4 @@ Producto principal del portafolio **Liguify**: gestión deportiva de torneos de 
 - `supabase/schema.sql` — esquema completo `competencias` (20 tablas, vistas públicas, funciones, triggers, RLS multi-tenant por marca).
 - `ANALISIS_PUBLICO_ADMIN.md` — análisis funcional, modelo de dominio y decisiones.
 
-Módulos complementarios del portafolio: [Liguify ERP](https://liguify.com) (financiero) · [Liguify Academias](https://liguify-academias.vercel.app).
+Módulos complementarios del portafolio: [Liguify ERP](https://erp.liguify.com) (financiero) · [Liguify Academias](https://liguify-academias.vercel.app).
