@@ -545,3 +545,63 @@ Verificación de identidad EN CANCHA al registrar jugadores en un partido (check
 8. Wizard de creación de torneo
 9. PWA instalable con push web
 10. Modo pantalla/TV para la sede
+
+---
+
+## 12. Integración ERP ↔ Competencias — importación de clubes por categoría (análisis 2026-07-29)
+
+**Objetivo (Luis):** el ERP ya tiene clubes inscritos a torneos (con categoría y modalidad); Competencias debe poder **importar esos clubes a un torneo/categoría** sin duplicar clubes en la base de datos.
+
+### 12.1 Los dos modelos (mismo proyecto Supabase, esquemas distintos)
+
+| Concepto | ERP (`public`, ids bigint) | Competencias (`competencias`, ids uuid) |
+|---|---|---|
+| Tenant | `organizaciones` | `marca` |
+| Club | `clubes` (nombre, delegado, teléfono, provincia, org_id) | `club` (marca_id, nombre, escudo, UNIQUE marca+nombre) |
+| Torneo | `torneos` (estado activo/en_ejecucion/cerrado) | `torneo` (slug, reglas) |
+| Categoría | `categorias` (nombre libre p.ej. "2015") + `torneo_categorias` (torneo+cat+**modalidad F7**) | `categoria` (**anio_nacimiento + modalidad**, UNIQUE) |
+| Inscripción del club | **`equipos`** (torneo_id, club_id, cat_id, modalidad, nombre "Cara A/B", estado, montos) | **`equipo`** (categoria_id, club_id, nombre libre, estado) |
+
+**Hallazgo clave:** `public.equipos` ≈ `competencias.equipo` — la inscripción ERP contiene exactamente lo necesario para crear el equipo deportivo (club + categoría + modalidad + sub-nombre → nombre libre/sufijo).
+
+### 12.2 Diseño del puente (sin duplicar clubes)
+
+**Columnas de vínculo (Fase 1 — DDL):**
+```sql
+alter table competencias.marca  add column erp_org_id  bigint unique;             -- marca ↔ organización
+alter table competencias.club   add column erp_club_id bigint unique;             -- club ↔ club ERP (1:1)
+alter table competencias.equipo add column erp_equipo_id bigint unique;           -- idempotencia del import
+-- (FK cross-schema opcional: references public.clubes(id) on delete set null — mismo Postgres, es válido)
+```
+
+**Resolución de club SIN duplicar (algoritmo por cada club ERP a importar):**
+1. ¿Existe `competencias.club` con `erp_club_id = X`? → **reusar** (vínculo ya hecho).
+2. Si no: ¿existe club de la marca con **nombre normalizado igual** (lower/trim)? → **ADOPTAR**: set `erp_club_id = X` sobre el existente (es el mismo club creado a mano antes — así se cura el duplicado en vez de crearlo). Confirmación del admin en UI.
+3. Si no: **crear** `club {marca_id, nombre, erp_club_id}` (+ delegado/teléfono como contacto).
+
+**Mapeo de categoría:** `public.categorias.nombre` es texto libre → si parsea como año (regex `^(19|20)\d{2}$`) se sugiere el match con `anio_nacimiento`; la modalidad viene de `equipos.modalidad`/`torneo_categorias.modalidad`. La UI de import muestra el pareo sugerido ERP↔Competencias y el admin lo confirma/ajusta (mapping manual como fallback — los nombres de categoría del ERP son libres por org).
+
+**Flujo de importación (Fase 2 — UI en Competencias, categoría → "⬇ IMPORTAR CLUBES DESDE ERP"):**
+1. Requiere `marca.erp_org_id` vinculado (pantalla Editar Marca: "Vincular con mi organización del ERP").
+2. Selector de torneo ERP (de esa org) → lista sus `equipos` (inscripciones) con club/categoría/modalidad/estado, pre-filtrados por el mapeo de la categoría destino.
+3. Multi-select → por cada uno: resolver club (12.2) + crear `competencias.equipo {categoria_id, club_id, nombre: equipos.nombre||null, erp_equipo_id}` — **idempotente** por `erp_equipo_id unique` (re-importar no duplica).
+4. Resumen: N clubes creados · N adoptados · N reusados · N equipos creados · N omitidos.
+
+**Seguridad/RLS:** implementar como función `security definer` — `competencias.importar_clubes_erp(p_categoria uuid, p_erp_torneo bigint, ...)`: valida `es_admin_marca` **y** que `marca.erp_org_id` = org del torneo ERP; solo entonces lee `public.*` (no se otorgan grants directos de ERP a usuarios de Competencias; la cartera de otras orgs queda inaccesible).
+
+### 12.3 Casos borde
+- `equipos.nombre` "Cara A"/"Cara B" del ERP → nombre libre del equipo Competencias (patrón sufijo ya soportado).
+- `equipos.estado='inactivo'` en ERP → no se ofrece en el import (o se ofrece marcado).
+- `equipos.invitado` → informativo (sin efecto deportivo).
+- Ids bigint (ERP) vs uuid (Competencias) → por eso columnas de vínculo dedicadas, nunca compartir PKs.
+- Un mismo club ERP en 2 categorías del mismo torneo ERP → 2 equipos Competencias, 1 solo club (correcto).
+- Torneo ERP `cerrado` → igual importable (caso real: la parte financiera se cierra antes de armar el deportivo del siguiente).
+
+### 12.4 Bonus que habilita el vínculo (futuro)
+- **Semáforo de pagos en Competencias**: con `club.erp_club_id`, el admin deportivo puede ver "al día / deudor" desde la cuenta corriente del ERP (join por vínculo) — p.ej. bloquear acreditación o programación de clubes morosos (configurable).
+- Inverso: el ERP puede mostrar posición/resultados del club (dato deportivo) en su estado de cuenta.
+
+### 12.5 Fases propuestas
+1. **F1 (DDL, 15 min):** columnas de vínculo + función `importar_clubes_erp` security definer.
+2. **F2 (UI):** vincular marca↔org en Editar Marca + modal de importación en la categoría (idéntico patrón al "Importar plantel" ya construido).
+3. **F3 (valor):** semáforo de pagos ERP en la vista de equipos/acreditación.
