@@ -285,6 +285,7 @@ create table competencias.partido (
 create table competencias.evento_partido (
   id             uuid primary key,                    -- generado en el cliente
   partido_id     uuid not null references competencias.partido(id) on delete cascade,
+  equipo_id      uuid references competencias.equipo(id),   -- atribución del evento (gol sin jugador elegido igual suma)
   inscripcion_id uuid references competencias.inscripcion_lbf(id),
   tipo           text not null check (tipo in ('gol','amarilla','roja','asistencia','cambio','lesion')),
   periodo        int  not null default 1,
@@ -407,8 +408,11 @@ for each row execute function competencias.touch_updated_at();
 create or replace function competencias.limpiar_eventos_si_cambia_resultado()
 returns trigger language plpgsql security definer set search_path = competencias, pg_temp as $$
 begin
-  if (old.goles_local is distinct from new.goles_local)
-     or (old.goles_visita is distinct from new.goles_visita) then
+  -- T2: solo cuando el ADMIN modifica el resultado (no cuando el Match Center
+  -- en vivo deriva el marcador de sus propios eventos, estado 'en_vivo')
+  if new.estado <> 'en_vivo'
+     and ((old.goles_local is distinct from new.goles_local)
+       or (old.goles_visita is distinct from new.goles_visita)) then
     delete from competencias.evento_partido where partido_id = new.id;
   end if;
   return new;

@@ -78,6 +78,43 @@ tailwind.config={theme:{extend:{
     <div id="tab-tabla" class="ctab hidden"></div>
   </section>
 
+  <!-- MATCH CENTER EN VIVO -->
+  <section id="s-live" class="screen">
+    <button onclick="abrirCategoria(CAT)" class="text-sm text-ink-500 mb-3 font-semibold">← Categoría</button>
+    <div id="live-head"></div>
+    <div class="grid md:grid-cols-2 gap-4 mt-4">
+      <div class="bg-white border border-line rounded-2xl p-5">
+        <p class="font-display text-xl tracking-wide mb-3">REGISTRAR JUGADA</p>
+        <div class="grid grid-cols-2 gap-2 mb-3">
+          <select id="lv-eq" onchange="fillJugadores()" class="border border-line rounded-xl px-3 py-2 text-sm font-semibold bg-white"></select>
+          <select id="lv-jug" class="border border-line rounded-xl px-3 py-2 text-sm font-semibold bg-white"></select>
+        </div>
+        <div class="grid grid-cols-2 gap-2 mb-3 text-sm font-semibold">
+          <label class="flex items-center gap-2">Periodo <select id="lv-per" class="border border-line rounded-lg px-2 py-1.5 flex-1 bg-white"><option>1</option><option>2</option></select></label>
+          <label class="flex items-center gap-2">Minuto <input id="lv-min" type="number" min="0" value="0" class="border border-line rounded-lg px-2 py-1.5 w-full"/></label>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="regEvento('gol')" class="bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-700">⚽ GOL</button>
+          <button onclick="regEvento('asistencia')" class="bg-sky-600 text-white font-bold py-3 rounded-xl hover:bg-sky-700">🎯 ASISTENCIA</button>
+          <button onclick="regEvento('amarilla')" class="bg-yellow-400 text-yellow-950 font-bold py-3 rounded-xl hover:bg-yellow-500">🟨 AMARILLA</button>
+          <button onclick="regEvento('roja')" class="bg-brand-500 text-white font-bold py-3 rounded-xl hover:bg-brand-600">🟥 ROJA</button>
+        </div>
+        <div class="flex gap-2 mt-3">
+          <button onclick="iniciarPartido()" id="lv-iniciar" class="flex-1 bg-white border border-line font-bold py-2 rounded-xl text-sm hover:bg-paper">▶ INICIAR</button>
+          <button onclick="finalizarPartido()" class="flex-1 bg-ink-900 text-white font-bold py-2 rounded-xl text-sm hover:bg-ink-700">⏹ FINALIZAR</button>
+        </div>
+        <p class="text-[10px] text-ink-400 mt-2">📵 <b>Modo offline:</b> sin señal, los eventos se guardan en el dispositivo y se sincronizan solos al reconectar (id de cliente = nunca se duplican).</p>
+      </div>
+      <div class="bg-white border border-line rounded-2xl p-5">
+        <div class="flex items-center justify-between mb-3">
+          <p class="font-display text-xl tracking-wide">CRONOLOGÍA <span id="lv-count" class="text-xs font-sans text-ink-400 font-semibold"></span></p>
+          <button onclick="flushQueue()" id="lv-sync" class="hidden text-[10px] font-bold bg-amber-100 text-amber-700 rounded-full px-3 py-1 hover:bg-amber-200">⏳ sincronizar cola</button>
+        </div>
+        <div id="lv-feed" class="space-y-1 max-h-[420px] overflow-y-auto"></div>
+      </div>
+    </div>
+  </section>
+
   <!-- EQUIPO / LBF -->
   <section id="s-lbf" class="screen">
     <button onclick="abrirCategoria(CAT)" class="text-sm text-ink-500 mb-3 font-semibold">← Categoría</button>
@@ -665,6 +702,7 @@ async function renderFixture(){
             <span class="font-display text-2xl">${m.goles_local??'–'} : ${m.goles_visita??'–'}</span>
           </div>
           <div class="flex-1 flex items-center gap-2 text-sm font-semibold">${V?badgeEq(V):''} ${V?nomEq(V):'—'}</div>
+          <button onclick='abrirLive(${JSON.stringify(m).replace(/'/g,"&#39;")})' class="text-xs font-bold text-white bg-brand-500 rounded-lg px-2.5 py-1.5 hover:bg-brand-600" title="Match Center en vivo">▶ VIVO</button>
           <button onclick='modalResultado(${JSON.stringify(m).replace(/'/g,"&#39;")})' class="text-xs font-bold text-brand-600 border border-brand-100 rounded-lg px-2.5 py-1.5 hover:bg-brand-50">CARGAR</button>
         </div>`;}).join('')}
     </div>`).join('') || '<p class="text-ink-400 text-sm">Sin partidos.</p>';
@@ -693,6 +731,123 @@ async function guardarResultado(id){
   if(error){toast(errNegocio(error));return;}
   cerrarModal(); toast('Resultado guardado ✔ — tabla recalculada por la BD y publicada en vivo ⚡');
   await renderFixture(); await renderTabla();
+}
+
+/* ---- MATCH CENTER EN VIVO ---- */
+const QKEY='liguify-live-queue';
+let LIVEP=null, LIVE_INS={};   // inscripciones por equipo: {equipoId:[{id,dorsal,nombre}]}
+const cola = ()=>JSON.parse(localStorage.getItem(QKEY)||'[]');
+const setCola = q=>localStorage.setItem(QKEY,JSON.stringify(q));
+
+async function abrirLive(m){
+  LIVEP=m;
+  // planteles alineables de ambos equipos (LBF, no inhabilitados)
+  const ins=await sb.from('inscripcion_lbf').select('id,equipo_id,dorsal,jugador_id')
+    .in('equipo_id',[m.local_id,m.visita_id]).eq('en_lbf',true).eq('inhabilitado',false);
+  let nombres={};
+  if(!ins.error&&ins.data.length){
+    const js=await sb.from('jugador_maestro').select('id,nombres,apellidos').in('id',ins.data.map(i=>i.jugador_id));
+    nombres=Object.fromEntries((js.data||[]).map(j=>[j.id,j.nombres+' '+j.apellidos]));
+  }
+  LIVE_INS={[m.local_id]:[],[m.visita_id]:[]};
+  (ins.data||[]).forEach(i=>LIVE_INS[i.equipo_id].push({id:i.id,dorsal:i.dorsal,nombre:nombres[i.jugador_id]||'—'}));
+  $('lv-eq').innerHTML=[m.local_id,m.visita_id].map(id=>`<option value="${id}">${nomEq(EQUIPOS[id]||{})}</option>`).join('');
+  fillJugadores();
+  renderLiveHead(); refreshEventos(); show('s-live');
+}
+function fillJugadores(){
+  const eq=$('lv-eq').value;
+  $('lv-jug').innerHTML=`<option value="">— sin jugador —</option>`+
+    (LIVE_INS[eq]||[]).map(p=>`<option value="${p.id}">${p.dorsal??''} ${p.nombre}</option>`).join('');
+}
+function renderLiveHead(){
+  const m=LIVEP, L=EQUIPOS[m.local_id], V=EQUIPOS[m.visita_id];
+  const vivo=m.estado==='en_vivo', pend=cola().filter(e=>e.partido_id===m.id).length;
+  $('lv-sync').classList.toggle('hidden',!pend);
+  if(pend) $('lv-sync').textContent=`⏳ sincronizar ${pend} en cola`;
+  $('lv-iniciar').classList.toggle('hidden', vivo||m.estado==='finalizado');
+  $('live-head').innerHTML=`<div class="bg-ink-900 text-white rounded-2xl p-6">
+    <p class="text-[11px] text-white/50 uppercase tracking-widest font-bold text-center mb-3">${m.etapa||'FASE DE GRUPOS'} · ${m.sede||''} ${navigator.onLine?'':'· 📵 SIN SEÑAL'}</p>
+    <div class="flex items-center justify-center gap-5">
+      <div class="text-center w-40">${L?badgeEq(L,9):''}<p class="font-bold text-sm mt-1">${L?nomEq(L):''}</p></div>
+      <div class="text-center">
+        <p class="text-[11px] font-bold ${vivo?'text-brand-500':m.estado==='finalizado'?'text-emerald-400':'text-white/40'} uppercase mb-1">${vivo?'● EN VIVO':m.estado}</p>
+        <p class="font-display text-6xl tracking-wider">${m.goles_local??0} : ${m.goles_visita??0}</p>
+      </div>
+      <div class="text-center w-40">${V?badgeEq(V,9):''}<p class="font-bold text-sm mt-1">${V?nomEq(V):''}</p></div>
+    </div></div>`;
+}
+async function iniciarPartido(){
+  const {error}=await sb.from('partido').update({estado:'en_vivo',goles_local:LIVEP.goles_local??0,goles_visita:LIVEP.goles_visita??0}).eq('id',LIVEP.id);
+  if(error){toast(errNegocio(error));return;}
+  LIVEP.estado='en_vivo'; LIVEP.goles_local??=0; LIVEP.goles_visita??=0;
+  renderLiveHead(); toast('Partido EN VIVO — visible en el módulo público ⚡');
+}
+async function regEvento(tipo){
+  if(LIVEP.estado!=='en_vivo'){toast('Primero presiona ▶ INICIAR');return;}
+  const ev={ id:crypto.randomUUID(), partido_id:LIVEP.id, equipo_id:$('lv-eq').value,
+    inscripcion_id:$('lv-jug').value||null, tipo,
+    periodo:+$('lv-per').value, minuto:+$('lv-min').value||0, segundo:0 };
+  // marcador local inmediato (optimista)
+  if(tipo==='gol'){ ev.equipo_id===LIVEP.local_id?LIVEP.goles_local=(LIVEP.goles_local??0)+1:LIVEP.goles_visita=(LIVEP.goles_visita??0)+1; renderLiveHead(); }
+  const {error}=await sb.from('evento_partido').insert(ev);
+  if(error){
+    // sin señal o fallo → COLA LOCAL (id de cliente garantiza no-duplicados al reintentar)
+    ev.creado_offline=true; setCola([...cola(),ev]);
+    renderLiveHead(); refreshEventos();
+    toast(`${tipo.toUpperCase()} guardado en COLA LOCAL ⏳ — se sincronizará al reconectar`);
+    return;
+  }
+  await actualizarMarcador();
+  refreshEventos();
+  toast(`${tipo.toUpperCase()} registrado ⏱ ${ev.periodo}º ${ev.minuto}' — publicado en vivo ⚡`);
+}
+async function flushQueue(){
+  const q=cola(); if(!q.length) return;
+  const {error}=await sb.from('evento_partido').upsert(q,{onConflict:'id',ignoreDuplicates:true});
+  if(error){toast('Aún sin conexión — la cola sigue guardada ⏳');return;}
+  setCola([]);
+  await actualizarMarcador();
+  renderLiveHead(); refreshEventos();
+  toast(`📶 ${q.length} evento(s) de la cola SINCRONIZADOS y publicados ⚡`);
+}
+window.addEventListener('online',()=>{ if(cola().length) flushQueue(); });
+async function actualizarMarcador(){
+  // el marcador del partido se deriva de los eventos GOL sincronizados
+  const {data:evs}=await sb.from('evento_partido').select('tipo,equipo_id').eq('partido_id',LIVEP.id).eq('tipo','gol');
+  const gl=(evs||[]).filter(e=>e.equipo_id===LIVEP.local_id).length;
+  const gv=(evs||[]).filter(e=>e.equipo_id===LIVEP.visita_id).length;
+  // + los goles en cola aún no sincronizados (vista local)
+  const qg=cola().filter(e=>e.partido_id===LIVEP.id&&e.tipo==='gol');
+  LIVEP.goles_local=gl+qg.filter(e=>e.equipo_id===LIVEP.local_id).length;
+  LIVEP.goles_visita=gv+qg.filter(e=>e.equipo_id===LIVEP.visita_id).length;
+  await sb.from('partido').update({goles_local:gl,goles_visita:gv,estado:'en_vivo'}).eq('id',LIVEP.id);
+  renderLiveHead();
+}
+async function refreshEventos(){
+  const {data:evs}=await sb.from('evento_partido').select('*').eq('partido_id',LIVEP.id);
+  const todos=[...(evs||[]),...cola().filter(e=>e.partido_id===LIVEP.id)]
+    .sort((a,b)=>b.periodo-a.periodo||b.minuto-a.minuto);
+  const nombreIns=id=>{ for(const eq in LIVE_INS){const p=LIVE_INS[eq].find(x=>x.id===id); if(p) return p.nombre;} return null; };
+  $('lv-count').textContent=`${todos.length} eventos`;
+  $('lv-feed').innerHTML=todos.map(e=>{
+    const ic={gol:'⚽',asistencia:'🎯',amarilla:'🟨',roja:'🟥'}[e.tipo]||'•';
+    const lb={gol:'<b class="text-emerald-600">GOOL!</b>',asistencia:'<b class="text-sky-600">ASISTENCIA</b>',amarilla:'<b class="text-yellow-600">TARJETA</b>',roja:'<b class="text-brand-600">TARJETA ROJA</b>'}[e.tipo]||e.tipo;
+    return `<div class="flex items-center gap-3 py-2 border-b border-line last:border-0 text-sm">
+      <span class="text-xs font-bold text-ink-400 w-14">⏱ ${e.periodo}º ${e.minuto}'</span>
+      <span class="text-xl">${ic}</span>
+      <span class="flex-1">${lb}<br><span class="font-semibold">${nombreIns(e.inscripcion_id)||nomEq(EQUIPOS[e.equipo_id]||{})}</span></span>
+      ${e.creado_offline&&cola().some(q=>q.id===e.id)?'<span class="text-[9px] bg-amber-100 text-amber-700 font-bold rounded-full px-2 py-0.5">⏳ cola local</span>':''}
+    </div>`;
+  }).join('')||'<p class="text-sm text-ink-400">Sin eventos aún.</p>';
+}
+async function finalizarPartido(){
+  if(!confirm(`¿Finalizar el partido ${LIVEP.goles_local??0} : ${LIVEP.goles_visita??0}?\n\nEl resultado queda consolidado y la tabla se recalcula.`)) return;
+  const {error}=await sb.from('partido').update({estado:'finalizado'}).eq('id',LIVEP.id);
+  if(error){toast(errNegocio(error));return;}
+  LIVEP.estado='finalizado'; renderLiveHead();
+  toast('Partido FINALIZADO ✔ — puntos asignados y tabla pública recalculada');
+  await renderTabla();
 }
 
 /* ---- Tabla ---- */
