@@ -159,7 +159,7 @@ const sb = supabase.createClient(
 );
 const $=id=>document.getElementById(id);
 let MARCA=null, ROLES=[], TORNEO=null, CAT=null, EQUIPO=null;
-let CLUBES={}, EQUIPOS={}, ZONAS=[], FASES=[];
+let CLUBES={}, EQUIPOS={}, ZONAS=[], FASES=[], JORNADAS=[];
 
 function toast(m){const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.add('hidden'),4200);}
 function msg(texto,tipo){const e=$('msg'); if(!texto){e.classList.add('hidden');return;}
@@ -417,6 +417,8 @@ async function abrirCategoria(c){
   CLUBES=Object.fromEntries((cls.data||[]).map(x=>[x.id,x]));
   EQUIPOS=Object.fromEntries((eqs.data||[]).map(x=>[x.id,x]));
   FASES=fs.data||[];
+  const js=await sb.from('jornada').select('*').eq('categoria_id',c.id).order('numero');
+  JORNADAS=js.data||[];
   const zs=FASES.length?await sb.from('zona').select('*').in('fase_id',FASES.map(f=>f.id)):{data:[]};
   ZONAS=zs.data||[];
   tabs('equipos');
@@ -995,34 +997,139 @@ async function crearLlaves(){
 async function renderFixture(){
   const {data,error}=await sb.from('partido').select('*, jornada:jornada_id(numero)').eq('categoria_id',CAT.id).order('fecha').order('hora');
   if(error){$('tab-fixture').innerHTML='';msg(errNegocio(error),'err');return;}
-  const grupos={};
+  const porFecha={}, porFase={};
   data.forEach(m=>{
-    const k=m.etapa
-      ? `🏆 ${(FASES.find(f=>f.id===m.fase_id)||{}).nombre||'Eliminatoria'} · ${m.etapa}`
-      : ('FECHA '+((m.jornada&&m.jornada.numero)||'?'));
-    (grupos[k]=grupos[k]||[]).push(m);
+    if(m.etapa) (porFase[m.fase_id||'0']=porFase[m.fase_id||'0']||[]).push(m);
+    else { const n=(m.jornada&&m.jornada.numero)||0; (porFecha[n]=porFecha[n]||[]).push(m); }
   });
+  const medalla=n=>/oro/i.test(n)?'🥇':/plata/i.test(n)?'🥈':/bronce/i.test(n)?'🥉':'🏆';
+  const ordEt=et=>{const i=['Octavos','Cuartos de final','Semifinal','Tercer puesto','Final'].findIndex(p=>(et||'').startsWith(p));return i<0?99:i;};
+  const fila=m=>{
+    const fin=m.estado==='finalizado'||m.estado==='walkover';
+    const L=EQUIPOS[m.local_id],V=EQUIPOS[m.visita_id];
+    const J=JSON.stringify(m).replace(/'/g,"&#39;");
+    return `<div class="flex items-center px-4 py-2.5 border-b border-line last:border-0 gap-2 flex-wrap">
+      ${m.etapa?`<span class="text-[9px] font-bold bg-amber-100 text-amber-700 rounded px-1.5 py-0.5 whitespace-nowrap">${m.etapa}</span>`:''}
+      <div class="flex-1 flex items-center justify-end gap-2 text-sm font-semibold min-w-28">${L?nomEq(L):'—'} ${L?badgeEq(L):''}</div>
+      <div class="w-24 text-center">
+        <span class="block text-[9px] font-bold uppercase ${fin?'text-emerald-600':'text-ink-400'}">${m.estado}</span>
+        <span class="font-display text-2xl">${m.goles_local??'–'} : ${m.goles_visita??'–'}</span>
+        <span class="block text-[9px] text-ink-400">${m.fecha||''} ${m.hora?m.hora.slice(0,5):''}</span>
+      </div>
+      <div class="flex-1 flex items-center gap-2 text-sm font-semibold min-w-28">${V?badgeEq(V):''} ${V?nomEq(V):'—'}</div>
+      <div class="flex gap-1">
+        ${esAdmin()?`<button onclick='modalEditPartido(${J})' class="text-xs font-bold text-ink-500 border border-line rounded-lg px-2 py-1.5 hover:bg-paper" title="Editar fecha, hora, sede, cancha, árbitro">✏️</button>`:''}
+        <button onclick='abrirAcred(${J})' class="text-xs font-bold text-ink-500 border border-line rounded-lg px-2 py-1.5 hover:bg-paper" title="Acreditación en cancha">🪪</button>
+        <button onclick='abrirLive(${J})' class="text-xs font-bold text-white bg-brand-500 rounded-lg px-2 py-1.5 hover:bg-brand-600" title="Match Center en vivo">▶</button>
+        <button onclick='modalResultado(${J})' class="text-xs font-bold text-brand-600 border border-brand-100 rounded-lg px-2 py-1.5 hover:bg-brand-50">CARGAR</button>
+        ${esAdmin()?`<button onclick='eliminarPartido(${J})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-brand-50 hover:text-brand-600" title="Eliminar partido">🗑</button>`:''}
+      </div>
+    </div>`;
+  };
+  const header=(titulo,addBtn)=>`<div class="px-4 py-2.5 border-b border-line flex items-center justify-between">
+      <span class="font-display text-lg tracking-wide">${titulo}</span>${esAdmin()?addBtn:''}</div>`;
+  const fechas=Object.keys(porFecha).map(Number).sort((a,b)=>a-b);
+  const htmlFechas=fechas.map(n=>{
+    const jid=porFecha[n][0].jornada_id||'';
+    return `<div class="bg-white border border-line rounded-2xl mb-4">
+      ${header('FECHA '+(n||'?'),`<button onclick="modalNuevoPartido('jornada','${jid}')" class="text-xs font-bold text-brand-600 border border-brand-100 rounded-lg px-3 py-1.5 hover:bg-brand-50">+ PARTIDO</button>`)}
+      ${porFecha[n].map(fila).join('')}
+    </div>`;
+  }).join('');
+  const htmlFases=FASES.filter(f=>porFase[f.id]).map(f=>`
+    <div class="bg-white border-2 border-amber-200 rounded-2xl mb-4">
+      ${header(medalla(f.nombre)+' '+f.nombre.toUpperCase(),`<button onclick="modalNuevoPartido('fase','${f.id}')" class="text-xs font-bold text-brand-600 border border-brand-100 rounded-lg px-3 py-1.5 hover:bg-brand-50">+ PARTIDO</button>`)}
+      ${porFase[f.id].sort((a,b)=>ordEt(a.etapa)-ordEt(b.etapa)||(a.etapa||'').localeCompare(b.etapa||'')).map(fila).join('')}
+    </div>`).join('');
   $('tab-fixture').innerHTML=
-  `<div class="flex justify-end gap-2 mb-3">${esAdmin()?`
-    <button onclick="modalLlaves()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">🏆 GENERAR LLAVES</button>
-    <button onclick="modalFixture()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">⚙️ GENERAR FIXTURE</button>`:''}</div>`+
-  Object.entries(grupos).map(([g,ms])=>`
-    <div class="bg-white border border-line rounded-2xl mb-4">
-      <div class="px-4 py-2.5 border-b border-line font-display text-lg tracking-wide">${g.toUpperCase()}</div>
-      ${ms.map(m=>{const fin=m.estado==='finalizado'||m.estado==='walkover';
-        const L=EQUIPOS[m.local_id],V=EQUIPOS[m.visita_id];
-        return `<div class="flex items-center px-4 py-2.5 border-b border-line last:border-0 gap-2">
-          <div class="flex-1 flex items-center justify-end gap-2 text-sm font-semibold">${L?nomEq(L):'—'} ${L?badgeEq(L):''}</div>
-          <div class="w-24 text-center">
-            <span class="block text-[9px] font-bold uppercase ${fin?'text-emerald-600':'text-ink-400'}">${m.estado}</span>
-            <span class="font-display text-2xl">${m.goles_local??'–'} : ${m.goles_visita??'–'}</span>
-          </div>
-          <div class="flex-1 flex items-center gap-2 text-sm font-semibold">${V?badgeEq(V):''} ${V?nomEq(V):'—'}</div>
-          <button onclick='abrirAcred(${JSON.stringify(m).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-500 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper" title="Acreditación en cancha">🪪</button>
-          <button onclick='abrirLive(${JSON.stringify(m).replace(/'/g,"&#39;")})' class="text-xs font-bold text-white bg-brand-500 rounded-lg px-2.5 py-1.5 hover:bg-brand-600" title="Match Center en vivo">▶ VIVO</button>
-          <button onclick='modalResultado(${JSON.stringify(m).replace(/'/g,"&#39;")})' class="text-xs font-bold text-brand-600 border border-brand-100 rounded-lg px-2.5 py-1.5 hover:bg-brand-50">CARGAR</button>
-        </div>`;}).join('')}
-    </div>`).join('') || '<p class="text-ink-400 text-sm">Sin partidos.</p>';
+    `<div class="flex justify-end gap-2 mb-3">${esAdmin()?`
+      <button onclick="modalLlaves()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">🏆 GENERAR LLAVES</button>
+      <button onclick="modalFixture()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">⚙️ GENERAR FIXTURE</button>`:''}</div>`
+    + ((htmlFechas+htmlFases) || '<p class="text-ink-400 text-sm">Sin partidos.</p>');
+}
+/* ---- Gestión de partidos: editar / agregar / eliminar ---- */
+function modalEditPartido(m){
+  const L=EQUIPOS[m.local_id],V=EQUIPOS[m.visita_id];
+  abrirModal(`<div class="flex items-center justify-between mb-3"><h3 class="font-display text-2xl tracking-wide">✏️ EDITAR PARTIDO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-sm font-semibold mb-4 text-center">${L?nomEq(L):''} <span class="text-ink-400">vs</span> ${V?nomEq(V):''}</p>
+    <div class="grid grid-cols-2 gap-3 text-sm">
+      ${!m.etapa&&JORNADAS.length?`<label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Mover a otra fecha (jornada)</span>
+        <select id="ep-j" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${JORNADAS.map(j=>`<option value="${j.id}" ${j.id===m.jornada_id?'selected':''}>Fecha ${j.numero}${j.nombre&&j.nombre!=='Fecha '+j.numero?' · '+j.nombre:''}</option>`).join('')}</select></label>`:''}
+      ${m.etapa?`<label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Etapa</span><input id="ep-e" value="${m.etapa}" class="w-full border-b border-line py-1.5 font-semibold"/></label>`:''}
+      <label><span class="text-ink-400 font-semibold text-xs">Fecha</span><input id="ep-f" type="date" value="${m.fecha||''}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Hora</span><input id="ep-h" type="time" value="${m.hora?m.hora.slice(0,5):''}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Sede</span><input id="ep-s" value="${m.sede||''}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Cancha</span><input id="ep-c" value="${m.cancha||''}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Árbitro</span><input id="ep-a" value="${m.arbitro||''}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+    </div>
+    <button onclick="guardarEditPartido('${m.id}',${m.etapa?'true':'false'})" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl mt-4 hover:bg-brand-600">GUARDAR CAMBIOS</button>`);
+}
+async function guardarEditPartido(id,esLlave){
+  const upd={fecha:$('ep-f').value||null, hora:$('ep-h').value||null,
+    sede:$('ep-s').value.trim()||null, cancha:$('ep-c').value.trim()||null, arbitro:$('ep-a').value.trim()||null};
+  if(esLlave&&$('ep-e')) upd.etapa=$('ep-e').value.trim()||null;
+  if(!esLlave&&$('ep-j')) upd.jornada_id=$('ep-j').value;
+  const {error}=await sb.from('partido').update(upd).eq('id',id);
+  if(error){toast(errNegocio(error));return;}
+  cerrarModal(); toast('Partido actualizado ✔ (fecha/hora/sede) — visible en el público al instante');
+  await renderFixture();
+}
+function modalNuevoPartido(tipo,refId){
+  const acts=Object.values(EQUIPOS).filter(e=>e.estado==='activo');
+  const opts=acts.map((e,i)=>`<option value="${e.id}">${nomEq(e)}</option>`).join('');
+  abrirModal(`<div class="flex items-center justify-between mb-3"><h3 class="font-display text-2xl tracking-wide">+ NUEVO PARTIDO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <div class="grid grid-cols-2 gap-3 text-sm">
+      <label><span class="text-ink-400 font-semibold text-xs">Local</span>
+        <select id="np-l" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${opts}</select></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Visita</span>
+        <select id="np-v" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${opts}</select></label>
+      ${tipo==='jornada'
+        ?`<label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Zona (para que sume a la tabla)</span>
+            <select id="np-z" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
+              ${ZONAS.map(z=>`<option value="${z.id}">Zona ${z.nombre}</option>`).join('')}
+              <option value="">— sin zona (amistoso: no suma puntos) —</option>
+            </select></label>`
+        :`<label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Etapa</span><input id="np-e" placeholder="Semifinal #3 · Final · Repechaje…" class="w-full border-b border-line py-1.5 font-semibold"/></label>`}
+      <label><span class="text-ink-400 font-semibold text-xs">Fecha</span><input id="np-f" type="date" value="${new Date(Date.now()+3*864e5).toISOString().slice(0,10)}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Hora</span><input id="np-h" type="time" value="15:00" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Sede</span><input id="np-s" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Cancha</span><input id="np-c" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Árbitro</span><input id="np-a" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+    </div>
+    <button onclick="crearPartidoManual('${tipo}','${refId}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl mt-4 hover:bg-brand-600">AGREGAR PARTIDO</button>`);
+  if(acts.length>1) setTimeout(()=>{$('np-v').selectedIndex=1;},50);
+}
+async function crearPartidoManual(tipo,refId){
+  const l=$('np-l').value, v=$('np-v').value;
+  if(l===v){toast('⚠ Elige dos equipos distintos');return;}
+  const fila={categoria_id:CAT.id, local_id:l, visita_id:v, estado:'programado',
+    fecha:$('np-f').value||null, hora:$('np-h').value||null, sede:$('np-s').value.trim()||null,
+    cancha:$('np-c').value.trim()||null, arbitro:$('np-a').value.trim()||null};
+  if(tipo==='jornada'){
+    fila.jornada_id=refId||null;
+    const zid=$('np-z').value;
+    if(zid){
+      const ez=await sb.from('equipo_en_zona').select('equipo_id').eq('zona_id',zid);
+      const ids=(ez.data||[]).map(x=>x.equipo_id);
+      if(!ids.includes(l)||!ids.includes(v)){toast('⚠ Ambos equipos deben pertenecer a la zona elegida (o marca "sin zona" para un amistoso)');return;}
+      fila.zona_id=zid; fila.fase_id=(ZONAS.find(z=>z.id===zid)||{}).fase_id||null;
+    }
+  } else {
+    fila.fase_id=refId; fila.etapa=$('np-e').value.trim()||'Partido';
+  }
+  const {error}=await sb.from('partido').insert(fila);
+  if(error){toast(errNegocio(error));return;}
+  cerrarModal(); toast('Partido agregado ✔');
+  await renderFixture(); await renderTabla();
+}
+async function eliminarPartido(m){
+  const fin=['finalizado','walkover'].includes(m.estado);
+  const L=EQUIPOS[m.local_id],V=EQUIPOS[m.visita_id];
+  if(!confirm(`¿ELIMINAR el partido ${L?nomEq(L):''} vs ${V?nomEq(V):''}?${fin?'\n\n⚠ TIENE RESULTADO: al eliminarlo se revierten sus puntos y la tabla se recalcula.':''}\n\nTambién se eliminan sus eventos, planilla y acreditaciones.`)) return;
+  const {error}=await sb.from('partido').delete().eq('id',m.id);
+  if(error){toast(errNegocio(error));return;}
+  toast('Partido eliminado — tabla recalculada ⟳');
+  await renderFixture(); await renderTabla();
 }
 function modalResultado(m){
   const L=EQUIPOS[m.local_id],V=EQUIPOS[m.visita_id];
