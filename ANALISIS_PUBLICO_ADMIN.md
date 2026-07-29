@@ -552,6 +552,13 @@ Verificación de identidad EN CANCHA al registrar jugadores en un partido (check
 
 **Objetivo (Luis):** el ERP ya tiene clubes inscritos a torneos (con categoría y modalidad); Competencias debe poder **importar esos clubes a un torneo/categoría** sin duplicar clubes en la base de datos.
 
+### 12.0 PRINCIPIO RECTOR (Luis, 2026-07-29): el ERP es OPCIONAL y complementario
+> **La gran mayoría de marcas NO usará el ERP** — crean sus clubes directamente en Competencias y ese camino es y seguirá siendo el principal, sin fricción ni dependencia alguna del ERP. Solo marcas grandes (ej. INTI CUP) vinculan su organización del ERP y obtienen la importación como **complemento** de la creación directa. Implicancias de diseño:
+> 1. `marca.erp_org_id` **null = comportamiento normal**: cero rastro del ERP en la UI (el botón "Importar desde ERP" solo aparece en marcas vinculadas).
+> 2. La creación directa de clubes NUNCA exige ni consulta datos del ERP.
+> 3. Ambos caminos conviven en la misma tabla `club`: un club creado a mano que luego aparezca en un import del ERP se **ADOPTA** (se vincula, no se duplica — regla 12.2).
+> 4. Ninguna función de Competencias (fixture, tabla, acreditación…) depende del vínculo; los extras (semáforo de pagos) son solo para marcas vinculadas.
+
 ### 12.1 Los dos modelos (mismo proyecto Supabase, esquemas distintos)
 
 | Concepto | ERP (`public`, ids bigint) | Competencias (`competencias`, ids uuid) |
