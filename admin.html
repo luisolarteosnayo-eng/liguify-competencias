@@ -432,7 +432,9 @@ async function renderEquipos(){
   const ez=ZONAS.length?await sb.from('equipo_en_zona').select('*').in('zona_id',ZONAS.map(z=>z.id)):{data:[]};
   const porZona={}; (ez.data||[]).forEach(x=>{(porZona[x.zona_id]=porZona[x.zona_id]||[]).push(x.equipo_id);});
   const asignados=new Set((ez.data||[]).map(x=>x.equipo_id));
-  const sinZona=Object.values(EQUIPOS).filter(e=>!asignados.has(e.id));
+  const activos=Object.values(EQUIPOS).filter(e=>e.estado==='activo');
+  const sinZona=activos.filter(e=>!asignados.has(e.id));
+  const retirados=Object.values(EQUIPOS).filter(e=>e.estado==='inactivo');
   const cardSinZona = sinZona.length ? `<div class="bg-white border-2 border-amber-300 rounded-2xl mb-4 overflow-hidden">
       <div class="bg-amber-500 text-white px-5 py-2.5 font-display text-lg tracking-wide">⚠ EQUIPOS SIN ZONA <span class="text-xs font-sans font-semibold">— no aparecen en fixture ni tabla hasta asignarlos</span></div>
       ${sinZona.map(e=>`<div class="flex items-center gap-3 px-5 py-2.5 border-b border-line last:border-0">
@@ -441,6 +443,16 @@ async function renderEquipos(){
           <button onclick="asignarZona('${e.id}')" class="text-xs font-bold text-white bg-amber-500 rounded-lg px-3 py-1.5 hover:bg-amber-600">ASIGNAR</button>`
           :ZONAS.length?'':'<span class="text-[10px] text-amber-600 font-bold">crea una zona primero</span>'}
         <button onclick='abrirLBF("${e.id}")' class="text-xs font-bold text-brand-600 hover:underline">LBF →</button>
+        ${esAdmin()?`<button onclick="retirarEquipo('${e.id}')" title="Retirar del torneo (no se borra: se inactiva conservando su historial)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-brand-50 hover:text-brand-600">RETIRAR</button>`:''}
+      </div>`).join('')}
+    </div>` : '';
+  const cardRetirados = retirados.length ? `<div class="bg-white border border-line rounded-2xl mb-4 overflow-hidden opacity-80">
+      <div class="bg-paper border-b border-line px-5 py-2.5 font-display text-lg tracking-wide text-ink-500">RETIRADOS DEL TORNEO <span class="text-xs font-sans font-semibold">— historial y LBF conservados</span></div>
+      ${retirados.map(e=>`<div class="flex items-center gap-3 px-5 py-2.5 border-b border-line last:border-0">
+        <span style="filter:grayscale(1);opacity:.7">${badgeEq(e)}</span>
+        <span class="flex-1 font-semibold text-sm text-ink-500 line-through">${nomEq(e)}</span>
+        <button onclick='abrirLBF("${e.id}")' class="text-xs font-bold text-ink-400 hover:underline">LBF →</button>
+        ${esAdmin()?`<button onclick="reactivarEquipo('${e.id}')" class="text-xs font-bold text-emerald-700 border border-emerald-300 rounded-lg px-3 py-1.5 hover:bg-emerald-50">REACTIVAR</button>`:''}
       </div>`).join('')}
     </div>` : '';
   $('tab-equipos').innerHTML=
@@ -450,12 +462,36 @@ async function renderEquipos(){
     cardSinZona+
     ZONAS.map(z=>`<div class="bg-white border border-line rounded-2xl mb-4 overflow-hidden">
       <div class="bg-ink-900 text-white px-5 py-2.5 font-display text-lg tracking-wide">ZONA ${z.nombre}</div>
-      ${(porZona[z.id]||[]).map(eqId=>{const e=EQUIPOS[eqId]; if(!e) return '';
+      ${(porZona[z.id]||[]).map(eqId=>{const e=EQUIPOS[eqId]; if(!e||e.estado!=='activo') return '';
         return `<div class="flex items-center gap-3 px-5 py-2.5 border-b border-line last:border-0">
           ${badgeEq(e)}<span class="flex-1 font-semibold text-sm">${nomEq(e)}</span>
           <button onclick='abrirLBF("${e.id}")' class="text-xs font-bold text-brand-600 hover:underline">LBF →</button>
+          ${esAdmin()?`<button onclick="quitarDeZona('${z.id}','${e.id}')" title="Quitar de la zona (el equipo sigue en el torneo, pasa a Sin Zona)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-paper">✕ ZONA</button>
+          <button onclick="retirarEquipo('${e.id}')" title="Retirar del torneo (no se borra: se inactiva conservando su historial)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-brand-50 hover:text-brand-600">RETIRAR</button>`:''}
         </div>`;}).join('')||'<p class="px-5 py-5 text-sm text-ink-400">Zona sin equipos.</p>'}
-    </div>`).join('');
+    </div>`).join('')+cardRetirados;
+}
+async function quitarDeZona(zonaId,eqId){
+  const {error}=await sb.from('equipo_en_zona').delete().eq('zona_id',zonaId).eq('equipo_id',eqId);
+  if(error){toast(errNegocio(error));return;}
+  toast(`${nomEq(EQUIPOS[eqId])} quitado de la zona — sigue en el torneo (sección Sin Zona)`);
+  await renderEquipos(); await renderTabla();
+}
+async function retirarEquipo(eqId){
+  const e=EQUIPOS[eqId];
+  if(!confirm(`¿Retirar a "${nomEq(e)}" del torneo?\n\nNO se elimina de la base de datos: se INACTIVA conservando su LBF, sus partidos jugados y su historial. Sus partidos pendientes los resuelves tú (ej. walkover). Podrás reactivarlo.`)) return;
+  const {data,error}=await sb.from('equipo').update({estado:'inactivo'}).eq('id',eqId).select().single();
+  if(error){toast(errNegocio(error));return;}
+  EQUIPOS[eqId]=data;
+  toast(`${nomEq(e)} RETIRADO del torneo — historial conservado; sale de la tabla y de nuevas programaciones`);
+  await renderEquipos(); await renderTabla();
+}
+async function reactivarEquipo(eqId){
+  const {data,error}=await sb.from('equipo').update({estado:'activo'}).eq('id',eqId).select().single();
+  if(error){toast(errNegocio(error));return;}
+  EQUIPOS[eqId]=data;
+  toast(`${nomEq(EQUIPOS[eqId])} REACTIVADO — vuelve a su zona, tabla y fixture`);
+  await renderEquipos(); await renderTabla();
 }
 function modalEquipo(){
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">NUEVO EQUIPO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
