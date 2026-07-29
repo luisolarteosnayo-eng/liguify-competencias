@@ -86,6 +86,7 @@ tailwind.config={theme:{extend:{
     <div class="flex gap-1.5 mb-5" id="c-tabs"></div>
     <div id="tab-tabla" class="ctab"></div>
     <div id="tab-fixture" class="ctab hidden"></div>
+    <div id="tab-llaves" class="ctab hidden"></div>
     <div id="tab-equipos" class="ctab hidden"></div>
   </section>
 
@@ -215,11 +216,11 @@ async function irCategoria(){
   EQUIPOS=Object.fromEntries(eqs.data.map(e=>[e.id,e]));
   CLUBES=Object.fromEntries(cls.data.map(c=>[c.id,c]));
   renderTabs('tabla');
-  await Promise.all([renderTabla(),renderFixture(),renderEquipos()]);
+  await Promise.all([renderTabla(),renderFixture(),renderLlaves(),renderEquipos()]);
   show('s-categoria');
 }
 function renderTabs(act){
-  $('c-tabs').innerHTML=[['tabla','Tabla'],['fixture','Fixture'],['equipos','Equipos']].map(([t,l])=>
+  $('c-tabs').innerHTML=[['tabla','Tabla'],['fixture','Fixture'],['llaves','Llaves'],['equipos','Equipos']].map(([t,l])=>
     `<button onclick="renderTabs('${t}')" class="tabbtn ${t===act?'active':''} rounded-xl px-4 py-2 text-sm font-bold border border-line ${t===act?'':'text-ink-500 bg-white'}">${l}</button>`).join('');
   document.querySelectorAll('.ctab').forEach(x=>x.classList.add('hidden'));
   $('tab-'+act).classList.remove('hidden');
@@ -280,6 +281,54 @@ async function renderFixture(){
     </div>`).join('') || '<p class="text-ink-400 text-sm">Sin partidos programados.</p>';
 }
 
+/* Llaves: bracket de la fase eliminatoria (no suma puntos a grupos) */
+const ORDEN_ETAPAS=['Octavos','Cuartos de final','Semifinal','Tercer puesto','Final'];
+function cardLlave(m){
+  const fin=['finalizado','walkover'].includes(m.estado), vivo=m.estado==='en_vivo';
+  const marc=id=>(fin||vivo)?(id===m.local_id?m.goles_local:m.goles_visita):'–';
+  const pen=id=>m.penales?`<span class="text-[10px] text-ink-400 ml-1">(${id===m.local_id?m.penales_local:m.penales_visita})</span>`:'';
+  const gana=id=>fin&&(m.penales
+    ?(id===m.local_id?m.penales_local>m.penales_visita:m.penales_visita>m.penales_local)
+    :(id===m.local_id?m.goles_local>m.goles_visita:m.goles_visita>m.goles_local));
+  return `<div class="bg-white border border-line rounded-2xl p-4 hover:shadow-md transition">
+    <p class="text-[10px] font-bold uppercase tracking-wider ${vivo?'text-brand-600':'text-ink-400'} mb-2">
+      ${vivo?'<span class="live-dot inline-block align-middle mr-1"></span>EN VIVO · ':''}🏆 ${m.etapa}
+      ${m.fecha?` · ${m.fecha}`:''}${m.hora?` ${m.hora.slice(0,5)}`:''}
+    </p>
+    ${[m.local_id,m.visita_id].map(id=>{const e=EQUIPOS[id];return `
+      <div class="flex items-center gap-2 py-1.5 ${gana(id)?'font-bold':''}">
+        ${e?badge(e):''}<span class="text-sm flex-1">${e?nomEq(e):'Por definir'}</span>
+        <span class="font-display text-xl">${marc(id)??'–'}</span>${pen(id)}
+      </div>`;}).join('')}
+    ${m.penales?'<p class="text-[10px] text-ink-400 mt-1">definición por penales</p>':''}
+    ${m.sede?`<p class="text-[10px] text-ink-400 mt-1">📍 ${m.sede}</p>`:''}
+  </div>`;
+}
+async function renderLlaves(){
+  const {data,error}=await sb.from('partido').select('*')
+    .eq('categoria_id',CAT.id).not('etapa','is',null).order('etapa');
+  if(error){$('tab-llaves').innerHTML='';return;}
+  if(!(data||[]).length){
+    $('tab-llaves').innerHTML='<p class="text-ink-400 text-sm bg-white border border-line rounded-2xl p-6 text-center">La fase eliminatoria aún no está programada.</p>';
+    return;
+  }
+  // agrupar por etapa (prefijo antes de " #")
+  const grupos={};
+  data.forEach(m=>{const k=(m.etapa||'').split(' #')[0];(grupos[k]=grupos[k]||[]).push(m);});
+  const etapas=Object.keys(grupos).sort((a,b)=>{
+    const ia=ORDEN_ETAPAS.indexOf(a), ib=ORDEN_ETAPAS.indexOf(b);
+    return (ia<0?99:ia)-(ib<0?99:ib);
+  });
+  $('tab-llaves').innerHTML=`
+    <p class="text-ink-500 text-sm mb-4">Fase eliminatoria — los resultados de las llaves no suman puntos a la tabla de grupos.</p>
+    <div class="grid gap-4 items-start" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
+      ${etapas.map(et=>`<div>
+        <p class="font-display text-xl tracking-wide mb-2 ${et==='Final'?'text-amber-600':''}">${et.toUpperCase()}</p>
+        <div class="space-y-3">${grupos[et].map(cardLlave).join('')}</div>
+      </div>`).join('')}
+    </div>`;
+}
+
 /* Equipos de la categoría */
 async function renderEquipos(){
   $('tab-equipos').innerHTML=`<div class="grid sm:grid-cols-2 gap-3">${Object.values(EQUIPOS).map(e=>`
@@ -320,7 +369,7 @@ sb.channel('publico-live')
   .on('postgres_changes',{event:'*',schema:'competencias',table:'partido'},async ()=>{
     $('hdr-rt').innerHTML='<span class="live-dot"></span> actualizado en vivo';
     setTimeout(()=>$('hdr-rt').innerHTML='',4000);
-    if($('s-categoria').classList.contains('active')){ await renderTabla(); await renderFixture(); }
+    if($('s-categoria').classList.contains('active')){ await renderTabla(); await renderFixture(); await renderLlaves(); }
   })
   .subscribe(st=>{ if(st==='SUBSCRIBED') $('hdr-rt').innerHTML=''; });
 
