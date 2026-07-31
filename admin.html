@@ -158,7 +158,7 @@ const sb = supabase.createClient(
   { db:{schema:'competencias'}, auth:{storageKey:'sb-competencias-admin'} }   // cajón propio; jamás toca ERP/Academias
 );
 const $=id=>document.getElementById(id);
-let MARCA=null, ROLES=[], TORNEO=null, CAT=null, EQUIPO=null;
+let MARCA=null, MARCAS=[], ROLES=[], TORNEO=null, CAT=null, EQUIPO=null;
 let CLUBES={}, EQUIPOS={}, ZONAS=[], FASES=[], JORNADAS=[];
 
 function toast(m){const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.add('hidden'),4200);}
@@ -205,16 +205,31 @@ async function iniciar(){
   const um=await sb.from('usuario_marca').select('marca_id, rol');
   if(um.error||!um.data.length){msg('Tu usuario no tiene roles asignados en ninguna marca.','err');show('s-login');return;}
   ROLES=um.data;
-  const {data:mk}=await sb.from('marca').select('*').eq('id',um.data[0].marca_id).single();
-  MARCA=mk;
-  $('hdr-user').textContent=`${session.user.email} · ${[...new Set(ROLES.map(r=>r.rol))].join(' + ')}`;
+  const ids=[...new Set(um.data.map(r=>r.marca_id))];
+  const {data:mks}=await sb.from('marca').select('*').in('id',ids).order('nombre');
+  MARCAS=mks||[];
+  MARCA=MARCAS[0];
+  actualizarHeaderRoles(session.user.email);
   await cargarTorneos();
 }
-const esAdmin=()=>ROLES.some(r=>r.rol==='admin_marca');
+function actualizarHeaderRoles(email){
+  const mios=[...new Set(ROLES.filter(r=>r.marca_id===MARCA.id).map(r=>r.rol))];
+  $('hdr-user').textContent=`${email||$('hdr-user').textContent.split(' · ')[0]} · ${mios.join(' + ')||'sin rol en esta marca'}`;
+}
+const esAdmin=()=>ROLES.some(r=>r.rol==='admin_marca'&&r.marca_id===MARCA.id);
+function cambiarMarca(id){
+  MARCA=MARCAS.find(m=>m.id===id);
+  actualizarHeaderRoles();
+  cargarTorneos();
+}
 
 /* ============ TORNEOS ============ */
 async function cargarTorneos(){
-  $('marca-card').innerHTML=`<div class="bg-ink-900 text-white rounded-2xl p-5 flex items-center gap-4 flex-wrap">
+  const selMarcas=MARCAS.length>1?`<div class="flex gap-2 mb-3 flex-wrap items-center">
+    <span class="text-[10px] uppercase tracking-widest text-ink-400 font-bold">Mis marcas:</span>
+    ${MARCAS.map(m=>`<button onclick="cambiarMarca('${m.id}')" class="text-xs font-bold px-4 py-2 rounded-xl border ${m.id===MARCA.id?'bg-ink-900 text-white border-ink-900':'bg-white border-line text-ink-500 hover:bg-paper'}">${m.nombre.toUpperCase()}</button>`).join('')}
+  </div>`:'';
+  $('marca-card').innerHTML=selMarcas+`<div class="bg-ink-900 text-white rounded-2xl p-5 flex items-center gap-4 flex-wrap">
     <span class="w-14 h-14 rounded-2xl grid place-items-center font-display text-2xl overflow-hidden relative" style="background:#d9232e">${MARCA.logo_url?`<img src="${MARCA.logo_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(MARCA.nombre)}</span>
     <div class="flex-1 min-w-40"><p class="text-[10px] uppercase tracking-widest text-white/40 font-bold">Marca organizadora · membresía ${MARCA.membresia}</p>
     <h1 class="font-display text-4xl tracking-wide leading-none">${MARCA.nombre.toUpperCase()}</h1>
