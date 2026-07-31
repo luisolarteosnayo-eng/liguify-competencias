@@ -158,7 +158,7 @@ const sb = supabase.createClient(
   { db:{schema:'competencias'}, auth:{storageKey:'sb-competencias-admin'} }   // cajón propio; jamás toca ERP/Academias
 );
 const $=id=>document.getElementById(id);
-let MARCA=null, MARCAS=[], ROLES=[], TORNEO=null, CAT=null, EQUIPO=null;
+let MARCA=null, MARCAS=[], ROLES=[], ES_SUPER=false, TORNEO=null, CAT=null, EQUIPO=null;
 let CLUBES={}, EQUIPOS={}, ZONAS=[], FASES=[], JORNADAS=[];
 
 function toast(m){const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.add('hidden'),4200);}
@@ -205,6 +205,8 @@ async function iniciar(){
   const um=await sb.from('usuario_marca').select('marca_id, rol');
   if(um.error||!um.data.length){msg('Tu usuario no tiene roles asignados en ninguna marca.','err');show('s-login');return;}
   ROLES=um.data;
+  const perf=await sb.from('usuario_perfil').select('es_super').eq('id',session.user.id).single();
+  ES_SUPER=!!(perf.data&&perf.data.es_super);
   const ids=[...new Set(um.data.map(r=>r.marca_id))];
   const {data:mks}=await sb.from('marca').select('*').in('id',ids).order('nombre');
   MARCAS=mks||[];
@@ -225,16 +227,18 @@ function cambiarMarca(id){
 
 /* ============ TORNEOS ============ */
 async function cargarTorneos(){
-  const selMarcas=MARCAS.length>1?`<div class="flex gap-2 mb-3 flex-wrap items-center">
+  const selMarcas=(MARCAS.length>1||ES_SUPER)?`<div class="flex gap-2 mb-3 flex-wrap items-center">
     <span class="text-[10px] uppercase tracking-widest text-ink-400 font-bold">Mis marcas:</span>
     ${MARCAS.map(m=>`<button onclick="cambiarMarca('${m.id}')" class="text-xs font-bold px-4 py-2 rounded-xl border ${m.id===MARCA.id?'bg-ink-900 text-white border-ink-900':'bg-white border-line text-ink-500 hover:bg-paper'}">${m.nombre.toUpperCase()}</button>`).join('')}
+    ${ES_SUPER?`<button onclick="modalNuevaMarca()" class="text-xs font-bold px-4 py-2 rounded-xl border border-dashed border-brand-500 text-brand-600 hover:bg-brand-50">+ NUEVA MARCA</button>`:''}
   </div>`:'';
   $('marca-card').innerHTML=selMarcas+`<div class="bg-ink-900 text-white rounded-2xl p-5 flex items-center gap-4 flex-wrap">
     <span class="w-14 h-14 rounded-2xl grid place-items-center font-display text-2xl overflow-hidden relative" style="background:#d9232e">${MARCA.logo_url?`<img src="${MARCA.logo_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(MARCA.nombre)}</span>
     <div class="flex-1 min-w-40"><p class="text-[10px] uppercase tracking-widest text-white/40 font-bold">Marca organizadora · membresía ${MARCA.membresia}</p>
     <h1 class="font-display text-4xl tracking-wide leading-none">${MARCA.nombre.toUpperCase()}</h1>
     <p class="text-emerald-300 text-xs mt-1">🔗 ${MARCA.slug}.liguify.com</p></div>
-    ${esAdmin()?`<button onclick="modalMarca()" class="bg-white/10 border border-white/20 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/20">✏️ EDITAR MARCA</button>`
+    ${esAdmin()?`<button onclick="modalMarca()" class="bg-white/10 border border-white/20 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/20">✏️ EDITAR MARCA</button>
+      <button onclick="modalUsuariosMarca()" class="bg-white/10 border border-white/20 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/20">👥 USUARIOS</button>`
       :'<span class="text-[10px] font-bold bg-amber-500/20 text-amber-300 rounded-full px-3 py-1">MODO MESA: solo resultados</span>'}
   </div>`;
   $('btn-nuevo-torneo').classList.toggle('hidden', !esAdmin());
@@ -298,6 +302,91 @@ async function guardarMarca(){
     if(error){toast(errNegocio(error));return;}
     MARCA=data; cerrarModal(); toast('Marca actualizada ✔ — visible en el módulo público'); cargarTorneos();
   }catch(e){toast('Logo: '+(e.message||e)+' — ¿creaste el bucket "publico" en Storage?');}
+}
+
+/* ---- ALTA DE MARCAS (solo super-admin) + USUARIOS por marca ---- */
+function modalNuevaMarca(){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">+ NUEVA MARCA</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">Da de alta una marca cliente. Tú quedas como admin para configurarla; el dueño se asigna por email.</p>
+    <div class="grid grid-cols-2 gap-3 mb-3">
+      ${campo('nm-n','Nombre de la marca','')}
+      ${campo('nm-s','Slug (url pública)','','text','placeholder="ej: copaandina" pattern="[a-z0-9]{2,30}"')}
+      <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Membresía</span>
+        <select id="nm-m" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${['basico','intermedio','premium'].map(m=>`<option>${m}</option>`).join('')}</select></label>
+      ${campo('nm-c','Ciudad','')}
+    </div>
+    <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Logo (opcional)</span>
+      <input id="nm-logo" type="file" accept="image/*" class="w-full text-xs mt-1"/></label>
+    <label class="block text-sm mb-1"><span class="text-ink-400 font-semibold text-xs">Email del dueño (opcional — quedará como admin de su marca)</span>
+      <input id="nm-owner" type="email" placeholder="dueno@marca.com" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+    <p class="text-[11px] text-amber-600 mb-4">⚠ El dueño debe haber iniciado sesión al menos una vez (Google o email) en liguify.com/admin para poder asignarlo. Si aún no lo hizo, crea la marca sin dueño y asígnalo luego desde 👥 USUARIOS.</p>
+    <button onclick="crearMarca()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">CREAR MARCA</button>`);
+  $('nm-n').addEventListener('input',()=>{$('nm-s').value=$('nm-n').value.toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,30);});
+}
+async function crearMarca(){
+  const nombre=$('nm-n').value.trim(), slug=$('nm-s').value.trim().toLowerCase();
+  if(!nombre){toast('⚠ El nombre es obligatorio');return;}
+  if(!/^[a-z0-9]{2,30}$/.test(slug)){toast('⚠ Slug inválido: solo letras minúsculas y números (2-30), sin espacios');return;}
+  const {data:mk,error}=await sb.from('marca').insert({nombre, slug, membresia:$('nm-m').value, ciudad:$('nm-c').value.trim()||null}).select().single();
+  if(error){toast(errNegocio(error));return;}
+  const uid=(await sb.auth.getUser()).data.user.id;
+  await sb.from('usuario_marca').insert({usuario_id:uid, marca_id:mk.id, rol:'admin_marca'});
+  try{
+    const url=await subirImagen('nm-logo', `marcas/${mk.id}`);
+    if(url){ await sb.from('marca').update({logo_url:url}).eq('id',mk.id); mk.logo_url=url; }
+  }catch(e){ toast('Logo: '+(e.message||e)); }
+  let extra='';
+  const oe=$('nm-owner').value.trim();
+  if(oe){
+    const r=await sb.rpc('asignar_rol_marca',{p_email:oe, p_marca:mk.id, p_rol:'admin_marca'});
+    if(r.error) extra=' · dueño: '+errNegocio(r.error);
+    else extra=r.data==='OK'?' · dueño asignado ✔':' · ⚠ el dueño aún no tiene cuenta: pídele entrar una vez a liguify.com/admin y asígnalo desde 👥 USUARIOS';
+  }
+  MARCAS.push(mk); MARCAS.sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  ROLES.push({marca_id:mk.id, rol:'admin_marca'});
+  MARCA=mk; actualizarHeaderRoles();
+  cerrarModal(); toast(`Marca "${nombre}" creada ✔ — ${slug}.liguify.com${extra}`);
+  cargarTorneos();
+}
+function modalUsuariosMarca(){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">👥 USUARIOS · ${MARCA.nombre.toUpperCase()}</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-3">admin_marca configura torneos y aprueba; mesa_control solo carga resultados y acredita.</p>
+    <div id="um-lista" class="mb-4 text-sm">Cargando…</div>
+    <div class="flex gap-2 items-end border-t border-line pt-3">
+      <label class="flex-1 text-sm"><span class="text-ink-400 font-semibold text-xs">Email del usuario</span>
+        <input id="um-e" type="email" placeholder="usuario@correo.com" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <select id="um-r" class="border-b border-line py-1.5 font-semibold text-sm bg-transparent">
+        <option value="admin_marca">admin_marca</option><option value="mesa_control">mesa_control</option></select>
+      <button onclick="agregarUsuarioMarca()" class="bg-brand-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-brand-600">AGREGAR</button>
+    </div>
+    <p class="text-[11px] text-ink-400 mt-2">El usuario debe haber iniciado sesión al menos una vez en liguify.com/admin.</p>`);
+  refrescarUsuariosMarca();
+}
+async function refrescarUsuariosMarca(){
+  const {data,error}=await sb.rpc('usuarios_de_marca',{p_marca:MARCA.id});
+  if(error){$('um-lista').innerHTML=`<p class="text-brand-600 text-xs font-bold">${errNegocio(error)}</p>`;return;}
+  $('um-lista').innerHTML=(data||[]).map(u=>`
+    <div class="flex items-center gap-2 py-1.5 border-b border-line last:border-0">
+      <span class="flex-1 font-semibold">${u.email}</span>
+      <span class="text-[10px] font-bold rounded-full px-2.5 py-1 ${u.rol==='admin_marca'?'bg-ink-900 text-white':'bg-amber-100 text-amber-700'}">${u.rol}</span>
+      <button onclick="quitarRolMarca('${u.usuario_id}','${u.rol}','${u.email}')" class="text-ink-400 hover:text-brand-600 font-bold px-1" title="Quitar rol">✕</button>
+    </div>`).join('')||'<p class="text-ink-400 text-xs">Sin usuarios asignados.</p>';
+}
+async function agregarUsuarioMarca(){
+  const e=$('um-e').value.trim();
+  if(!e){toast('⚠ Escribe el email');return;}
+  const r=await sb.rpc('asignar_rol_marca',{p_email:e, p_marca:MARCA.id, p_rol:$('um-r').value});
+  if(r.error){toast(errNegocio(r.error));return;}
+  if(r.data==='NO_EXISTE'){toast('⚠ Ese email aún no tiene cuenta: pídele iniciar sesión una vez (Google o email) en liguify.com/admin y vuelve a intentar');return;}
+  toast('Rol asignado ✔'); $('um-e').value='';
+  refrescarUsuariosMarca();
+}
+async function quitarRolMarca(uid,rol,email){
+  if(!confirm(`¿Quitar el rol ${rol} de ${email} en ${MARCA.nombre}?`))return;
+  const r=await sb.rpc('quitar_rol_marca',{p_usuario:uid, p_marca:MARCA.id, p_rol:rol});
+  if(r.error){toast(errNegocio(r.error));return;}
+  toast('Rol quitado');
+  refrescarUsuariosMarca();
 }
 
 function modalTorneo(t){
