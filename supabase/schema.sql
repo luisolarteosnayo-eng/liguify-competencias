@@ -360,6 +360,14 @@ returns jsonb language sql stable as $$
 $$;
 
 -- Roles del usuario autenticado
+-- SECURITY DEFINER obligatorio: las políticas que consultan usuario_perfil inline
+-- disparan la política de usuario_perfil y recursan (42P17).
+create or replace function competencias.es_super()
+returns boolean language sql stable security definer
+set search_path = competencias as $$
+  select exists (select 1 from usuario_perfil where id = auth.uid() and es_super)
+$$;
+
 create or replace function competencias.es_admin_marca(p_marca uuid)
 returns boolean language sql stable security definer set search_path = competencias as $$
   select exists (select 1 from usuario_marca
@@ -628,8 +636,8 @@ create policy auth_read on competencias.acreditacion_partido for select
   using (auth.uid() is not null);
 create policy auth_read on competencias.sancion_global for select
   using (auth.uid() is not null);
-create policy self_read on competencias.usuario_perfil for select using (id = auth.uid()
-  or exists (select 1 from competencias.usuario_perfil p where p.id = auth.uid() and p.es_super));
+create policy self_read on competencias.usuario_perfil for select
+  using (id = auth.uid() or competencias.es_super());
 create policy self_read on competencias.usuario_marca  for select using (usuario_id = auth.uid());
 create policy self_read on competencias.usuario_club   for select using (usuario_id = auth.uid());
 
@@ -637,8 +645,7 @@ create policy self_read on competencias.usuario_club   for select using (usuario
 create policy adm_write on competencias.marca for update
   using (competencias.es_admin_marca(id)) with check (competencias.es_admin_marca(id));
 create policy adm_ins on competencias.marca for insert
-  with check (exists (select 1 from competencias.usuario_perfil p
-                      where p.id = auth.uid() and p.es_super));
+  with check (competencias.es_super());
 
 create policy adm_all on competencias.torneo for all
   using (competencias.es_admin_marca(marca_id)) with check (competencias.es_admin_marca(marca_id));
@@ -666,7 +673,7 @@ create policy adm_all on competencias.equipo_en_zona for all
 create policy jug_ins on competencias.jugador_maestro for insert
   with check (auth.uid() is not null);
 create policy jug_upd on competencias.jugador_maestro for update
-  using ((not verificado) or exists (select 1 from competencias.usuario_perfil p where p.id = auth.uid() and p.es_super));
+  using ((not verificado) or competencias.es_super());
 
 -- LBF: staff de la marca o coordinador/delegado del club (con vínculo)
 create policy lbf_write on competencias.inscripcion_lbf for all
@@ -698,8 +705,7 @@ create policy audit_read on competencias.auditoria for select
   using (marca_id is null or competencias.es_admin_marca(marca_id));
 
 create policy super_all on competencias.sancion_global for all
-  using (exists (select 1 from competencias.usuario_perfil p where p.id = auth.uid() and p.es_super))
-  with check (exists (select 1 from competencias.usuario_perfil p where p.id = auth.uid() and p.es_super));
+  using (competencias.es_super()) with check (competencias.es_super());
 create policy self_ins on competencias.usuario_perfil for insert with check (id = auth.uid());
 create policy adm_ins  on competencias.usuario_marca for insert
   with check (competencias.es_admin_marca(marca_id));
