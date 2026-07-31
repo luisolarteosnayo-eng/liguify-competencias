@@ -258,8 +258,12 @@ create table competencias.partido (
   zona_id      uuid references competencias.zona(id),
   jornada_id   uuid references competencias.jornada(id),
   etapa        text,                        -- "Semifinal #1 Copa Oro" (llaves)
-  local_id     uuid not null references competencias.equipo(id),
-  visita_id    uuid not null references competencias.equipo(id),
+  -- Llaves con plantilla (§13): el partido puede nacer sin equipos (placeholder)
+  -- con el cupo descrito en *_origen; resolver = asignar los equipos reales.
+  local_id     uuid references competencias.equipo(id),
+  visita_id    uuid references competencias.equipo(id),
+  local_origen  jsonb,                      -- {t:'zona',zona,puesto}|{t:'mejor',puesto,rank}|{t:'ganador'|'perdedor',partido}
+  visita_origen jsonb,
   fecha        date,
   hora         time,
   sede         text,
@@ -277,7 +281,10 @@ create table competencias.partido (
   created_by   uuid,
   updated_by   uuid,
   updated_at   timestamptz not null default now(),
-  check (local_id <> visita_id)
+  check (local_id <> visita_id),
+  constraint partido_estado_equipos_chk
+    check (estado in ('programado','suspendido')
+           or (local_id is not null and visita_id is not null))
 );
 
 -- Eventos del Match Center (en vivo). id lo genera el CLIENTE (uuid) para

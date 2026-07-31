@@ -127,6 +127,18 @@ function badge(eq,sz=7){
   return `<span class="relative inline-grid place-items-center w-${sz} h-${sz} rounded-lg text-white text-[10px] font-bold shrink-0 overflow-hidden align-middle" style="background:${cl.color||'#334155'}">${cl.escudo_url?`<img src="${cl.escudo_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(cl.nombre)}${eq.color_dot?`<span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white" style="background:${eq.color_dot}"></span>`:''}</span>`;
 }
 const nomEq=eq=>eq.nombre||(CLUBES[eq.club_id]||{}).nombre||'—';
+/* Llaves con plantilla (§13): etiqueta del cupo cuando el equipo aún no se define */
+let PART_IDX={};
+function etiquetaCupo(o){
+  if(!o) return 'Por definir';
+  if(o.t==='zona') return `${o.puesto}º ZONA ${o.zona}`;
+  if(o.t==='mejor') return `${o.rank&&o.rank>1?o.rank+'º ':''}MEJOR ${o.puesto}º`;
+  if(o.t==='ganador'||o.t==='perdedor'){
+    const src=PART_IDX[o.partido];
+    return (o.t==='ganador'?'GANADOR ':'PERDEDOR ')+(src?(src.etapa||''):'');
+  }
+  return 'Por definir';
+}
 
 /* ============ CATÁLOGO ============ */
 async function irCatalogo(){
@@ -288,22 +300,25 @@ async function renderFixture(){
     .eq('categoria_id',CAT.id).order('fecha').order('hora');
   if(error){$('tab-fixture').innerHTML='';err(error.message);return;}
   const grupos={};
-  data.forEach(m=>{ const k=m.etapa||('FECHA '+((m.jornada&&m.jornada.numero)||'?')); (grupos[k]=grupos[k]||[]).push(m); });
+  data.forEach(m=>{ PART_IDX[m.id]=m; const k=m.etapa||('FECHA '+((m.jornada&&m.jornada.numero)||'?')); (grupos[k]=grupos[k]||[]).push(m); });
   $('tab-fixture').innerHTML=Object.entries(grupos).map(([g,ms])=>`
     <div class="bg-white rounded-2xl border border-line mb-4">
       <div class="px-4 py-2.5 border-b border-line font-display text-lg tracking-wide">${g.toUpperCase()}</div>
       ${ms.map(m=>{
         const fin=m.estado==='finalizado'||m.estado==='walkover', vivo=m.estado==='en_vivo';
         const L=EQUIPOS[m.local_id], V=EQUIPOS[m.visita_id];
+        const lado=(e,ori,der)=>e
+          ?(der?`${badge(e)} ${nomEq(e)}`:`${nomEq(e)} ${badge(e)}`)
+          :`<span class="italic text-ink-400">${etiquetaCupo(ori)}</span>`;
         return `<div class="flex items-center px-4 py-3 border-b border-line last:border-0">
-          <div class="flex-1 flex items-center justify-end gap-2 text-sm ${fin&&m.goles_local>m.goles_visita?'font-bold':''}">${nomEq(L)} ${badge(L)}</div>
+          <div class="flex-1 flex items-center justify-end gap-2 text-sm ${fin&&m.goles_local>m.goles_visita?'font-bold':''}">${lado(L,m.local_origen,false)}</div>
           <div class="w-28 text-center">
             ${vivo?`<span class="flex items-center justify-center gap-1 text-[9px] font-bold text-brand-600"><span class="live-dot"></span>EN VIVO</span>`
-              :`<span class="block text-[9px] font-bold uppercase ${fin?'text-emerald-600':'text-ink-400'}">${m.estado}</span>`}
+              :`<span class="block text-[9px] font-bold uppercase ${fin?'text-emerald-600':'text-ink-400'}">${(!m.local_id||!m.visita_id)?'por definir':m.estado}</span>`}
             <span class="font-display text-2xl">${m.goles_local??'–'} : ${m.goles_visita??'–'}</span>
             ${m.penales?`<span class="block text-[9px] text-ink-400">pen. ${m.penales_local} × ${m.penales_visita}</span>`:''}
           </div>
-          <div class="flex-1 flex items-center gap-2 text-sm ${fin&&m.goles_visita>m.goles_local?'font-bold':''}">${badge(V)} ${nomEq(V)}</div>
+          <div class="flex-1 flex items-center gap-2 text-sm ${fin&&m.goles_visita>m.goles_local?'font-bold':''}">${lado(V,m.visita_origen,true)}</div>
         </div>
         <p class="text-[10px] text-ink-400 text-center pb-2 -mt-1">${m.fecha||''} ${m.hora?('· '+m.hora.slice(0,5)):''} ${m.sede?('· '+m.sede):''}</p>`;
       }).join('')}
@@ -324,10 +339,11 @@ function cardLlave(m){
       ${vivo?'<span class="live-dot inline-block align-middle mr-1"></span>EN VIVO · ':''}🏆 ${m.etapa}
       ${m.fecha?` · ${m.fecha}`:''}${m.hora?` ${m.hora.slice(0,5)}`:''}
     </p>
-    ${[m.local_id,m.visita_id].map(id=>{const e=EQUIPOS[id];return `
-      <div class="flex items-center gap-2 py-1.5 ${gana(id)?'font-bold':''}">
-        ${e?badge(e):''}<span class="text-sm flex-1">${e?nomEq(e):'Por definir'}</span>
-        <span class="font-display text-xl">${marc(id)??'–'}</span>${pen(id)}
+    ${[[m.local_id,m.local_origen],[m.visita_id,m.visita_origen]].map(([id,ori])=>{const e=EQUIPOS[id];return `
+      <div class="flex items-center gap-2 py-1.5 ${id&&gana(id)?'font-bold':''}">
+        ${e?badge(e):'<span class="inline-block w-7 h-7 rounded-lg bg-paper border border-dashed border-line shrink-0"></span>'}
+        <span class="text-sm flex-1 ${e?'':'italic text-ink-400'}">${e?nomEq(e):etiquetaCupo(ori)}</span>
+        <span class="font-display text-xl">${id?(marc(id)??'–'):'–'}</span>${id?pen(id):''}
       </div>`;}).join('')}
     ${m.penales?'<p class="text-[10px] text-ink-400 mt-1">definición por penales</p>':''}
     ${m.sede?`<p class="text-[10px] text-ink-400 mt-1">📍 ${m.sede}</p>`:''}
@@ -337,6 +353,7 @@ async function renderLlaves(){
   const {data,error}=await sb.from('partido').select('*, fase:fase_id(nombre)')
     .eq('categoria_id',CAT.id).not('etapa','is',null).order('etapa');
   if(error){$('tab-llaves').innerHTML='';return;}
+  (data||[]).forEach(m=>PART_IDX[m.id]=m);   // para etiquetas "GANADOR Semifinal #1"
   if(!(data||[]).length){
     $('tab-llaves').innerHTML='<p class="text-ink-400 text-sm bg-white border border-line rounded-2xl p-6 text-center">La fase eliminatoria aún no está programada.</p>';
     return;

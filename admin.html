@@ -1132,7 +1132,11 @@ async function modalLlaves(){
   LL_RANK={}; LL_ZONAS.forEach(z=>LL_RANK[z]=(vt||[]).filter(r=>r.zona===z).sort((a,b)=>b.pts-a.pts||b.dg-a.dg||b.gf-a.gf));
   const fasesElim=FASES.filter(f=>f.tipo==='eliminacion');
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">🏆 GENERAR LLAVES</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
-    <p class="text-xs text-ink-400 mb-4">Fase eliminatoria estilo mundial: estos partidos <b>NO suman puntos</b> a la tabla de grupos. Los cruces se sugieren desde las posiciones actuales — ajústalos si quieres.</p>
+    <p class="text-xs text-ink-400 mb-3">Fase eliminatoria estilo mundial: estos partidos <b>NO suman puntos</b> a la tabla de grupos.</p>
+    <div class="flex gap-2 mb-4" id="ll-modos">
+      <button onclick="setLlModo('equipos')" data-m="equipos" class="text-xs font-bold px-4 py-2 rounded-xl border bg-ink-900 text-white border-ink-900">EQUIPOS DIRECTOS</button>
+      <button onclick="setLlModo('cupos')" data-m="cupos" class="text-xs font-bold px-4 py-2 rounded-xl border bg-white border-line text-ink-500 hover:bg-paper">🔮 PLANTILLA POR POSICIONES</button>
+    </div>
     <div class="grid grid-cols-2 gap-3 text-sm mb-3">
       <label><span class="text-ink-400 font-semibold text-xs">Fase</span>
         <select id="ll-fase" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
@@ -1140,12 +1144,12 @@ async function modalLlaves(){
           <option value="__new__" ${fasesElim.length?'':'selected'}>➕ Nueva fase eliminatoria</option>
         </select></label>
       <label><span class="text-ink-400 font-semibold text-xs">Nombre (si es nueva)</span><input id="ll-fn" value="Eliminatoria" class="w-full border-b border-line py-1.5 font-semibold"/></label>
-      <label><span class="text-ink-400 font-semibold text-xs">Etapa</span>
+      <label id="ll-wrap-etapa"><span class="text-ink-400 font-semibold text-xs">Etapa</span>
         <select id="ll-etapa" onchange="renderLlaveRows()" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
           ${Object.keys(ETAPAS_LLAVE).map(e=>`<option>${e}</option>`).join('')}
         </select></label>
       <label><span class="text-ink-400 font-semibold text-xs">Clasifican (sugerencias de cruce)</span>
-        <select id="ll-desde" onchange="renderLlaveRows()" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
+        <select id="ll-desde" onchange="renderLlaveRows();if(LL_MODO==='cupos')setLlModo('cupos')" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
           <option value="0">1º y 2º de cada zona (ej. ORO)</option>
           <option value="2">3º y 4º de cada zona (ej. PLATA)</option>
           <option value="4">5º y 6º de cada zona</option>
@@ -1155,8 +1159,163 @@ async function modalLlaves(){
       <label><span class="text-ink-400 font-semibold text-xs">Sede</span><input id="ll-s" placeholder="Arena 7" class="w-full border-b border-line py-1.5 font-semibold"/></label>
     </div>
     <div id="ll-rows" class="space-y-2 mb-4"></div>
-    <button onclick="crearLlaves()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">CREAR LLAVES</button>`);
+    <div id="ll-cupos" class="hidden mb-4">
+      <div class="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-ink-700 mb-2">
+        <p class="font-bold mb-1">🔮 El bracket se crea COMPLETO con cupos por posición, sin equipos todavía:</p>
+        <p id="ll-cupos-desc"></p>
+        <p class="mt-1 text-ink-500">Será visible en el público desde ya. Cuando la fase de grupos avance, usa <b>⚡ RESOLVER</b> en el fixture para asignar los equipos reales (con vista previa editable).</p>
+      </div>
+      <label class="flex items-center justify-between text-sm font-semibold py-1">Incluir Tercer puesto<input id="ll-3er" type="checkbox" checked class="w-4 h-4 accent-[#d9232e]"/></label>
+    </div>
+    <button id="ll-go" onclick="crearLlavesDispatch()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">CREAR LLAVES</button>`);
   renderLlaveRows();
+  setLlModo('equipos');
+}
+let LL_MODO='equipos';
+function setLlModo(m){
+  LL_MODO=m;
+  document.querySelectorAll('#ll-modos button').forEach(b=>{
+    const on=b.dataset.m===m;
+    b.className=`text-xs font-bold px-4 py-2 rounded-xl border ${on?'bg-ink-900 text-white border-ink-900':'bg-white border-line text-ink-500 hover:bg-paper'}`;
+  });
+  $('ll-wrap-etapa').classList.toggle('hidden', m==='cupos');
+  $('ll-rows').classList.toggle('hidden', m==='cupos');
+  $('ll-cupos').classList.toggle('hidden', m!=='cupos');
+  if(m==='cupos'){
+    const Z=LL_ZONAS, o=+($('ll-desde').value||0);
+    const p1=n=>`${o+1}º ${n}`, p2=n=>`${o+2}º ${n}`;
+    $('ll-cupos-desc').innerHTML = Z.length===2
+      ? `SF1: <b>${p1(Z[0])} vs ${p2(Z[1])}</b> · SF2: <b>${p1(Z[1])} vs ${p2(Z[0])}</b> · Final: Ganador SF1 vs Ganador SF2 (+ 3er puesto con los perdedores).`
+      : Z.length===4
+      ? `Cuartos cruzados (${p1(Z[0])}-${p2(Z[1])}, ${p1(Z[2])}-${p2(Z[3])}, ${p1(Z[1])}-${p2(Z[0])}, ${p1(Z[3])}-${p2(Z[2])}) → Semifinales → Final (+ 3er puesto).`
+      : `⚠ La plantilla automática requiere 2 o 4 zonas (esta categoría tiene ${Z.length}). Usa EQUIPOS DIRECTOS.`;
+  }
+  $('ll-go').textContent = m==='cupos' ? '🔮 CREAR PLANTILLA COMPLETA' : 'CREAR LLAVES';
+}
+function crearLlavesDispatch(){ return LL_MODO==='cupos' ? crearPlantilla() : crearLlaves(); }
+async function llFaseElegida(){
+  let faseId=$('ll-fase').value;
+  if(faseId==='__new__'){
+    const fn=$('ll-fn').value.trim()||'Eliminatoria';
+    const nf=await sb.from('fase').insert({categoria_id:CAT.id,nombre:fn,tipo:'eliminacion',orden:FASES.length+1}).select().single();
+    if(nf.error){toast(errNegocio(nf.error));return null;}
+    FASES.push(nf.data); faseId=nf.data.id;
+  }
+  return faseId;
+}
+async function crearPlantilla(){
+  const Z=LL_ZONAS;
+  if(Z.length!==2&&Z.length!==4){toast('⚠ La plantilla automática requiere 2 o 4 zonas. Usa EQUIPOS DIRECTOS.');return;}
+  const faseId=await llFaseElegida(); if(!faseId) return;
+  const o=+($('ll-desde').value||0);
+  const fecha=$('ll-f').value, hBase=$('ll-h').value||'09:00', sede=$('ll-s').value.trim()||null;
+  const hora=i=>String(((+hBase.slice(0,2))+i)%24).padStart(2,'0')+':'+hBase.slice(3);
+  const cupo=(z,p)=>({t:'zona',zona:z,puesto:p});
+  const base={categoria_id:CAT.id,fase_id:faseId,zona_id:null,jornada_id:null,estado:'programado',fecha,sede};
+  let semis;
+  if(Z.length===2){
+    semis=[
+      {...base,etapa:'Semifinal #1',hora:hora(0),local_origen:cupo(Z[0],o+1),visita_origen:cupo(Z[1],o+2)},
+      {...base,etapa:'Semifinal #2',hora:hora(1),local_origen:cupo(Z[1],o+1),visita_origen:cupo(Z[0],o+2)}];
+  } else {
+    const qf=[[cupo(Z[0],o+1),cupo(Z[1],o+2)],[cupo(Z[2],o+1),cupo(Z[3],o+2)],
+              [cupo(Z[1],o+1),cupo(Z[0],o+2)],[cupo(Z[3],o+1),cupo(Z[2],o+2)]];
+    const qr=await sb.from('partido').insert(qf.map((c,i)=>({...base,etapa:'Cuartos de final #'+(i+1),hora:hora(i),local_origen:c[0],visita_origen:c[1]}))).select();
+    if(qr.error){toast(errNegocio(qr.error));return;}
+    const q=qr.data.sort((a,b)=>a.etapa.localeCompare(b.etapa));
+    semis=[
+      {...base,etapa:'Semifinal #1',hora:hora(4),local_origen:{t:'ganador',partido:q[0].id},visita_origen:{t:'ganador',partido:q[1].id}},
+      {...base,etapa:'Semifinal #2',hora:hora(5),local_origen:{t:'ganador',partido:q[2].id},visita_origen:{t:'ganador',partido:q[3].id}}];
+  }
+  const sr=await sb.from('partido').insert(semis).select();
+  if(sr.error){toast(errNegocio(sr.error));return;}
+  const s=sr.data.sort((a,b)=>a.etapa.localeCompare(b.etapa));
+  const off=Z.length===2?2:6;
+  const finales=[];
+  if($('ll-3er').checked)
+    finales.push({...base,etapa:'Tercer puesto',hora:hora(off),local_origen:{t:'perdedor',partido:s[0].id},visita_origen:{t:'perdedor',partido:s[1].id}});
+  finales.push({...base,etapa:'Final',hora:hora(off+finales.length),local_origen:{t:'ganador',partido:s[0].id},visita_origen:{t:'ganador',partido:s[1].id}});
+  const fr=await sb.from('partido').insert(finales);
+  if(fr.error){toast(errNegocio(fr.error));return;}
+  cerrarModal();
+  toast('🔮 Plantilla creada: el bracket completo ya es visible con cupos por posición. Resuélvelo con ⚡ cuando avance la fase de grupos.');
+  await renderFixture();
+}
+/* ---- ⚡ RESOLVER: convertir cupos en equipos reales (vista previa editable) ---- */
+let RES_LLAVES=[];
+async function modalResolver(faseId){
+  const all=(await sb.from('partido').select('*').eq('categoria_id',CAT.id)).data||[];
+  PART_IDX=Object.fromEntries(all.map(m=>[m.id,m]));
+  RES_LLAVES=all.filter(m=>m.fase_id===faseId&&(m.local_origen||m.visita_origen)
+    &&m.estado==='programado'&&m.goles_local==null&&m.goles_visita==null)
+    .sort((a,b)=>(a.hora||'').localeCompare(b.hora||'')||(a.etapa||'').localeCompare(b.etapa||''));
+  if(!RES_LLAVES.length){toast('No hay llaves con cupos por resolver en esta fase');return;}
+  // posiciones con el MISMO desempate del torneo (orden_tabla)
+  const {data:vt}=await sb.from('vista_tabla_zona').select('*').eq('categoria_id',CAT.id);
+  const colf={PUNTOS:'pts',DIF_GOL:'dg',GF:'gf',GC:'gc',PG:'pg',PE:'pe',PP:'pp'};
+  const crit=((TORNEO.orden_tabla&&TORNEO.orden_tabla.length?TORNEO.orden_tabla:['PUNTOS','DIF_GOL','GF','GC'])).filter(k=>colf[k]);
+  const cmp=(a,b)=>{for(const k of crit){const f=colf[k];const d=(k==='GC')?(a[f]-b[f]):(b[f]-a[f]);if(d)return d;}return String(a.equipo).localeCompare(b.equipo);};
+  const rank={}; [...new Set((vt||[]).map(r=>r.zona))].sort().forEach(z=>rank[z]=(vt||[]).filter(r=>r.zona===z).sort(cmp));
+  const porPuesto={}; Object.keys(rank).forEach(z=>rank[z].forEach((r,i)=>{(porPuesto[i+1]=porPuesto[i+1]||[]).push(r);}));
+  Object.values(porPuesto).forEach(l=>l.sort(cmp));
+  const empate=(a,b)=>!!(a&&b&&cmp(a,b)===0);
+  const desdePartido=(pid,quiero)=>{
+    const src=PART_IDX[pid];
+    if(!src) return {id:null,warn:'la llave de origen fue eliminada'};
+    if(!['finalizado','walkover'].includes(src.estado)) return {id:null,warn:`aún no se juega ${src.etapa||'la llave de origen'}`};
+    const gl=src.goles_local??0, gv=src.goles_visita??0;
+    let winLocal = gl>gv?true : gl<gv?false : (src.penales?(src.penales_local??0)>(src.penales_visita??0):null);
+    if(winLocal===null) return {id:null,warn:`empate sin penales en ${src.etapa||'la llave de origen'}`};
+    return {id: quiero==='g' ? (winLocal?src.local_id:src.visita_id) : (winLocal?src.visita_id:src.local_id)};
+  };
+  const resolver=o=>{
+    if(!o) return {id:null,warn:null};
+    if(o.t==='zona'){const l=rank[o.zona]||[];const r=l[o.puesto-1];
+      return {id:r?r.equipo_id:null, warn:r?(empate(r,l[o.puesto])?'empate exacto con el siguiente: revisa el orden':null):'esa zona no tiene equipo en ese puesto'};}
+    if(o.t==='mejor'){const l=porPuesto[o.puesto]||[];const i=(o.rank||1)-1;const r=l[i];
+      return {id:r?r.equipo_id:null, warn:r?(empate(r,l[i+1])?'empate exacto: revisa el orden':null):'sin candidatos'};}
+    if(o.t==='ganador') return desdePartido(o.partido,'g');
+    if(o.t==='perdedor') return desdePartido(o.partido,'p');
+    return {id:null,warn:null};
+  };
+  const pendGrupos=all.filter(m=>m.zona_id&&['programado','en_vivo'].includes(m.estado)).length;
+  const opts=sel=>'<option value="">— pendiente —</option>'+Object.values(EQUIPOS).filter(e=>e.estado==='activo')
+    .map(e=>`<option value="${e.id}" ${e.id===sel?'selected':''}>${nomEq(e)}</option>`).join('');
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⚡ RESOLVER LLAVES</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-2">Propuesta según las posiciones actuales y el desempate del torneo. Puedes ajustar cualquier cupo antes de aplicar. Lo que quede "pendiente" no se toca.</p>
+    ${pendGrupos?`<p class="text-xs font-bold text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-3">⚠ Aún hay ${pendGrupos} partido(s) de grupos sin terminar: las posiciones pueden cambiar. Resolver ahora es bajo tu criterio.</p>`:''}
+    <div class="max-h-80 overflow-y-auto space-y-2 mb-3">
+    ${RES_LLAVES.map((m,i)=>{
+      const rl=resolver(m.local_origen), rv=resolver(m.visita_origen);
+      const celda=(pref,o,r,cur)=>`<div class="flex-1 min-w-0">
+        <p class="text-[10px] font-bold text-ink-400 truncate">${etiquetaCupo(o)}${r.warn?` <span class="text-amber-600">· ⚠ ${r.warn}</span>`:''}</p>
+        <select id="${pref}-${i}" class="w-full border border-line rounded-lg px-2 py-1.5 text-xs font-semibold bg-white">${opts(r.id||cur)}</select>
+      </div>`;
+      return `<div class="border border-line rounded-xl px-3 py-2">
+        <p class="text-[10px] font-bold bg-amber-100 text-amber-700 rounded px-1.5 py-0.5 inline-block mb-1.5">${m.etapa||'Llave'}</p>
+        <div class="flex items-center gap-2">
+          ${celda('rz-l',m.local_origen,rl,m.local_id)}
+          <span class="text-ink-300 text-xs shrink-0">vs</span>
+          ${celda('rz-v',m.visita_origen,rv,m.visita_id)}
+        </div>
+      </div>`;}).join('')}
+    </div>
+    <button onclick="aplicarResolucion()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">APLICAR RESOLUCIÓN</button>`);
+}
+async function aplicarResolucion(){
+  let n=0;
+  for(let i=0;i<RES_LLAVES.length;i++){
+    const m=RES_LLAVES[i];
+    const l=$('rz-l-'+i).value||null, v=$('rz-v-'+i).value||null;
+    if(l&&v&&l===v){toast(`⚠ ${m.etapa}: un equipo no puede jugar contra sí mismo`);return;}
+    if(l===(m.local_id||null)&&v===(m.visita_id||null)) continue;   // sin cambios
+    const {error}=await sb.from('partido').update({local_id:l,visita_id:v}).eq('id',m.id);
+    if(error){toast(errNegocio(error));return;}
+    n++;
+  }
+  cerrarModal();
+  toast(n?`⚡ ${n} llave(s) resueltas — visibles al instante en el bracket del público`:'Sin cambios que aplicar');
+  await renderFixture();
 }
 function llEquipoOpts(sel){
   // opciones etiquetadas con posición y zona cuando clasifican
@@ -1219,9 +1378,21 @@ async function crearLlaves(){
 }
 
 /* ---- Fixture / Resultados ---- */
+let PART_IDX={};
+function etiquetaCupo(o){
+  if(!o) return 'Por definir';
+  if(o.t==='zona') return `${o.puesto}º ZONA ${o.zona}`;
+  if(o.t==='mejor') return `${o.rank&&o.rank>1?o.rank+'º ':''}MEJOR ${o.puesto}º`;
+  if(o.t==='ganador'||o.t==='perdedor'){
+    const src=PART_IDX[o.partido];
+    return (o.t==='ganador'?'GANADOR ':'PERDEDOR ')+(src?(src.etapa||''):'(llave eliminada)');
+  }
+  return 'Por definir';
+}
 async function renderFixture(){
   const {data,error}=await sb.from('partido').select('*, jornada:jornada_id(numero)').eq('categoria_id',CAT.id).order('fecha').order('hora');
   if(error){$('tab-fixture').innerHTML='';msg(errNegocio(error),'err');return;}
+  PART_IDX=Object.fromEntries(data.map(m=>[m.id,m]));
   const porFecha={}, porFase={};
   data.forEach(m=>{
     if(m.etapa) (porFase[m.fase_id||'0']=porFase[m.fase_id||'0']||[]).push(m);
@@ -1232,21 +1403,26 @@ async function renderFixture(){
   const fila=m=>{
     const fin=m.estado==='finalizado'||m.estado==='walkover';
     const L=EQUIPOS[m.local_id],V=EQUIPOS[m.visita_id];
+    const ph=!m.local_id||!m.visita_id;   // placeholder: cupos sin resolver
     const J=JSON.stringify(m).replace(/'/g,"&#39;");
+    const lado=(e,o,der)=>e
+      ?(der?`${badgeEq(e)} ${nomEq(e)}`:`${nomEq(e)} ${badgeEq(e)}`)
+      :`<span class="italic text-ink-400 font-semibold">${etiquetaCupo(o)}</span>`;
     return `<div class="flex items-center px-4 py-2.5 border-b border-line last:border-0 gap-2 flex-wrap">
       ${m.etapa?`<span class="text-[9px] font-bold bg-amber-100 text-amber-700 rounded px-1.5 py-0.5 whitespace-nowrap">${m.etapa}</span>`:''}
-      <div class="flex-1 flex items-center justify-end gap-2 text-sm font-semibold min-w-28">${L?nomEq(L):'—'} ${L?badgeEq(L):''}</div>
+      ${ph?'<span class="text-[9px] font-bold bg-paper text-ink-400 border border-line rounded px-1.5 py-0.5 whitespace-nowrap" title="Cupos por resolver">🔮</span>':''}
+      <div class="flex-1 flex items-center justify-end gap-2 text-sm font-semibold min-w-28">${lado(L,m.local_origen,false)}</div>
       <div class="w-24 text-center">
-        <span class="block text-[9px] font-bold uppercase ${fin?'text-emerald-600':'text-ink-400'}">${m.estado}</span>
+        <span class="block text-[9px] font-bold uppercase ${fin?'text-emerald-600':'text-ink-400'}">${ph?'por definir':m.estado}</span>
         <span class="font-display text-2xl">${m.goles_local??'–'} : ${m.goles_visita??'–'}</span>
         <span class="block text-[9px] text-ink-400">${m.fecha||''} ${m.hora?m.hora.slice(0,5):''}</span>
       </div>
-      <div class="flex-1 flex items-center gap-2 text-sm font-semibold min-w-28">${V?badgeEq(V):''} ${V?nomEq(V):'—'}</div>
+      <div class="flex-1 flex items-center gap-2 text-sm font-semibold min-w-28">${lado(V,m.visita_origen,true)}</div>
       <div class="flex gap-1">
         ${esAdmin()?`<button onclick='modalEditPartido(${J})' class="text-xs font-bold text-ink-500 border border-line rounded-lg px-2 py-1.5 hover:bg-paper" title="Editar fecha, hora, sede, cancha, árbitro">✏️</button>`:''}
-        <button onclick='abrirAcred(${J})' class="text-xs font-bold text-ink-500 border border-line rounded-lg px-2 py-1.5 hover:bg-paper" title="Acreditación en cancha">🪪</button>
+        ${ph?'':`<button onclick='abrirAcred(${J})' class="text-xs font-bold text-ink-500 border border-line rounded-lg px-2 py-1.5 hover:bg-paper" title="Acreditación en cancha">🪪</button>
         <button onclick='abrirLive(${J})' class="text-xs font-bold text-white bg-brand-500 rounded-lg px-2 py-1.5 hover:bg-brand-600" title="Match Center en vivo">▶</button>
-        <button onclick='modalResultado(${J})' class="text-xs font-bold text-brand-600 border border-brand-100 rounded-lg px-2 py-1.5 hover:bg-brand-50">CARGAR</button>
+        <button onclick='modalResultado(${J})' class="text-xs font-bold text-brand-600 border border-brand-100 rounded-lg px-2 py-1.5 hover:bg-brand-50">CARGAR</button>`}
         ${esAdmin()?`<button onclick='eliminarPartido(${J})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-brand-50 hover:text-brand-600" title="Eliminar partido">🗑</button>`:''}
       </div>
     </div>`;
@@ -1263,7 +1439,9 @@ async function renderFixture(){
   }).join('');
   const htmlFases=FASES.filter(f=>porFase[f.id]).map(f=>`
     <div class="bg-white border-2 border-amber-200 rounded-2xl mb-4">
-      ${header(medalla(f.nombre)+' '+f.nombre.toUpperCase(),`<button onclick="modalNuevoPartido('fase','${f.id}')" class="text-xs font-bold text-brand-600 border border-brand-100 rounded-lg px-3 py-1.5 hover:bg-brand-50">+ PARTIDO</button>`)}
+      ${header(medalla(f.nombre)+' '+f.nombre.toUpperCase(),
+        `${porFase[f.id].some(m=>!m.local_id||!m.visita_id)?`<button onclick="modalResolver('${f.id}')" class="text-xs font-bold text-white bg-amber-500 rounded-lg px-3 py-1.5 hover:bg-amber-600 mr-1">⚡ RESOLVER</button>`:''}
+         <button onclick="modalNuevoPartido('fase','${f.id}')" class="text-xs font-bold text-brand-600 border border-brand-100 rounded-lg px-3 py-1.5 hover:bg-brand-50">+ PARTIDO</button>`)}
       ${porFase[f.id].sort((a,b)=>ordEt(a.etapa)-ordEt(b.etapa)||(a.etapa||'').localeCompare(b.etapa||'')).map(fila).join('')}
     </div>`).join('');
   $('tab-fixture').innerHTML=
