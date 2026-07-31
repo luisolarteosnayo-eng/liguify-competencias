@@ -287,7 +287,39 @@ function modalMarca(){
     </div>
     <label class="block text-sm mb-4"><span class="text-ink-400 font-semibold text-xs">Descripción</span>
       <textarea id="mk-desc" rows="2" class="w-full border border-line rounded-xl p-2.5 mt-1 text-sm">${MARCA.descripcion||''}</textarea></label>
+    <div class="border-t border-line pt-3 mb-4">
+      <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-2">Liguify Financiero (ERP) — opcional</p>
+      <div id="mk-erp" class="text-sm">${MARCA.erp_org_id
+        ?`<div class="flex items-center gap-2"><span class="flex-1 font-semibold text-emerald-700">✔ Vinculada a tu organización del ERP (#${MARCA.erp_org_id})</span>
+           <button onclick="desvincularERP()" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-3 py-1.5 hover:bg-paper">DESVINCULAR</button></div>
+          <p class="text-[11px] text-ink-400 mt-1">Habilita el botón "💰 IMPORTAR DEL ERP" en cada categoría.</p>`
+        :`<button onclick="vincularERP()" class="text-xs font-bold text-brand-600 border border-brand-100 rounded-lg px-3 py-2 hover:bg-brand-50">🔗 VINCULAR CON MI ORGANIZACIÓN DEL ERP</button>
+          <p class="text-[11px] text-ink-400 mt-1">Permite importar clubes y equipos de tus torneos del ERP sin duplicarlos. Si no usas el ERP, ignora esta sección.</p>`}</div>
+    </div>
     <button onclick="guardarMarca()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR MARCA</button>`);
+}
+async function vincularERP(){
+  const {data,error}=await sb.rpc('erp_orgs_disponibles');
+  if(error){toast(errNegocio(error));return;}
+  if(!data||!data.length){toast('⚠ Tu cuenta no pertenece a ninguna organización del ERP. Entra al menos una vez a erp.liguify.com con este mismo correo.');return;}
+  if(data.length===1){confirmarVinculoERP(data[0].org_id,data[0].nombre);return;}
+  $('mk-erp').innerHTML=`<p class="text-xs font-bold text-ink-500 mb-1.5">Elige tu organización:</p>`+
+    data.map(o=>`<button onclick="confirmarVinculoERP(${o.org_id},'${(o.nombre||'').replace(/'/g,'')}')" class="block w-full text-left text-sm font-semibold border border-line rounded-lg px-3 py-2 mb-1.5 hover:bg-paper">${o.nombre} <span class="text-[10px] text-ink-400">#${o.org_id}</span></button>`).join('');
+}
+async function confirmarVinculoERP(id,nombre){
+  if(!confirm(`¿Vincular la marca ${MARCA.nombre} con la organización "${nombre}" del ERP?`))return;
+  const r=await sb.rpc('vincular_erp',{p_marca:MARCA.id,p_org:id});
+  if(r.error){toast(errNegocio(r.error));return;}
+  MARCA.erp_org_id=id;
+  cerrarModal(); toast('Marca vinculada al ERP ✔ — ya tienes "💰 IMPORTAR DEL ERP" en cada categoría');
+  cargarTorneos();
+}
+async function desvincularERP(){
+  if(!confirm('¿Desvincular del ERP? Los clubes ya importados conservan su vínculo; solo desaparece la opción de importar.'))return;
+  const r=await sb.rpc('vincular_erp',{p_marca:MARCA.id,p_org:null});
+  if(r.error){toast(errNegocio(r.error));return;}
+  MARCA.erp_org_id=null;
+  cerrarModal(); toast('Marca desvinculada del ERP');
 }
 async function guardarMarca(){
   try{
@@ -566,6 +598,7 @@ async function renderEquipos(){
     </div>` : '';
   $('tab-equipos').innerHTML=
     `<div class="flex justify-end gap-2 mb-3">${esAdmin()?`
+      ${MARCA.erp_org_id?`<button onclick="modalImportarERP()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">💰 IMPORTAR DEL ERP</button>`:''}
       <button onclick="modalZona()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">+ NUEVA ZONA</button>
       <button onclick="modalEquipo()" class="bg-brand-500 text-white font-bold px-4 py-2 rounded-xl text-sm hover:bg-brand-600">+ NUEVO EQUIPO</button>`:''}</div>`+
     cardSinZona+
@@ -580,6 +613,54 @@ async function renderEquipos(){
         </div>`;}).join('')||'<p class="px-5 py-5 text-sm text-ink-400">Zona sin equipos.</p>'}
     </div>`).join('')+cardRetirados;
 }
+/* ---- IMPORTAR EQUIPOS DESDE EL ERP (solo marcas vinculadas — §12) ---- */
+let ERP_EQ=[];
+async function modalImportarERP(){
+  const catNom=CAT.nombre_display||('Categoría '+CAT.anio_nacimiento+' / '+CAT.modalidad);
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">💰 IMPORTAR DEL ERP</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-3">Trae los equipos inscritos en un torneo de Liguify Financiero hacia <b>${catNom}</b>. Los clubes no se duplican: si ya existen se reusan o se adoptan por nombre.</p>
+    <label class="block text-sm mb-2"><span class="text-ink-400 font-semibold text-xs">Torneo del ERP</span>
+      <select id="ie-t" onchange="cargarEquiposERP()" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"></select></label>
+    <div id="ie-lista" class="my-3 text-sm max-h-72 overflow-y-auto border border-line rounded-xl">Cargando torneos…</div>
+    <button onclick="importarERP()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">IMPORTAR SELECCIONADOS</button>`);
+  const {data,error}=await sb.rpc('erp_torneos',{p_marca:MARCA.id});
+  if(error){$('ie-lista').innerHTML=`<p class="p-3 text-brand-600 text-xs font-bold">${errNegocio(error)}</p>`;return;}
+  if(!data||!data.length){$('ie-lista').innerHTML='<p class="p-3 text-ink-400 text-xs">Tu organización del ERP no tiene torneos.</p>';return;}
+  $('ie-t').innerHTML=data.map(t=>`<option value="${t.torneo_id}">${t.nombre} · ${t.estado}${t.inicio?' · '+t.inicio:''}</option>`).join('');
+  cargarEquiposERP();
+}
+async function cargarEquiposERP(){
+  const tid=$('ie-t').value;
+  if(!tid){$('ie-lista').innerHTML='';return;}
+  $('ie-lista').innerHTML='<p class="p-3 text-ink-400 text-xs">Cargando equipos…</p>';
+  const {data,error}=await sb.rpc('erp_equipos_torneo',{p_marca:MARCA.id,p_torneo:+tid});
+  if(error){$('ie-lista').innerHTML=`<p class="p-3 text-brand-600 text-xs font-bold">${errNegocio(error)}</p>`;return;}
+  ERP_EQ=data||[];
+  if(!ERP_EQ.length){$('ie-lista').innerHTML='<p class="p-3 text-ink-400 text-xs">Ese torneo no tiene equipos inscritos.</p>';return;}
+  const sugerido=e=>String(CAT.anio_nacimiento)===(e.categoria||'').trim() && (!e.modalidad||e.modalidad===CAT.modalidad);
+  $('ie-lista').innerHTML=ERP_EQ.map(e=>{
+    const match=sugerido(e), imp=e.ya_importado, inact=e.estado==='inactivo';
+    const clubChip=e.club_vinculado?'<span class="text-[9px] font-bold text-emerald-700">🔗 club vinculado</span>'
+      :e.club_adoptable?'<span class="text-[9px] font-bold text-amber-600">≈ adoptará club existente</span>'
+      :'<span class="text-[9px] font-bold text-ink-400">+ club nuevo</span>';
+    return `<label class="flex items-center gap-2.5 px-3 py-2 border-b border-line last:border-0 ${imp?'opacity-50':''} ${match&&!imp?'bg-emerald-50/50':''}">
+      <input type="checkbox" id="ie-x-${e.erp_equipo_id}" ${match&&!imp&&!inact?'checked':''} ${imp?'disabled':''} class="w-4 h-4 accent-[#d9232e]"/>
+      <span class="flex-1"><b>${e.club_nombre}</b>${e.sub_nombre?' · '+e.sub_nombre:''}
+        <span class="block text-[10px] text-ink-400">Cat. ${e.categoria}${e.modalidad?' · '+e.modalidad:''}${inact?' · <b class="text-brand-600">INACTIVO en ERP</b>':''}${e.invitado?' · invitado':''}</span></span>
+      ${imp?'<span class="text-[9px] font-bold text-ink-400">YA IMPORTADO</span>':clubChip}
+    </label>`;}).join('')+
+    `<p class="px-3 py-2 text-[10px] text-ink-400 bg-paper">Pre-seleccionados los de la categoría ${CAT.anio_nacimiento}${CAT.modalidad?'/'+CAT.modalidad:''}. Puedes marcar otros (p.ej. si el nombre de categoría del ERP no coincide).</p>`;
+}
+async function importarERP(){
+  const ids=ERP_EQ.filter(e=>{const c=$('ie-x-'+e.erp_equipo_id);return c&&c.checked&&!c.disabled;}).map(e=>e.erp_equipo_id);
+  if(!ids.length){toast('⚠ No hay equipos seleccionados');return;}
+  const {data,error}=await sb.rpc('importar_equipos_erp',{p_categoria:CAT.id,p_erp_torneo:+$('ie-t').value,p_ids:ids});
+  if(error){toast(errNegocio(error));return;}
+  cerrarModal();
+  toast(`Importación ✔ — equipos creados: ${data.equipos_creados} · clubes nuevos: ${data.clubes_creados} · adoptados: ${data.clubes_adoptados} · reusados: ${data.clubes_reusados}${data.omitidos?' · ya importados (omitidos): '+data.omitidos:''}. Asígnales zona en la sección ámbar.`);
+  abrirCategoria(CAT);
+}
+
 // REGLA: no se puede mover ni quitar de la zona si tiene partidos (programados o jugados) en ella
 async function partidosEnZona(eqId,zonaId){
   const {data}=await sb.from('partido').select('id,estado').eq('zona_id',zonaId)
