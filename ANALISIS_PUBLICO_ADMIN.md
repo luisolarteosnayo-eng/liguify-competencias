@@ -612,3 +612,68 @@ alter table competencias.equipo add column erp_equipo_id bigint unique;         
 1. **F1 (DDL, 15 min):** columnas de vínculo + función `importar_clubes_erp` security definer.
 2. **F2 (UI):** vincular marca↔org en Editar Marca + modal de importación en la categoría (idéntico patrón al "Importar plantel" ya construido).
 3. **F3 (valor):** semáforo de pagos ERP en la vista de equipos/acreditación.
+
+---
+
+## 13. Llaves con plantilla (bracket sembrado) — análisis 2026-07-31
+
+**Objetivo (Luis):** definir las series de la fase eliminatoria DESDE EL INICIO con posiciones, no con equipos:
+> Semifinal ORO 1: 1º A vs 2º B · Semifinal ORO 2: 2º A vs 1º B · Final ORO: Ganador SF1 vs Ganador SF2.
+> Semifinal PLATA 1: 3º A vs 4º B · Semifinal PLATA 2: 4º A vs 3º B · Final PLATA: Ganador SF1 vs Ganador SF2.
+
+El sistema debe (a) mapear la clasificación, (b) mostrarla gráficamente antes de conocerse los equipos, y (c) en el momento indicado convertir los cupos en equipos reales ("resolver las llaves").
+
+### 13.1 Decisión de arquitectura: partido-placeholder (una sola fuente de verdad)
+
+Dos opciones evaluadas:
+- **(A) Tabla nueva `llave_plantilla`** separada de `partido` → obliga a que el bracket del público y el fixture del admin mezclen dos orígenes de datos, duplica renderizado y sincronización.
+- **(B) ELEGIDA — El partido nace como placeholder**: `partido.local_id/visita_id` pasan a ser **nullables** y se agregan `local_origen jsonb` / `visita_origen jsonb` que describen el CUPO. El bracket existente (admin y público) ya renderiza partidos por etapa: un placeholder es solo un partido cuyo equipo aún no se conoce. Resolver = `update partido set local_id=..., visita_id=...`. Cero duplicación.
+
+Impacto verificado del cambio de nulabilidad:
+- `vista_tabla_zona` solo cuenta partidos con `zona_id` (los de llave lo tienen null) → tablas de grupos intactas.
+- `check (local_id <> visita_id)` en Postgres PASA con nulls (comparación con null = null) → no bloquea.
+- Guardas nuevas necesarias: **constraint** `estado in ('programado','suspendido') or (local_id is not null and visita_id is not null)` (no se puede poner en vivo/finalizar/dar walkover a un placeholder) + UI bloquea CARGAR/▶VIVO/🪪 en placeholders.
+
+### 13.2 Tipos de cupo (`*_origen` jsonb)
+
+| Cupo | JSON | Etiqueta mostrada |
+|---|---|---|
+| Posición en zona | `{t:'zona', zona:'A', puesto:1}` | «1º ZONA A» |
+| Mejor N entre zonas | `{t:'mejor', puesto:3, rank:2}` | «2º MEJOR 3º» (usa el mismo orden de COMPARAR PUESTOS) |
+| Ganador de otra llave | `{t:'ganador', partido:'<uuid>'}` | «GANADOR SF 1» (referencia por uuid, sobrevive renombres de etapa) |
+| Perdedor de otra llave | `{t:'perdedor', partido:'<uuid>'}` | «PERDEDOR SF 1» (tercer puesto) |
+
+El cupo `mejor` cubre el caso 3 zonas → clasifican 3 primeros + 3 segundos + 2 mejores terceros.
+
+### 13.3 Resolución (manual con vista previa — el admin siempre confirma)
+
+1. Botón **⚡ RESOLVER LLAVES** en el bloque de la fase (admin fixture). Solo aparece si hay placeholders.
+2. Cupos `zona`/`mejor`: se calculan con `vista_tabla_zona` + el desempate de `orden_tabla` (mismo `cmp` del público). **Vista previa**: «1º A → SPORT BOYS SR (9 pts, +5)» con select editable por cupo (override manual). Advertencias: (a) «faltan N partidos de grupos» si la fase de grupos no terminó (se puede forzar bajo responsabilidad — regla I2); (b) «empate exacto entre X e Y en todos los criterios: define tú el orden» (hoy el desempate final es alfabético, el admin debe poder invertirlo).
+3. Cupos `ganador`/`perdedor`: exigen el partido fuente `finalizado` (o walkover). Ganador = goles; empate → penales (`penales_local/visita` ya existen). Empate sin penales registrados → no resoluble, aviso.
+4. **Re-resolver** permitido solo mientras la llave destino esté `programado` y sin goles (mismo espíritu que la regla de ⇄ ZONA y RETIRAR). Si un resultado de grupos cambia después de resolver, el mapeo NO se recalcula solo: el admin re-resuelve (decisión humana, regla C3/I2).
+5. Encadenado natural: resolver semis no exige nada de la final; cuando las semis terminan, el mismo botón resuelve la final y el tercer puesto.
+
+### 13.4 Creación de la plantilla (GENERAR LLAVES, modo nuevo)
+
+El modal GENERAR LLAVES gana un modo **«PLANTILLA (cupos por posición)»** junto al actual (equipos reales):
+- **Presets**: «Cruce clásico 2 zonas» = SF1: 1ºA-2ºB · SF2: 1ºB-2ºA · Final (G-SF1 vs G-SF2) · 3er puesto opcional (P-SF1 vs P-SF2). Parametrizado por el rango de puestos: ORO usa 1º-2º, PLATA usa 3º-4º (offset, como el actual `ll-desde`) — exactamente el ejemplo de Luis. Con 4 zonas el preset arma cuartos 1ºA-2ºB / 1ºC-2ºD / 1ºB-2ºA / 1ºD-2ºC → semis → final.
+- **Editor libre**: por cada llave, dos selects (puesto × zona | mejor N | ganador/perdedor de llave ya creada) para formatos no estándar.
+- La final y el 3er puesto se crean EN LA MISMA operación referenciando los uuid de las semis recién insertadas (orden de inserción: semis → final/3er).
+
+### 13.5 Visualización
+
+- **Público (Llaves)**: el bracket actual ya agrupa por fase y etapa; los placeholders se muestran con la etiqueta del cupo en gris/cursiva («1º ZONA A», «GANADOR SF 1») y sin marcador → el mapa completo del torneo es visible desde el día 1 (lo que pide Luis). Al resolver, Realtime actualiza los nombres al instante.
+- **Admin (fixture)**: fila de llave placeholder con chip 🔮 «por definir» y botones CARGAR/▶/🪪 ocultos; ✏️ (fecha/hora/sede) y 🗑 siguen activos (programar sedes/horarios ANTES de conocer los equipos es el caso de uso real).
+
+### 13.6 Casos borde
+- Equipo retirado tras clasificar → el admin re-resuelve la llave o la edita a mano (decisión humana).
+- Placeholder con fecha/hora ya programada → resolver NO toca fecha/hora/sede (solo equipos).
+- Llaves creadas por el flujo viejo (equipos directos) → siguen funcionando igual; `*_origen` null = llave clásica.
+- Borrar una semi referenciada por la final (`ganador.partido` uuid huérfano) → la etiqueta cae a «GANADOR (llave eliminada)» y el cupo se vuelve no-resoluble hasta editarlo; el 🗑 de una llave referenciada advierte antes.
+- Dos categorías/fases: cada plantilla vive en su fase; sin interacción entre ORO y PLATA.
+
+### 13.7 Fases propuestas
+1. **F1 (DDL):** drop not null en `local_id/visita_id` + `local_origen/visita_origen jsonb` + constraint de estado-con-equipos.
+2. **F2 (Admin):** modo PLANTILLA en GENERAR LLAVES (presets + editor), etiquetas de cupo en fixture, botón ⚡ RESOLVER con vista previa/overrides/advertencias.
+3. **F3 (Público):** etiquetas de cupo en el bracket (gris) — cambio pequeño en `cardLlave`.
+4. **F4 (pulido, opcional):** sugerencia automática «✔ Ya puedes resolver la Final» al finalizar la última semi (toast), y bloqueo de resolver forzado configurable.
