@@ -454,9 +454,12 @@ grant  execute on function competencias.usuarios_de_marca(uuid)           to aut
 
 -- ---- PUENTE ERP (Liguify Financiero, esquema public) — §12, OPCIONAL -------
 -- marca.erp_org_id null = cero rastro del ERP. Ver patch_erp_import.sql.
-alter table competencias.marca  add column if not exists erp_org_id    bigint unique;
-alter table competencias.club   add column if not exists erp_club_id   bigint unique;
-alter table competencias.equipo add column if not exists erp_equipo_id bigint unique;
+-- Una org ERP puede operar VARIAS marcas (N:1); vínculos e idempotencia POR MARCA.
+alter table competencias.marca  add column if not exists erp_org_id    bigint;
+alter table competencias.club   add column if not exists erp_club_id   bigint;
+alter table competencias.equipo add column if not exists erp_equipo_id bigint;
+alter table competencias.club   add constraint club_marca_erp_uk unique (marca_id, erp_club_id);
+create index if not exists equipo_erp_idx on competencias.equipo(erp_equipo_id);
 
 create or replace function competencias.erp_orgs_disponibles()
 returns table(org_id bigint, nombre text)
@@ -520,7 +523,10 @@ as $$
                    where tc.torneo_id = e.torneo_id and tc.cat_id = e.cat_id limit 1), ''),
          nullif(trim(e.nombre),''),
          e.estado, e.invitado,
-         exists (select 1 from competencias.equipo q where q.erp_equipo_id = e.id),
+         exists (select 1 from competencias.equipo q
+                 join competencias.categoria cc on cc.id = q.categoria_id
+                 join competencias.torneo tt on tt.id = cc.torneo_id
+                 where tt.marca_id = p_marca and q.erp_equipo_id = e.id),
          exists (select 1 from competencias.club k
                  where k.marca_id = p_marca and k.erp_club_id = c.id),
          exists (select 1 from competencias.club k
@@ -564,8 +570,11 @@ begin
     join public.clubes c on c.id = e.club_id
     where e.torneo_id = p_erp_torneo and e.id = any(p_ids)
   loop
-    if exists (select 1 from competencias.equipo q where q.erp_equipo_id = r.eq_id) then
-      n_omitidos := n_omitidos + 1; continue;   -- re-importar no duplica
+    if exists (select 1 from competencias.equipo q
+               join competencias.categoria cc on cc.id = q.categoria_id
+               join competencias.torneo tt on tt.id = cc.torneo_id
+               where tt.marca_id = v_marca and q.erp_equipo_id = r.eq_id) then
+      n_omitidos := n_omitidos + 1; continue;   -- re-importar no duplica (dentro de la marca)
     end if;
     select id into v_club from competencias.club
     where marca_id = v_marca and erp_club_id = r.club_id;
