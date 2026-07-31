@@ -1669,15 +1669,16 @@ async function renderTabla(){
         const rows=porPuesto[p].sort(orden);
         return `<div class="bg-white rounded-2xl border border-line mb-4 overflow-x-auto">
           <div class="px-4 py-3 border-b border-line flex items-center justify-between"><span class="font-display text-xl tracking-wide">${ORD[p]||p+'°'} DE CADA ZONA</span><span class="text-[9px] text-ink-400 font-bold uppercase">${rows.length} equipos</span></div>
-          <table class="w-full min-w-[500px]"><thead><tr class="text-[10px] uppercase text-ink-400 border-b border-line"><th class="py-2 w-8"></th><th class="text-left">Equipo</th><th class="w-14">Zona</th><th class="w-9">PJ</th><th class="w-9">GF</th><th class="w-9">DG</th><th class="w-10">PTS</th></tr></thead>
+          <table class="w-full min-w-[520px]"><thead><tr class="text-[10px] uppercase text-ink-400 border-b border-line"><th class="py-2 w-8"></th><th class="text-left">Equipo</th><th class="w-14">Zona</th><th class="w-9">PJ</th><th class="w-10">PTS</th><th class="w-9">DG</th><th class="w-9">GF</th><th class="w-9">GC</th></tr></thead>
           <tbody>${rows.map((r,i)=>`<tr class="border-b border-line last:border-0 ${i===0?'bg-emerald-50/60':''}">
             <td class="py-2 pl-2 text-ink-400 font-bold text-center">${i+1}</td>
             <td class="font-semibold text-sm">${EQUIPOS[r.equipo_id]?badgeEq(EQUIPOS[r.equipo_id],5):''} ${r.equipo} ${i===0?'<span class="text-[9px] font-bold bg-emerald-100 text-emerald-700 rounded px-1.5 py-0.5 ml-1">MEJOR</span>':''}</td>
             <td class="text-center text-xs font-bold text-ink-500">${r._zona}</td>
             <td class="text-center text-sm text-ink-400">${r.pj}</td>
-            <td class="text-center text-sm text-ink-400">${r.gf}</td>
+            <td class="text-center font-extrabold">${r.pts}</td>
             <td class="text-center text-sm font-semibold ${r.dg>0?'text-emerald-600':r.dg<0?'text-brand-600':'text-ink-400'}">${r.dg>0?'+':''}${r.dg}</td>
-            <td class="text-center font-extrabold">${r.pts}</td></tr>`).join('')}</tbody></table></div>`;
+            <td class="text-center text-sm text-ink-400">${r.gf}</td>
+            <td class="text-center text-sm text-ink-400">${r.gc}</td></tr>`).join('')}</tbody></table></div>`;
       }).join('');
     return;
   }
