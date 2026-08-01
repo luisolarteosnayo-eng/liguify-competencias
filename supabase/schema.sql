@@ -554,7 +554,7 @@ language plpgsql security definer
 set search_path = competencias, public
 as $$
 declare
-  v_marca uuid; v_org bigint; v_club uuid; r record;
+  v_marca uuid; v_org bigint; v_club uuid; v_link bigint; r record;
   n_reusados int := 0; n_adoptados int := 0; n_creados int := 0;
   n_eq int := 0; n_omitidos int := 0;
 begin
@@ -588,15 +588,22 @@ begin
     if v_club is not null then
       n_reusados := n_reusados + 1;
     else
-      select id into v_club from competencias.club
-      where marca_id = v_marca and erp_club_id is null
+      -- mismo nombre en la marca → usarlo SIEMPRE (club único por marca):
+      -- sin vínculo se adopta; ya vinculado a otro registro ERP (duplicado
+      -- en el ERP) se reusa sin tocar el vínculo.
+      select id, erp_club_id into v_club, v_link from competencias.club
+      where marca_id = v_marca
         and lower(trim(nombre)) = lower(trim(r.club_nombre))
       limit 1;
       if v_club is not null then
-        update competencias.club
-        set erp_club_id = r.club_id, contacto_tel = coalesce(contacto_tel, r.club_tel)
-        where id = v_club;
-        n_adoptados := n_adoptados + 1;
+        if v_link is null then
+          update competencias.club
+          set erp_club_id = r.club_id, contacto_tel = coalesce(contacto_tel, r.club_tel)
+          where id = v_club;
+          n_adoptados := n_adoptados + 1;
+        else
+          n_reusados := n_reusados + 1;
+        end if;
       else
         insert into competencias.club (marca_id, nombre, contacto_tel, erp_club_id)
         values (v_marca, trim(r.club_nombre), r.club_tel, r.club_id)
