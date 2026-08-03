@@ -415,30 +415,24 @@ async function irEquipoId(id){
     .or(`local_id.eq.${id},visita_id.eq.${id}`)
     .order('fecha').order('hora');
   const filaP=m=>{
-    const soyLocal=m.local_id===id;
-    const rivalId=soyLocal?m.visita_id:m.local_id;
-    const rival=EQUIPOS[rivalId];
     const fin=['finalizado','walkover'].includes(m.estado), vivo=m.estado==='en_vivo';
-    const gf=soyLocal?m.goles_local:m.goles_visita, gc=soyLocal?m.goles_visita:m.goles_local;
-    let res='';
-    if(fin){
-      let gano = gf>gc?true : gf<gc?false : (m.penales?(soyLocal?(m.penales_local??0)>(m.penales_visita??0):(m.penales_visita??0)>(m.penales_local??0)):null);
-      res = gano===true?'<span class="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 grid place-items-center text-[10px] font-extrabold shrink-0">G</span>'
-          : gano===false?'<span class="w-6 h-6 rounded-lg bg-brand-50 text-brand-600 grid place-items-center text-[10px] font-extrabold shrink-0">P</span>'
-          : '<span class="w-6 h-6 rounded-lg bg-paper text-ink-400 grid place-items-center text-[10px] font-extrabold shrink-0">E</span>';
-    } else {
-      res='<span class="w-6 h-6 rounded-lg border border-line text-ink-300 grid place-items-center text-[10px] font-extrabold shrink-0">·</span>';
-    }
+    const L=EQUIPOS[m.local_id], V=EQUIPOS[m.visita_id];
     const ctx=m.etapa?`🏆 ${m.etapa}`:(m.jornada&&m.jornada.numero?`Fecha ${m.jornada.numero}`:'');
-    return `<div class="flex items-center gap-3 px-5 py-2.5 border-b border-line last:border-0">
-      ${res}
-      <span class="flex-1 min-w-0">
-        <span class="text-sm font-semibold block truncate">${soyLocal?'vs':'@'} ${rival?nomEq(rival):'Por definir'}</span>
-        <span class="text-[10px] text-ink-400">${ctx}${m.fecha?' · '+m.fecha:''}${m.hora?' '+m.hora.slice(0,5):''}${m.sede?' · '+m.sede:''}</span>
-      </span>
-      ${vivo?'<span class="flex items-center gap-1 text-[9px] font-bold text-brand-600"><span class="live-dot"></span>EN VIVO</span>':''}
-      <span class="font-display text-xl ${fin?'':'text-ink-300'}">${m.goles_local??'–'} : ${m.goles_visita??'–'}</span>
-      ${m.penales?`<span class="text-[10px] text-ink-400">(${m.penales_local}-${m.penales_visita} pen.)</span>`:''}
+    const lado=(e,ori,der)=>e
+      ?(der?`${badge(e)} ${nomEq(e)}`:`${nomEq(e)} ${badge(e)}`)
+      :`<span class="italic text-ink-400">${etiquetaCupo(ori)}</span>`;
+    return `<div class="px-4 pt-3 border-b border-line last:border-0">
+      <div class="flex items-center">
+        <div class="flex-1 flex items-center justify-end gap-2 text-sm ${fin&&m.goles_local>m.goles_visita?'font-bold':''}">${lado(L,m.local_origen,false)}</div>
+        <div class="w-28 text-center">
+          ${vivo?`<span class="flex items-center justify-center gap-1 text-[9px] font-bold text-brand-600"><span class="live-dot"></span>EN VIVO</span>`
+            :`<span class="block text-[9px] font-bold uppercase ${fin?'text-emerald-600':'text-ink-400'}">${m.estado}</span>`}
+          <span class="font-display text-2xl">${m.goles_local??'–'} : ${m.goles_visita??'–'}</span>
+          ${m.penales?`<span class="block text-[9px] text-ink-400">pen. ${m.penales_local} × ${m.penales_visita}</span>`:''}
+        </div>
+        <div class="flex-1 flex items-center gap-2 text-sm ${fin&&m.goles_visita>m.goles_local?'font-bold':''}">${lado(V,m.visita_origen,true)}</div>
+      </div>
+      <p class="text-[10px] text-ink-400 text-center pb-2">${ctx}${m.fecha?' · '+m.fecha:''}${m.hora?' '+m.hora.slice(0,5):''}${m.sede?' · '+m.sede:''}</p>
     </div>`;
   };
   const jugados=(pms||[]).filter(m=>['finalizado','walkover'].includes(m.estado));
