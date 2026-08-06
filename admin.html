@@ -1691,6 +1691,9 @@ async function modalJornada(jid){
       <button onclick="cambiarDiaJornada('${jid}')" class="bg-ink-900 text-white text-xs font-bold px-4 rounded-xl hover:bg-ink-700">APLICAR A TODA LA FECHA</button>
     </div>
 
+    <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1.5">Compartir programación</p>
+    <button onclick="generarImagenJornada('${jid}')" class="w-full bg-ink-900 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-ink-700 mb-4">🖼 DESCARGAR IMAGEN DE LA PROGRAMACIÓN</button>
+
     <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1.5">Horarios en Excel</p>
     <div class="flex gap-2 mb-1">
       <button onclick="exportarExcelJornada('${jid}')" class="flex-1 bg-white border border-emerald-600 text-emerald-700 text-xs font-bold py-2.5 rounded-xl hover:bg-emerald-50">⬇ DESCARGAR EXCEL</button>
@@ -1714,6 +1717,104 @@ async function modalJornada(jid){
         :`<button onclick="eliminarJornada('${jid}')" class="w-full bg-white border border-brand-100 text-brand-600 text-sm font-bold py-2.5 rounded-xl hover:bg-brand-50">🗑 ELIMINAR LA FECHA COMPLETA (${ms.length} partido(s) programado(s))</button>`}
     </div>`);
 }
+/* ---- Imagen de la programación (flyer PNG para compartir) ---- */
+function cargarImg(url){
+  return new Promise(res=>{
+    if(!url){res(null);return;}
+    const im=new Image(); im.crossOrigin='anonymous';
+    const t=setTimeout(()=>res(null),6000);
+    im.onload=()=>{clearTimeout(t);res(im)};
+    im.onerror=()=>{clearTimeout(t);res(null)};
+    im.src=url;
+  });
+}
+async function generarImagenJornada(jid){
+  const j=JORNADAS.find(x=>x.id===jid); if(!j) return;
+  const {data:ms,error}=await sb.from('partido').select('*').eq('jornada_id',jid).order('hora').order('cancha');
+  if(error){toast(errNegocio(error));return;}
+  if(!ms.length){toast('⚠ Esta fecha no tiene partidos');return;}
+  toast('🖼 Generando imagen…');
+  await Promise.all([document.fonts.load('80px "Bebas Neue"'),document.fonts.load('700 30px Inter'),document.fonts.load('600 26px Inter')]);
+  // recursos: logo + escudos (best effort; si falla se dibujan iniciales)
+  const logo=await cargarImg(TORNEO.logo_url||MARCA.logo_url);
+  const escudos={};
+  await Promise.all([...new Set(ms.flatMap(m=>[m.local_id,m.visita_id]).filter(Boolean))].map(async id=>{
+    const cl=CLUBES[(EQUIPOS[id]||{}).club_id]||{};
+    escudos[id]={img:await cargarImg(cl.escudo_url), color:cl.color||'#334155', ini:iniciales(cl.nombre||'?')};
+  }));
+  const W=1080, HEAD=300, ROW=112, FOOT=96, H=HEAD+ms.length*ROW+FOOT;
+  const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+  const x=cv.getContext('2d');
+  const dib=(img,cx,cy,r,color,ini)=>{ // escudo circular con fallback de iniciales
+    x.save(); x.beginPath(); x.arc(cx,cy,r,0,7); x.clip();
+    if(img){x.drawImage(img,cx-r,cy-r,r*2,r*2);}
+    else{x.fillStyle=color; x.fillRect(cx-r,cy-r,r*2,r*2);
+      x.fillStyle='#fff'; x.font=`700 ${Math.round(r*0.8)}px Inter`; x.textAlign='center'; x.textBaseline='middle'; x.fillText(ini,cx,cy+2);}
+    x.restore(); x.textAlign='left'; x.textBaseline='alphabetic';
+  };
+  const fitText=(t,font,max)=>{let s=parseInt(font.match(/(\d+)px/)[1]);
+    for(;s>18;s--){x.font=font.replace(/\d+px/,s+'px'); if(x.measureText(t).width<=max) break;} return x.font;};
+  // fondo
+  x.fillStyle='#faf9f7'; x.fillRect(0,0,W,H);
+  // cabecera
+  x.fillStyle='#171e2e'; x.fillRect(0,0,W,HEAD);
+  x.fillStyle='#d9232e'; x.fillRect(0,HEAD-10,W,10);
+  dib(logo,116,116,64,'#d9232e',iniciales(MARCA.nombre));
+  x.fillStyle='#ffffff';
+  x.font=fitText(TORNEO.nombre.toUpperCase(),'88px "Bebas Neue"',820);
+  x.fillText(TORNEO.nombre.toUpperCase(),216,132);
+  x.fillStyle='rgba(255,255,255,.55)'; x.font='600 30px Inter';
+  x.fillText((CAT.nombre_display||('Categoría '+CAT.anio_nacimiento+' / '+CAT.modalidad))+'  ·  '+MARCA.nombre,218,178);
+  const dia=await diaDeJornada(jid);
+  const diaTxt=dia?new Date(dia+'T00:00:00').toLocaleDateString('es-PE',{weekday:'long',day:'numeric',month:'long'}).toUpperCase():'DÍA POR CONFIRMAR';
+  x.fillStyle='#ffd166'; x.font='54px "Bebas Neue"';
+  x.fillText('FECHA '+j.numero+'  ·  '+diaTxt,218,242);
+  // filas
+  ms.forEach((m,i)=>{
+    const y=HEAD+22+i*ROW, hCard=ROW-20, cy=y+hCard/2;
+    x.fillStyle='#ffffff';
+    x.beginPath(); x.roundRect(28,y,W-56,hCard,22); x.fill();
+    x.strokeStyle='#e9e6e0'; x.lineWidth=2; x.stroke();
+    // hora
+    x.fillStyle='#171e2e'; x.font='52px "Bebas Neue"'; x.textBaseline='middle';
+    x.fillText(m.hora?m.hora.slice(0,5):'--:--',56,cy+2);
+    // local (alineado a la derecha del centro)
+    const L=EQUIPOS[m.local_id], V=EQUIPOS[m.visita_id];
+    const nL=L?nomEq(L).toUpperCase():'POR DEFINIR', nV=V?nomEq(V).toUpperCase():'POR DEFINIR';
+    x.font=fitText(nL,'700 30px Inter',236); x.fillStyle='#171e2e'; x.textAlign='right';
+    x.fillText(nL,W/2-108,cy+2);
+    if(L) dib(escudos[m.local_id].img,W/2-72,cy,26,escudos[m.local_id].color,escudos[m.local_id].ini);
+    // vs
+    x.fillStyle='#d9232e'; x.font='34px "Bebas Neue"'; x.textAlign='center'; x.textBaseline='middle';
+    x.fillText('VS',W/2,cy+2);
+    // visita
+    if(V) dib(escudos[m.visita_id].img,W/2+72,cy,26,escudos[m.visita_id].color,escudos[m.visita_id].ini);
+    x.textAlign='left'; x.textBaseline='middle';
+    x.font=fitText(nV,'700 30px Inter',236); x.fillStyle='#171e2e';
+    x.fillText(nV,W/2+108,cy+2);
+    // cancha / sede (derecha)
+    const lugar=[m.cancha,m.sede].filter(Boolean).join(' · ');
+    if(lugar){ x.fillStyle='#5b6478'; x.textAlign='right';
+      x.font=fitText(lugar,'600 24px Inter',180); x.fillText(lugar,W-56,cy+2); }
+    x.textAlign='left'; x.textBaseline='alphabetic';
+  });
+  // pie
+  x.fillStyle='#8b93a7'; x.font='600 24px Inter'; x.textAlign='center';
+  x.fillText('Programación oficial  ·  ⚡ Powered by Liguify  ·  liguify.com/'+(MARCA.slug||''),W/2,H-38);
+  x.textAlign='left';
+  window.__CV=cv;   // referencia para vista previa / QA
+  try{
+    cv.toBlob(b=>{
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(b);
+      a.download=`programacion-fecha-${j.numero}.png`;
+      a.click();
+      setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+      toast('🖼 Imagen descargada ✔ — lista para WhatsApp e Instagram');
+    },'image/png');
+  }catch(e){toast('⚠ No se pudo exportar la imagen: '+(e.message||e));}
+}
+
 /* ---- Excel de horarios: exportar / importar con validación ---- */
 async function exportarExcelJornada(jid){
   const j=JORNADAS.find(x=>x.id===jid);
