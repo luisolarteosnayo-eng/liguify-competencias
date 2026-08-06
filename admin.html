@@ -1742,7 +1742,11 @@ async function generarImagenJornada(jid){
     const cl=CLUBES[(EQUIPOS[id]||{}).club_id]||{};
     escudos[id]={img:await cargarImg(cl.escudo_url), color:cl.color||'#334155', ini:iniciales(cl.nombre||'?')};
   }));
-  const W=1080, HEAD=300, ROW=112, FOOT=96, H=HEAD+ms.length*ROW+FOOT;
+  // lugar común: si toda la fecha se juega en la misma cancha/sede, va en la cabecera
+  const lugarDe=m=>[m.cancha,m.sede].filter(Boolean).join(' · ');
+  const lugares=[...new Set(ms.map(lugarDe).filter(Boolean))];
+  const lugarComun=lugares.length===1?lugares[0]:null;
+  const W=1080, HEAD=lugarComun?352:300, ROW=112, FOOT=96, H=HEAD+ms.length*ROW+FOOT;
   const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
   const x=cv.getContext('2d');
   const dib=(img,cx,cy,r,color,ini)=>{ // escudo circular con fallback de iniciales
@@ -1767,8 +1771,12 @@ async function generarImagenJornada(jid){
   x.fillText((CAT.nombre_display||('Categoría '+CAT.anio_nacimiento+' / '+CAT.modalidad))+'  ·  '+MARCA.nombre,218,178);
   const dia=await diaDeJornada(jid);
   const diaTxt=dia?new Date(dia+'T00:00:00').toLocaleDateString('es-PE',{weekday:'long',day:'numeric',month:'long'}).toUpperCase():'DÍA POR CONFIRMAR';
-  x.fillStyle='#ffd166'; x.font='54px "Bebas Neue"';
+  x.fillStyle='#ffd166'; x.font=fitText('FECHA '+j.numero+'  ·  '+diaTxt,'54px "Bebas Neue"',830);
   x.fillText('FECHA '+j.numero+'  ·  '+diaTxt,218,242);
+  if(lugarComun){
+    x.fillStyle='rgba(255,255,255,.85)'; x.font=fitText('📍 '+lugarComun.toUpperCase(),'42px "Bebas Neue"',830);
+    x.fillText('📍 '+lugarComun.toUpperCase(),218,306);
+  }
   // filas
   ms.forEach((m,i)=>{
     const y=HEAD+22+i*ROW, hCard=ROW-20, cy=y+hCard/2;
@@ -1778,10 +1786,13 @@ async function generarImagenJornada(jid){
     // hora
     x.fillStyle='#171e2e'; x.font='52px "Bebas Neue"'; x.textBaseline='middle';
     x.fillText(m.hora?m.hora.slice(0,5):'--:--',56,cy+2);
-    // local (alineado a la derecha del centro)
+    // zonas reservadas (nunca se superponen): hora [56..200] · local [210..W/2-108]
+    // · escudos/VS centro · visita [W/2+108 .. limVisita] · lugar [limVisita+16 .. W-56]
+    const conLugarFila=!lugarComun&&lugarDe(m);
+    const limVisita=conLugarFila?W-56-206:W-72;
     const L=EQUIPOS[m.local_id], V=EQUIPOS[m.visita_id];
     const nL=L?nomEq(L).toUpperCase():'POR DEFINIR', nV=V?nomEq(V).toUpperCase():'POR DEFINIR';
-    x.font=fitText(nL,'700 30px Inter',236); x.fillStyle='#171e2e'; x.textAlign='right';
+    x.font=fitText(nL,'700 30px Inter',(W/2-108)-210); x.fillStyle='#171e2e'; x.textAlign='right';
     x.fillText(nL,W/2-108,cy+2);
     if(L) dib(escudos[m.local_id].img,W/2-72,cy,26,escudos[m.local_id].color,escudos[m.local_id].ini);
     // vs
@@ -1790,12 +1801,11 @@ async function generarImagenJornada(jid){
     // visita
     if(V) dib(escudos[m.visita_id].img,W/2+72,cy,26,escudos[m.visita_id].color,escudos[m.visita_id].ini);
     x.textAlign='left'; x.textBaseline='middle';
-    x.font=fitText(nV,'700 30px Inter',236); x.fillStyle='#171e2e';
+    x.font=fitText(nV,'700 30px Inter',limVisita-(W/2+108)); x.fillStyle='#171e2e';
     x.fillText(nV,W/2+108,cy+2);
-    // cancha / sede (derecha)
-    const lugar=[m.cancha,m.sede].filter(Boolean).join(' · ');
-    if(lugar){ x.fillStyle='#5b6478'; x.textAlign='right';
-      x.font=fitText(lugar,'600 24px Inter',180); x.fillText(lugar,W-56,cy+2); }
+    // cancha / sede por fila (solo si NO hay lugar común en cabecera)
+    if(conLugarFila){ x.fillStyle='#5b6478'; x.textAlign='right';
+      x.font=fitText(conLugarFila,'600 24px Inter',190); x.fillText(conLugarFila,W-56,cy+2); }
     x.textAlign='left'; x.textBaseline='alphabetic';
   });
   // pie
