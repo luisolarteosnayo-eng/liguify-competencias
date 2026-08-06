@@ -1706,7 +1706,7 @@ async function modalJornada(jid){
       </select>
       <button onclick="intercambiarJornada('${jid}')" class="bg-ink-900 text-white text-xs font-bold px-4 rounded-xl hover:bg-ink-700">⇄ INTERCAMBIAR</button>
     </div>
-    <p class="text-[11px] text-ink-400 mb-4">Los cruces no cambian: la Fecha ${j.numero} se jugará el día de la otra fecha y viceversa (las horas de cada partido se conservan).</p>
+    <p class="text-[11px] text-ink-400 mb-4">Se intercambian los PARTIDOS: los cruces de la Fecha ${j.numero} pasan a la otra fecha y viceversa. Cada fecha conserva su día del calendario y las horas de cada partido se mantienen.</p>
 
     <div class="border-t border-line pt-3">
       ${jugados
@@ -1820,17 +1820,23 @@ async function cambiarDiaJornada(jid){
 async function intercambiarJornada(jid){
   const otraId=$('jr-swap').value;
   if(!otraId){toast('⚠ Elige la otra fecha');return;}
-  const dA=await diaDeJornada(jid), dB=await diaDeJornada(otraId);
-  if(!dA||!dB){toast('⚠ Ambas fechas necesitan un día asignado para intercambiar');return;}
   const jA=JORNADAS.find(x=>x.id===jid), jB=JORNADAS.find(x=>x.id===otraId);
-  if(!confirm(`¿Intercambiar días?\n\nFecha ${jA.numero} pasa a jugarse el ${dB}\nFecha ${jB.numero} pasa a jugarse el ${dA}\n\nLos cruces y las horas de cada partido se conservan.`))return;
-  const r1=await sb.from('partido').update({fecha:dB}).eq('jornada_id',jid);
-  const r2=await sb.from('partido').update({fecha:dA}).eq('jornada_id',otraId);
-  if(r1.error||r2.error){toast(errNegocio(r1.error||r2.error));return;}
-  await sb.from('jornada').update({fecha:dB}).eq('id',jid);
-  await sb.from('jornada').update({fecha:dA}).eq('id',otraId);
-  const js=await sb.from('jornada').select('*').eq('categoria_id',CAT.id).order('numero'); JORNADAS=js.data||JORNADAS;
-  cerrarModal(); toast(`⇄ Días intercambiados: Fecha ${jA.numero} → ${dB} · Fecha ${jB.numero} → ${dA} ✔`);
+  const dA=await diaDeJornada(jid), dB=await diaDeJornada(otraId);
+  const msA=((await sb.from('partido').select('id').eq('jornada_id',jid)).data||[]).map(x=>x.id);
+  const msB=((await sb.from('partido').select('id').eq('jornada_id',otraId)).data||[]).map(x=>x.id);
+  if(!confirm(`¿Intercambiar los PARTIDOS entre fechas?\n\nLos ${msA.length} partido(s) de la Fecha ${jA.numero} pasan a la Fecha ${jB.numero}, y los ${msB.length} de la Fecha ${jB.numero} pasan a la Fecha ${jA.numero}.\n\nCada fecha CONSERVA su día del calendario (Fecha ${jA.numero}: ${dA||'sin día'} · Fecha ${jB.numero}: ${dB||'sin día'}). Las horas de cada partido se conservan.`))return;
+  // cruzar los partidos y asignarles el día de su NUEVA fecha
+  if(msA.length){
+    const u={jornada_id:otraId}; if(dB) u.fecha=dB;
+    const r=await sb.from('partido').update(u).in('id',msA);
+    if(r.error){toast(errNegocio(r.error));return;}
+  }
+  if(msB.length){
+    const u={jornada_id:jid}; if(dA) u.fecha=dA;
+    const r=await sb.from('partido').update(u).in('id',msB);
+    if(r.error){toast(errNegocio(r.error));return;}
+  }
+  cerrarModal(); toast(`⇄ Partidos intercambiados: Fecha ${jA.numero} ↔ Fecha ${jB.numero} ✔ — cada fecha conserva su día`);
   await renderFixture();
 }
 async function eliminarJornada(jid){
