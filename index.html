@@ -301,7 +301,9 @@ async function renderFixture(){
     .eq('categoria_id',CAT.id).order('fecha').order('hora');
   if(error){$('tab-fixture').innerHTML='';err(error.message);return;}
   const grupos={};
-  data.forEach(m=>{ PART_IDX[m.id]=m; const k=m.etapa||('FECHA '+((m.jornada&&m.jornada.numero)||'?')); (grupos[k]=grupos[k]||[]).push(m); });
+  data.forEach(m=>{ PART_IDX[m.id]=m;
+    if(m.jornada&&m.jornada.horarios_publicados===false) return;   // fecha OCULTA: no se muestra en el público
+    const k=m.etapa||('FECHA '+((m.jornada&&m.jornada.numero)||'?')); (grupos[k]=grupos[k]||[]).push(m); });
   $('tab-fixture').innerHTML=Object.entries(grupos).map(([g,ms])=>`
     <div class="bg-white rounded-2xl border border-line mb-4">
       <div class="px-4 py-2.5 border-b border-line font-display text-lg tracking-wide">${g.toUpperCase()}</div>
@@ -439,9 +441,10 @@ async function irEquipoId(id){
       <p class="text-[10px] text-ink-400 text-center pb-2">${ctx}${(m.jornada&&m.jornada.horarios_publicados===false)?' · 🕒 horario por confirmar':`${m.fecha?' · '+m.fecha:''}${m.hora?' '+m.hora.slice(0,5):''}${m.sede?' · '+m.sede:''}`}</p>
     </div>`;
   };
-  const jugados=(pms||[]).filter(m=>['finalizado','walkover'].includes(m.estado));
-  const proximos=(pms||[]).filter(m=>!['finalizado','walkover'].includes(m.estado));
-  $('eq-partidos').innerHTML=(pms||[]).length?`
+  const visibles=(pms||[]).filter(m=>!(m.jornada&&m.jornada.horarios_publicados===false));  // fechas OCULTAS no se muestran
+  const jugados=visibles.filter(m=>['finalizado','walkover'].includes(m.estado));
+  const proximos=visibles.filter(m=>!['finalizado','walkover'].includes(m.estado));
+  $('eq-partidos').innerHTML=visibles.length?`
     ${proximos.length?`<div class="bg-white rounded-2xl border border-line mt-4 overflow-hidden">
       <p class="px-5 py-3 border-b border-line font-display text-xl tracking-wide">PRÓXIMOS PARTIDOS</p>
       ${proximos.map(filaP).join('')}

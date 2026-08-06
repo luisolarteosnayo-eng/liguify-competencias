@@ -1325,7 +1325,7 @@ async function generarFixture(){
   const jsFin=await sb.from('jornada').select('*').eq('categoria_id',CAT.id).order('numero');
   JORNADAS=jsFin.data||JORNADAS;
   cerrarModal();
-  toast(`Fixture generado ✔ ${zonasOk.length} zona(s) → ${totalFechas} fechas, ${filas.length} partidos. 🕒 Los horarios nacen OCULTOS al público: publícalos fecha por fecha cuando estén confirmados.`);
+  toast(`Fixture generado ✔ ${zonasOk.length} zona(s) → ${totalFechas} fechas, ${filas.length} partidos. 🚫 Las fechas nuevas nacen OCULTAS al público: publícalas una por una con 👁 cuando estén confirmadas.`);
   await renderFixture(); await renderTabla();
 }
 
@@ -1639,8 +1639,8 @@ async function renderFixture(){
   const htmlFechas=fechas.map(n=>{
     const jid=porFecha[n][0].jornada_id||'';
     const j=JORNADAS.find(x=>x.id===jid);
-    const btnHor=j?`<button onclick="modalJornada('${jid}')" title="Gestión de la jornada: cambiar día, intercambiar con otra fecha, eliminar" class="text-[10px] font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 mr-1 hover:bg-paper">⚙ FECHA</button>
-      <button onclick="toggleHorarios('${jid}',${j.horarios_publicados===false?'true':'false'})" title="Controla si el público ve fecha, hora y sede de esta jornada" class="text-[10px] font-bold rounded-lg px-3 py-1.5 mr-1 ${j.horarios_publicados===false?'bg-amber-100 text-amber-700 border border-amber-300':'text-ink-400 border border-line hover:bg-paper'}">${j.horarios_publicados===false?'🕒 OCULTOS EN PÚBLICO':'🕒 HORARIOS VISIBLES'}</button>`:'';
+    const btnHor=j?`<button onclick="modalJornada('${jid}')" title="Gestión de la jornada: cambiar día, intercambiar con otra fecha, Excel, eliminar" class="text-[10px] font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 mr-1 hover:bg-paper">⚙ FECHA</button>
+      <button onclick="toggleHorarios('${jid}',${j.horarios_publicados===false?'true':'false'})" title="Controla si esta jornada completa se muestra en el módulo público" class="text-[10px] font-bold rounded-lg px-3 py-1.5 mr-1 ${j.horarios_publicados===false?'bg-amber-100 text-amber-700 border border-amber-300':'text-ink-400 border border-line hover:bg-paper'}">${j.horarios_publicados===false?'🚫 OCULTA EN PÚBLICO':'👁 VISIBLE EN PÚBLICO'}</button>`:'';
     return `<div class="bg-white border border-line rounded-2xl mb-4">
       ${header('FECHA '+(n||'?'),`${btnHor}<button onclick="modalNuevoPartido('jornada','${jid}')" class="text-xs font-bold text-brand-600 border border-brand-100 rounded-lg px-3 py-1.5 hover:bg-brand-50">+ PARTIDO</button>`)}
       ${porFecha[n].map(fila).join('')}
@@ -1664,7 +1664,7 @@ async function toggleHorarios(jid,mostrar){
   const {data,error}=await sb.from('jornada').update({horarios_publicados:mostrar}).eq('id',jid).select().single();
   if(error){toast(errNegocio(error));return;}
   const i=JORNADAS.findIndex(x=>x.id===jid); if(i>=0) JORNADAS[i]=data;
-  toast(mostrar?'🕒 Horarios PUBLICADOS ✔ — el público ya ve fecha, hora y sede de esta jornada':'🕒 Horarios OCULTOS — el público ve los cruces con "horario por confirmar" mientras terminas la programación');
+  toast(mostrar?'👁 Fecha PUBLICADA ✔ — el público ya ve esta jornada completa (cruces, día y horarios)':'🚫 Fecha OCULTA — esta jornada NO aparece en el público mientras la trabajas (el club sí ve sus cruces con "por confirmar")');
   await renderFixture();
 }
 
