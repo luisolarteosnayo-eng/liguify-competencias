@@ -4,6 +4,7 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 <script>
 tailwind.config={theme:{extend:{
@@ -1690,6 +1691,14 @@ async function modalJornada(jid){
       <button onclick="cambiarDiaJornada('${jid}')" class="bg-ink-900 text-white text-xs font-bold px-4 rounded-xl hover:bg-ink-700">APLICAR A TODA LA FECHA</button>
     </div>
 
+    <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1.5">Horarios en Excel</p>
+    <div class="flex gap-2 mb-1">
+      <button onclick="exportarExcelJornada('${jid}')" class="flex-1 bg-white border border-emerald-600 text-emerald-700 text-xs font-bold py-2.5 rounded-xl hover:bg-emerald-50">⬇ DESCARGAR EXCEL</button>
+      <label class="flex-1 bg-white border border-line text-ink-500 text-xs font-bold py-2.5 rounded-xl hover:bg-paper text-center cursor-pointer">⬆ IMPORTAR EXCEL
+        <input type="file" accept=".xlsx,.xls,.csv" class="hidden" onchange="importarExcelJornada('${jid}',this)"/></label>
+    </div>
+    <p class="text-[11px] text-ink-400 mb-4">Descarga, edita <b>DÍA, HORA, SEDE, CANCHA y ÁRBITRO</b> en Excel (sin tocar la columna ID) y vuelve a importar. El sistema valida cada fila antes de aplicar.</p>
+
     <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1.5">Intercambiar día con otra fecha</p>
     <div class="flex gap-2 mb-1">
       <select id="jr-swap" class="flex-1 border border-line rounded-xl px-3 py-2 text-sm font-semibold bg-white">
@@ -1704,6 +1713,99 @@ async function modalJornada(jid){
         ?`<p class="text-xs font-bold text-ink-400">🔒 Esta fecha no se puede eliminar: tiene ${jugados} partido(s) jugado(s) o en vivo.</p>`
         :`<button onclick="eliminarJornada('${jid}')" class="w-full bg-white border border-brand-100 text-brand-600 text-sm font-bold py-2.5 rounded-xl hover:bg-brand-50">🗑 ELIMINAR LA FECHA COMPLETA (${ms.length} partido(s) programado(s))</button>`}
     </div>`);
+}
+/* ---- Excel de horarios: exportar / importar con validación ---- */
+async function exportarExcelJornada(jid){
+  const j=JORNADAS.find(x=>x.id===jid);
+  const {data:ms,error}=await sb.from('partido').select('*').eq('jornada_id',jid).order('hora');
+  if(error){toast(errNegocio(error));return;}
+  if(!ms.length){toast('⚠ Esta fecha no tiene partidos');return;}
+  const filas=ms.map(m=>({
+    'ID (no modificar)':m.id,
+    'LOCAL (referencia)':EQUIPOS[m.local_id]?nomEq(EQUIPOS[m.local_id]):'',
+    'VISITA (referencia)':EQUIPOS[m.visita_id]?nomEq(EQUIPOS[m.visita_id]):'',
+    'DIA (AAAA-MM-DD)':m.fecha||'',
+    'HORA (HH:MM)':m.hora?m.hora.slice(0,5):'',
+    'SEDE':m.sede||'',
+    'CANCHA':m.cancha||'',
+    'ARBITRO':m.arbitro||''
+  }));
+  const ws=XLSX.utils.json_to_sheet(filas);
+  ws['!cols']=[{wch:38},{wch:26},{wch:26},{wch:16},{wch:12},{wch:20},{wch:14},{wch:18}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Fecha '+j.numero);
+  XLSX.writeFile(wb,`fixture-fecha-${j.numero}.xlsx`);
+  toast('⬇ Excel descargado ✔ — edita día, hora, sede, cancha y árbitro SIN tocar la columna ID, y vuelve a importarlo aquí');
+}
+let IMP_UPDATES=[];
+async function importarExcelJornada(jid,input){
+  const f=input.files&&input.files[0]; if(!f) return; input.value='';
+  let rows;
+  try{
+    const wb=XLSX.read(await f.arrayBuffer(),{cellDates:true});
+    rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+  }catch(e){toast('⚠ No se pudo leer el archivo: '+(e.message||e));return;}
+  if(!rows.length){toast('⚠ El archivo no tiene filas');return;}
+  const {data:ms}=await sb.from('partido').select('*').eq('jornada_id',jid);
+  const porId=Object.fromEntries((ms||[]).map(m=>[m.id,m]));
+  const norm=s=>String(s||'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  const col=(r,pref)=>{const k=Object.keys(r).find(k2=>norm(k2).startsWith(norm(pref)));return k!==undefined?r[k]:'';};
+  const pDia=v=>{ if(v instanceof Date) return v.toISOString().slice(0,10);
+    const s=String(v).trim(); if(!s) return null;
+    if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+    const m2=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); if(m2) return `${m2[3]}-${m2[2].padStart(2,'0')}-${m2[1].padStart(2,'0')}`;
+    return undefined; };
+  const pHora=v=>{ if(v instanceof Date) return String(v.getHours()).padStart(2,'0')+':'+String(v.getMinutes()).padStart(2,'0');
+    if(typeof v==='number'&&v>=0&&v<1.5){const t=Math.round(v*24*60);return String(Math.floor(t/60)%24).padStart(2,'0')+':'+String(t%60).padStart(2,'0');}
+    const s=String(v).trim(); if(!s) return null;
+    const m2=s.match(/^(\d{1,2}):(\d{2})/); if(m2) return m2[1].padStart(2,'0')+':'+m2[2];
+    return undefined; };
+  const vistos=new Set(); const res=[];
+  rows.forEach((r,idx)=>{
+    const id=String(col(r,'ID')||'').trim();
+    const fila={n:idx+2, id};
+    if(!id){fila.err='sin ID';res.push(fila);return;}
+    if(vistos.has(id)){fila.err='ID duplicado en el archivo';res.push(fila);return;}
+    vistos.add(id);
+    const m=porId[id];
+    if(!m){fila.err='el ID no pertenece a esta fecha / categoría';res.push(fila);return;}
+    const L=EQUIPOS[m.local_id]?nomEq(EQUIPOS[m.local_id]):'', V=EQUIPOS[m.visita_id]?nomEq(EQUIPOS[m.visita_id]):'';
+    const eL=String(col(r,'LOCAL')||'').trim(), eV=String(col(r,'VISITA')||'').trim();
+    if(eL&&norm(eL)!==norm(L)){fila.err=`los equipos no coinciden con el ID (archivo: "${eL}" · sistema: "${L}")`;res.push(fila);return;}
+    if(eV&&norm(eV)!==norm(V)){fila.err=`los equipos no coinciden con el ID (archivo: "${eV}" · sistema: "${V}")`;res.push(fila);return;}
+    const dia=pDia(col(r,'DIA')), hora=pHora(col(r,'HORA'));
+    if(dia===undefined){fila.err='DÍA inválido (usa AAAA-MM-DD)';res.push(fila);return;}
+    if(hora===undefined){fila.err='HORA inválida (usa HH:MM)';res.push(fila);return;}
+    const upd={fecha:dia, hora, sede:String(col(r,'SEDE')||'').trim()||null,
+      cancha:String(col(r,'CANCHA')||'').trim()||null, arbitro:String(col(r,'ARBITRO')||'').trim()||null};
+    fila.label=`${L} vs ${V}`; fila.upd=upd;
+    fila.cambia=(upd.fecha||'')!==(m.fecha||'')||(upd.hora||'')!==(m.hora?m.hora.slice(0,5):'')
+      ||(upd.sede||'')!==(m.sede||'')||(upd.cancha||'')!==(m.cancha||'')||(upd.arbitro||'')!==(m.arbitro||'');
+    res.push(fila);
+  });
+  const errores=res.filter(x=>x.err), ok=res.filter(x=>!x.err&&x.cambia), sinCambio=res.filter(x=>!x.err&&!x.cambia);
+  IMP_UPDATES=ok;
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⬆ IMPORTAR HORARIOS</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs mb-3"><b class="text-emerald-700">${ok.length} para actualizar</b> · <span class="text-ink-400">${sinCambio.length} sin cambios</span> · <b class="${errores.length?'text-brand-600':'text-ink-400'}">${errores.length} con error</b></p>
+    ${ok.length?`<div class="max-h-44 overflow-y-auto border border-line rounded-xl mb-3">${ok.map(x=>`
+      <div class="px-3 py-1.5 border-b border-line last:border-0 text-xs"><b>${x.label}</b>
+        <span class="text-ink-400 block">${x.upd.fecha||'— sin día'} ${x.upd.hora||''}${x.upd.sede?' · '+x.upd.sede:''}${x.upd.cancha?' · '+x.upd.cancha:''}${x.upd.arbitro?' · '+x.upd.arbitro:''}</span></div>`).join('')}</div>`:''}
+    ${errores.length?`<div class="max-h-36 overflow-y-auto border border-brand-100 bg-brand-50 rounded-xl mb-3">${errores.map(x=>`
+      <div class="px-3 py-1.5 border-b border-brand-100 last:border-0 text-xs text-brand-700"><b>Fila ${x.n}:</b> ${x.err}</div>`).join('')}</div>`:''}
+    ${ok.length
+      ?`<button onclick="aplicarImportacion()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">APLICAR ${ok.length} CAMBIO(S)${errores.length?' (las filas con error se omiten)':''}</button>`
+      :'<p class="text-xs text-ink-400 text-center">Nada que aplicar.</p>'}`);
+}
+async function aplicarImportacion(){
+  let n=0;
+  for(const x of IMP_UPDATES){
+    const {error}=await sb.from('partido').update(x.upd).eq('id',x.id);
+    if(error){toast(`⚠ Fila ${x.n} (${x.label}): `+errNegocio(error));return;}
+    n++;
+  }
+  IMP_UPDATES=[];
+  cerrarModal(); toast(`⬆ ${n} partido(s) actualizados desde Excel ✔ — revisa y publica los horarios con 🕒`);
+  await renderFixture();
 }
 async function cambiarDiaJornada(jid){
   const dia=$('jr-dia').value;
