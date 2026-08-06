@@ -297,7 +297,7 @@ async function renderTabla(){
 /* Fixture: partidos agrupados por jornada, desde la BD */
 async function renderFixture(){
   const {data,error}=await sb.from('partido')
-    .select('*, jornada:jornada_id(numero,nombre), zona:zona_id(nombre)')
+    .select('*, jornada:jornada_id(numero,nombre,horarios_publicados), zona:zona_id(nombre)')
     .eq('categoria_id',CAT.id).order('fecha').order('hora');
   if(error){$('tab-fixture').innerHTML='';err(error.message);return;}
   const grupos={};
@@ -323,7 +323,7 @@ async function renderFixture(){
           </div>
           <div class="flex-1 flex items-center gap-2 text-sm ${gV?'font-bold':''}">${lado(V,m.visita_origen,true)}</div>
         </div>
-        <p class="text-[10px] text-ink-400 text-center pb-2 -mt-1">${m.fecha||''} ${m.hora?('· '+m.hora.slice(0,5)):''} ${m.sede?('· '+m.sede):''}</p>`;
+        <p class="text-[10px] text-ink-400 text-center pb-2 -mt-1">${(m.jornada&&m.jornada.horarios_publicados===false)?'🕒 horario por confirmar':`${m.fecha||''} ${m.hora?('· '+m.hora.slice(0,5)):''} ${m.sede?('· '+m.sede):''}`}</p>`;
       }).join('')}
     </div>`).join('') || '<p class="text-ink-400 text-sm">Sin partidos programados.</p>';
 }
@@ -412,7 +412,7 @@ async function irEquipoId(id){
   </div>`;
   // Partidos del equipo: resultados y programados (mockup: ficha completa)
   const {data:pms}=await sb.from('partido')
-    .select('*, jornada:jornada_id(numero)')
+    .select('*, jornada:jornada_id(numero,horarios_publicados)')
     .eq('categoria_id',CAT.id)
     .or(`local_id.eq.${id},visita_id.eq.${id}`)
     .order('fecha').order('hora');
@@ -436,7 +436,7 @@ async function irEquipoId(id){
         </div>
         <div class="flex-1 flex items-center gap-2 text-sm ${gV?'font-bold':''}">${lado(V,m.visita_origen,true)}</div>
       </div>
-      <p class="text-[10px] text-ink-400 text-center pb-2">${ctx}${m.fecha?' · '+m.fecha:''}${m.hora?' '+m.hora.slice(0,5):''}${m.sede?' · '+m.sede:''}</p>
+      <p class="text-[10px] text-ink-400 text-center pb-2">${ctx}${(m.jornada&&m.jornada.horarios_publicados===false)?' · 🕒 horario por confirmar':`${m.fecha?' · '+m.fecha:''}${m.hora?' '+m.hora.slice(0,5):''}${m.sede?' · '+m.sede:''}`}</p>
     </div>`;
   };
   const jugados=(pms||[]).filter(m=>['finalizado','walkover'].includes(m.estado));

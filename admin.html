@@ -1634,8 +1634,10 @@ async function renderFixture(){
   const fechas=Object.keys(porFecha).map(Number).sort((a,b)=>a-b);
   const htmlFechas=fechas.map(n=>{
     const jid=porFecha[n][0].jornada_id||'';
+    const j=JORNADAS.find(x=>x.id===jid);
+    const btnHor=j?`<button onclick="toggleHorarios('${jid}',${j.horarios_publicados===false?'true':'false'})" title="Controla si el público ve fecha, hora y sede de esta jornada" class="text-[10px] font-bold rounded-lg px-3 py-1.5 mr-1 ${j.horarios_publicados===false?'bg-amber-100 text-amber-700 border border-amber-300':'text-ink-400 border border-line hover:bg-paper'}">${j.horarios_publicados===false?'🕒 OCULTOS EN PÚBLICO':'🕒 HORARIOS VISIBLES'}</button>`:'';
     return `<div class="bg-white border border-line rounded-2xl mb-4">
-      ${header('FECHA '+(n||'?'),`<button onclick="modalNuevoPartido('jornada','${jid}')" class="text-xs font-bold text-brand-600 border border-brand-100 rounded-lg px-3 py-1.5 hover:bg-brand-50">+ PARTIDO</button>`)}
+      ${header('FECHA '+(n||'?'),`${btnHor}<button onclick="modalNuevoPartido('jornada','${jid}')" class="text-xs font-bold text-brand-600 border border-brand-100 rounded-lg px-3 py-1.5 hover:bg-brand-50">+ PARTIDO</button>`)}
       ${porFecha[n].map(fila).join('')}
     </div>`;
   }).join('');
@@ -1652,6 +1654,15 @@ async function renderFixture(){
       <button onclick="modalFixture()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">⚙️ GENERAR FIXTURE</button>`:''}</div>`
     + ((htmlFechas+htmlFases) || '<p class="text-ink-400 text-sm">Sin partidos.</p>');
 }
+/* ---- Horarios por jornada: visibles u ocultos en el público ---- */
+async function toggleHorarios(jid,mostrar){
+  const {data,error}=await sb.from('jornada').update({horarios_publicados:mostrar}).eq('id',jid).select().single();
+  if(error){toast(errNegocio(error));return;}
+  const i=JORNADAS.findIndex(x=>x.id===jid); if(i>=0) JORNADAS[i]=data;
+  toast(mostrar?'🕒 Horarios PUBLICADOS ✔ — el público ya ve fecha, hora y sede de esta jornada':'🕒 Horarios OCULTOS — el público ve los cruces con "horario por confirmar" mientras terminas la programación');
+  await renderFixture();
+}
+
 /* ---- Gestión de partidos: editar / agregar / eliminar ---- */
 function modalEditPartido(m){
   const L=EQUIPOS[m.local_id],V=EQUIPOS[m.visita_id];

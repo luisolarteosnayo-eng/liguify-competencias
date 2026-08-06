@@ -509,7 +509,7 @@ async function altaJugador(pais,doc){
 /* ---- PARTIDOS (formato fixture) ---- */
 async function renderPartidos(){
   const {data:pms,error}=await sb.from('partido')
-    .select('*, jornada:jornada_id(numero)')
+    .select('*, jornada:jornada_id(numero,horarios_publicados)')
     .eq('categoria_id',EQ.categoria_id)
     .or(`local_id.eq.${EQ.equipo_id},visita_id.eq.${EQ.equipo_id}`)
     .order('fecha').order('hora');
@@ -541,7 +541,7 @@ async function renderPartidos(){
         </div>
         <div class="flex-1 flex items-center gap-2 text-sm ${gV?'font-bold':''}">${lado(m.visita_id,true)}</div>
       </div>
-      <p class="text-[10px] text-ink-400 text-center pb-2">${ctx}${m.fecha?' · '+m.fecha:''}${m.hora?' '+m.hora.slice(0,5):''}${m.sede?' · '+m.sede:''}</p>
+      <p class="text-[10px] text-ink-400 text-center pb-2">${ctx}${(m.jornada&&m.jornada.horarios_publicados===false)?' · 🕒 horario por confirmar':`${m.fecha?' · '+m.fecha:''}${m.hora?' '+m.hora.slice(0,5):''}${m.sede?' · '+m.sede:''}`}</p>
     </div>`;
   };
   const jugados=(pms||[]).filter(m=>['finalizado','walkover'].includes(m.estado));

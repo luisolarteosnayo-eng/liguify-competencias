@@ -222,6 +222,7 @@ create table competencias.jornada (
   fecha            date,
   visible          boolean not null default true,
   computa_en_tabla boolean not null default true,   -- T4: fechas amistosas no suman
+  horarios_publicados boolean not null default true, -- ocultar fecha/hora/sede al público mientras se programa
   unique (categoria_id, numero)
 );
 
