@@ -598,7 +598,8 @@ async function renderEquipos(){
           <button onclick="asignarZona('${e.id}')" class="text-xs font-bold text-white bg-amber-500 rounded-lg px-3 py-1.5 hover:bg-amber-600">ASIGNAR</button>`
           :ZONAS.length?'':'<span class="text-[10px] text-amber-600 font-bold">crea una zona primero</span>'}
         <button onclick='abrirLBF("${e.id}")' class="text-xs font-bold text-brand-600 hover:underline">LBF →</button>
-        ${esAdmin()?btnRetirar(e):''}
+        ${esAdmin()?`<button onclick="modalCodigoDelegado('${e.id}')" title="Acceso del delegado (código de un solo uso)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-paper">🎟</button>
+        ${btnRetirar(e)}`:''}
       </div>`).join('')}
     </div>` : '';
   const cardRetirados = retirados.length ? `<div class="bg-white border border-line rounded-2xl mb-4 overflow-hidden opacity-80">
@@ -622,7 +623,8 @@ async function renderEquipos(){
         return `<div class="flex items-center gap-3 px-5 py-2.5 border-b border-line last:border-0">
           ${badgeEq(e)}<span class="flex-1 font-semibold text-sm">${nomEq(e)}</span>
           <button onclick='abrirLBF("${e.id}")' class="text-xs font-bold text-brand-600 hover:underline">LBF →</button>
-          ${esAdmin()?`<button onclick="modalZonaEquipo('${e.id}','${z.id}')" title="Mover de zona o quitar de la zona (validado contra sus partidos)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-paper">⇄ ZONA</button>
+          ${esAdmin()?`<button onclick="modalCodigoDelegado('${e.id}')" title="Acceso del delegado (código de un solo uso)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-paper">🎟</button>
+          <button onclick="modalZonaEquipo('${e.id}','${z.id}')" title="Mover de zona o quitar de la zona (validado contra sus partidos)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-paper">⇄ ZONA</button>
           ${btnRetirar(e)}`:''}
         </div>`;}).join('')||'<p class="px-5 py-5 text-sm text-ink-400">Zona sin equipos.</p>'}
     </div>`).join('')+cardRetirados;
@@ -985,6 +987,29 @@ async function altaJugador(pais,doc){
   cerrarModal();
   toast(anio!==CAT.anio_nacimiento?`⚠ Creado e inscrito como EXCEPCIÓN POR EDAD (nació ${anio}, categoría ${CAT.anio_nacimiento})`:'Jugador creado en la maestra e inscrito — PENDIENTE ✔');
   renderLBF();
+}
+
+/* ---- Acceso del delegado: código de UN SOLO USO (I4) ---- */
+function modalCodigoDelegado(eqId){
+  const e=EQUIPOS[eqId];
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">🎟 ACCESO DEL DELEGADO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-sm font-semibold mb-1">${nomEq(e)}</p>
+    <p class="text-xs mb-3 ${e.delegado_id?'text-emerald-700 font-bold':'text-ink-400'}">${e.delegado_id?'✔ Este equipo ya tiene un delegado vinculado.':'Este equipo aún no tiene delegado vinculado.'}</p>
+    ${e.delegado_codigo?`
+      <div class="bg-paper border-2 border-dashed border-line rounded-2xl p-4 text-center mb-3">
+        <p class="text-[10px] font-bold text-ink-400 uppercase tracking-widest mb-1">Código activo (un solo uso)</p>
+        <p class="font-display text-5xl tracking-[.2em]">${e.delegado_codigo}</p>
+      </div>
+      <button onclick="navigator.clipboard.writeText('Acceso delegado ${nomEq(e).replace(/'/g,'')}: entra a https://www.liguify.com/club, crea tu cuenta y canjea el código ${e.delegado_codigo}');toast('Instrucciones copiadas ✔ — pégalas en WhatsApp')" class="w-full bg-ink-900 text-white text-sm font-bold py-2.5 rounded-xl hover:bg-ink-700 mb-2">📋 COPIAR INSTRUCCIONES PARA WHATSAPP</button>`:''}
+    <button onclick="generarCodigoDelegado('${eqId}')" class="w-full ${e.delegado_codigo?'bg-white border border-line text-ink-500 hover:bg-paper':'bg-brand-500 text-white hover:bg-brand-600'} text-sm font-bold py-2.5 rounded-xl">${e.delegado_codigo?'⟳ REGENERAR (anula el actual)':'GENERAR CÓDIGO'}</button>
+    <p class="text-[11px] text-ink-400 mt-3">El delegado entra a <b>liguify.com/club</b>, crea su cuenta (o Google) y canjea el código. Es de <b>un solo uso</b>: al canjearse queda anulado y él queda vinculado al equipo — podrá cargar su LBF (los jugadores quedan PENDIENTES hasta que tú los valides) y ver sus partidos y tabla.</p>`);
+}
+async function generarCodigoDelegado(eqId){
+  const cod=Array.from({length:6},()=>'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[Math.floor(Math.random()*31)]).join('');
+  const {data,error}=await sb.from('equipo').update({delegado_codigo:cod}).eq('id',eqId).select().single();
+  if(error){toast(errNegocio(error));return;}
+  EQUIPOS[eqId]=data;
+  modalCodigoDelegado(eqId);
 }
 
 async function asignarZona(eqId){
