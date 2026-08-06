@@ -830,9 +830,63 @@ async function abrirLBF(eqId){
     <button onclick="modalClub('${EQUIPO.club_id}')" title="Editar escudo y datos del club">${badgeEq(EQUIPO,9)}</button>
     <div class="flex-1 min-w-40"><h1 class="font-display text-3xl tracking-wide">${nomEq(EQUIPO).toUpperCase()}</h1>
     <p class="text-white/50 text-sm">${(CLUBES[EQUIPO.club_id]||{}).nombre||''} · ${CAT.nombre_display||''}</p></div>
-    ${esAdmin()?`<button onclick="modalClub('${EQUIPO.club_id}')" class="bg-white/10 border border-white/20 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/20">🛡️ ESCUDO DEL CLUB</button>`:''}
+    ${esAdmin()?`<button onclick="modalClub('${EQUIPO.club_id}')" class="bg-white/10 border border-white/20 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/20">🛡️ ESCUDO DEL CLUB</button>
+      <button onclick="modalCoordinadorClub('${EQUIPO.club_id}')" class="bg-white/10 border border-white/20 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/20">👤 COORDINADOR</button>`:''}
   </div>`;
   await renderLBF(); show('s-lbf');
+}
+/* ---- Coordinador del club: invitación por email (enlace de acceso) ---- */
+const sbMail=supabase.createClient('https://bpsczjjomgzhnjxnzmhj.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwc2N6ampvbWd6aG5qeG56bWhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1MDg5MTgsImV4cCI6MjA5ODA4NDkxOH0.3O92Q-3xxdCmF1LStCQrlCtz1s_EfdlayXnL_mEElOw',
+  {auth:{storageKey:'sb-competencias-mail', persistSession:false}});
+async function enviarAccesoEmail(email){
+  const {error}=await sbMail.auth.signInWithOtp({email, options:{emailRedirectTo:'https://www.liguify.com/club', shouldCreateUser:true}});
+  return error;
+}
+async function modalCoordinadorClub(clubId){
+  const cl=CLUBES[clubId]||{};
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">👤 COORDINADOR · ${(cl.nombre||'').toUpperCase()}</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-3">El coordinador recibe un email con su enlace de acceso, <b>acepta la invitación</b> al torneo ${TORNEO.nombre} y podrá cargar la LBF de TODAS las categorías del club (y nombrar sub-coordinadores por categoría). Dentro crea su contraseña o entra con Google.</p>
+    <div id="ic-lista" class="mb-3 text-sm">Cargando…</div>
+    <div class="border-t border-line pt-3">
+      <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-2">Nueva invitación</p>
+      <div class="grid grid-cols-2 gap-3 text-sm mb-3">
+        ${campo('ic-n','Nombre','')}
+        ${campo('ic-t','Teléfono/WhatsApp','')}
+        <label class="col-span-2 block text-sm"><span class="text-ink-400 font-semibold text-xs">Email (obligatorio)</span><input id="ic-e" type="email" class="w-full border-b border-line py-1.5 font-semibold" placeholder="coordinador@club.pe"/></label>
+      </div>
+      <button onclick="enviarInvitacionCoordinador('${clubId}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">📨 INVITAR COORDINADOR</button>
+    </div>`);
+  refrescarInvitaciones(clubId);
+}
+async function refrescarInvitaciones(clubId){
+  const {data,error}=await sb.rpc('invitaciones_de_club',{p_torneo:TORNEO.id,p_club:clubId});
+  if(error){$('ic-lista').innerHTML=`<p class="text-brand-600 text-xs font-bold">${errNegocio(error)}</p>`;return;}
+  $('ic-lista').innerHTML=(data||[]).length?data.map(i=>`
+    <div class="flex items-center gap-2 py-1.5 border-b border-line last:border-0">
+      <span class="flex-1 min-w-0"><span class="font-semibold block truncate">${i.nombre||i.email}</span>
+        <span class="text-[10px] text-ink-400">${i.email}${i.categorias&&i.categorias.length?' · '+i.categorias.join(', '):''}</span></span>
+      <span class="text-[9px] font-bold uppercase rounded-full px-2 py-0.5 ${i.rol==='coordinador'?'bg-ink-900 text-white':'bg-sky-100 text-sky-700'}">${i.rol==='coordinador'?'COORD':'SUB'}</span>
+      <span class="text-[9px] font-bold uppercase rounded-full px-2 py-0.5 ${i.estado==='aceptada'?'bg-emerald-100 text-emerald-700':i.estado==='pendiente'?'bg-amber-100 text-amber-700':'bg-paper text-ink-400'}">${i.estado}</span>
+      ${i.estado==='pendiente'?`<button onclick="revocarInv('${i.id}','${clubId}')" class="text-ink-400 hover:text-brand-600 font-bold px-1" title="Revocar invitación">✕</button>`:''}
+    </div>`).join(''):'<p class="text-ink-400 text-xs">Sin invitaciones para este club en este torneo.</p>';
+}
+async function enviarInvitacionCoordinador(clubId){
+  const email=$('ic-e').value.trim();
+  if(!email){toast('⚠ El email es obligatorio');return;}
+  const r=await sb.rpc('invitar_coordinador',{p_torneo:TORNEO.id,p_club:clubId,p_email:email,p_nombre:$('ic-n').value.trim(),p_telefono:$('ic-t').value.trim()});
+  if(r.error){toast(errNegocio(r.error));return;}
+  const em=await enviarAccesoEmail(email);
+  toast(em?('Invitación registrada ✔ pero el email falló: '+em.message+' — puedes reenviar el acceso desde esta pantalla'):'📨 Invitación enviada ✔ — le llegó un email con su enlace de acceso a liguify.com/club');
+  $('ic-e').value=''; $('ic-n').value=''; $('ic-t').value='';
+  refrescarInvitaciones(clubId);
+}
+async function revocarInv(id,clubId){
+  if(!confirm('¿Revocar esta invitación pendiente? El enlace del email dejará de servir para este club.'))return;
+  const r=await sb.rpc('revocar_invitacion',{p_id:id});
+  if(r.error){toast(errNegocio(r.error));return;}
+  toast('Invitación revocada');
+  refrescarInvitaciones(clubId);
 }
 /* ---- Club: escudo (único por marca) + datos ---- */
 function modalClub(clubId){

@@ -23,6 +23,7 @@ tailwind.config={theme:{extend:{
     <span class="w-8 h-8 rounded-lg bg-brand-500 grid place-items-center font-display text-lg pt-0.5">L</span>
     <span class="font-display text-xl tracking-wide">LIGUIFY <span class="text-white/50">CLUB</span></span>
     <span id="hdr-user" class="ml-auto text-xs text-white/60"></span>
+    <button id="hdr-key" onclick="modalNuevaPassword()" class="hidden text-xs font-bold border border-white/20 rounded-lg px-3 py-1.5 hover:bg-white/10" title="Crear o cambiar mi contraseña">🔑</button>
     <button id="hdr-out" onclick="salir()" class="hidden text-xs font-bold border border-white/20 rounded-lg px-3 py-1.5 hover:bg-white/10">SALIR</button>
   </div>
 </header>
@@ -48,11 +49,13 @@ tailwind.config={theme:{extend:{
         <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.5 6.1 29.5 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.5 6.1 29.5 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 10-2 13.6-5.2l-6.3-5.3c-2 1.5-4.6 2.5-7.3 2.5-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4 5.6l6.3 5.3C41.4 35.4 44 30.1 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
         Entrar con Google
       </button>
+      <button onclick="olvidePassword()" class="w-full text-xs text-ink-400 underline mt-4">¿Olvidaste tu contraseña?</button>
     </div>
   </section>
 
   <!-- THE HUB: MIS EQUIPOS -->
   <section id="s-hub" class="screen">
+    <div id="hub-inv"></div>
     <div class="bg-white border-2 border-dashed border-line rounded-2xl p-5 mb-6">
       <p class="font-display text-xl tracking-wide mb-1">🎟 CANJEAR CÓDIGO DE EQUIPO</p>
       <p class="text-xs text-ink-400 mb-3">El organizador del torneo te entrega un código de un solo uso que te vincula como delegado de tu equipo.</p>
@@ -124,35 +127,153 @@ async function entrarGoogle(){
   if(error) msg('Google: '+error.message,'err');
 }
 async function salir(){ await sb.auth.signOut({scope:'local'}); location.reload(); }
-sb.auth.onAuthStateChange((ev)=>{ if(ev==='SIGNED_IN'&&$('s-login').classList.contains('active')) iniciar(); });
+sb.auth.onAuthStateChange((ev)=>{
+  if(ev==='PASSWORD_RECOVERY'){ modalNuevaPassword(); return; }
+  if(ev==='SIGNED_IN'&&$('s-login').classList.contains('active')) iniciar();
+});
+const sbMail=supabase.createClient('https://bpsczjjomgzhnjxnzmhj.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwc2N6ampvbWd6aG5qeG56bWhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1MDg5MTgsImV4cCI6MjA5ODA4NDkxOH0.3O92Q-3xxdCmF1LStCQrlCtz1s_EfdlayXnL_mEElOw',
+  {auth:{storageKey:'sb-competencias-mail', persistSession:false}});
+async function enviarAccesoEmail(email){
+  const {error}=await sbMail.auth.signInWithOtp({email, options:{emailRedirectTo:'https://www.liguify.com/club', shouldCreateUser:true}});
+  return error;
+}
+async function olvidePassword(){
+  const email=$('lg-e').value.trim();
+  if(!email){msg('Escribe tu email arriba y vuelve a pulsar "¿Olvidaste tu contraseña?".','err');return;}
+  const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:'https://www.liguify.com/club'});
+  if(error){msg('No se pudo enviar: '+error.message,'err');return;}
+  msg('📨 Te enviamos un email para restablecer tu contraseña. Ábrelo y sigue el enlace.');
+}
+function modalNuevaPassword(){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">🔑 MI CONTRASEÑA</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">Crea o cambia la contraseña de tu cuenta (${''}). También puedes entrar siempre con Google usando el mismo email.</p>
+    <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Nueva contraseña (mín. 6)</span>
+      <input id="np-p1" type="password" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+    <label class="block text-sm mb-4"><span class="text-ink-400 font-semibold text-xs">Repítela</span>
+      <input id="np-p2" type="password" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+    <button onclick="guardarPassword()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR CONTRASEÑA</button>`);
+}
+async function guardarPassword(){
+  const p1=$('np-p1').value, p2=$('np-p2').value;
+  if(p1.length<6){toast('⚠ Mínimo 6 caracteres');return;}
+  if(p1!==p2){toast('⚠ Las contraseñas no coinciden');return;}
+  const {error}=await sb.auth.updateUser({password:p1});
+  if(error){toast('⚠ '+error.message);return;}
+  cerrarModal(); toast('Contraseña guardada ✔ — ya puedes entrar con email y contraseña');
+  iniciar();
+}
 
 async function iniciar(){
   const {data:{session}}=await sb.auth.getSession();
   if(!session){show('s-login');return;}
   $('hdr-user').textContent=session.user.email;
   $('hdr-out').classList.remove('hidden');
+  $('hdr-key').classList.remove('hidden');
   await cargarHub();
 }
 
-/* ============ THE HUB ============ */
+/* ============ THE HUB (agrupado por torneo) ============ */
 async function cargarHub(){
-  const {data,error}=await sb.rpc('mis_equipos_club');
-  if(error){msg(errNegocio(error),'err');show('s-hub');$('hub-lista').innerHTML='';return;}
-  // dedupe por equipo (coordinador+delegado del mismo club)
+  const [inv,eqs]=await Promise.all([sb.rpc('mis_invitaciones'),sb.rpc('mis_equipos_club')]);
+  // invitaciones pendientes → tarjetas de aceptación
+  $('hub-inv').innerHTML=(inv.data||[]).map(i=>`
+    <div class="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-4 mb-3 flex items-center gap-3 flex-wrap">
+      <span class="text-2xl">📨</span>
+      <span class="flex-1 min-w-40 text-sm"><b>${i.torneo}</b> (${i.marca}) te invita como
+        <b>${i.rol==='coordinador'?'COORDINADOR del club '+i.club:'SUB-COORDINADOR de '+i.club}</b>
+        ${i.categorias&&i.categorias.length?'<span class="block text-xs text-ink-500">Categorías: '+i.categorias.join(' · ')+'</span>':''}</span>
+      <button onclick="aceptarInv('${i.id}')" class="bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-emerald-700">✔ ACEPTAR INVITACIÓN</button>
+    </div>`).join('');
+  if(eqs.error){msg(errNegocio(eqs.error),'err');show('s-hub');$('hub-lista').innerHTML='';return;}
   const vistos=new Set();
-  MIS=(data||[]).filter(m=>vistos.has(m.equipo_id)?false:vistos.add(m.equipo_id));
-  $('hub-lista').innerHTML=MIS.length?MIS.map(m=>`
-    <button onclick='abrirEquipo("${m.equipo_id}")' class="w-full bg-white border border-line rounded-2xl px-5 py-4 flex items-center gap-4 hover:shadow-md transition text-left ${m.equipo_estado==='inactivo'?'opacity-60':''}">
-      ${escudo(m,11)}
-      <span class="flex-1 min-w-0">
-        <span class="font-bold block truncate">${m.equipo_nombre} ${m.equipo_estado==='inactivo'?'<span class="text-[9px] font-bold text-brand-600">(RETIRADO)</span>':''}</span>
-        <span class="text-xs text-ink-400">${m.torneo} · ${m.categoria} · ${m.marca}</span>
-      </span>
-      <span class="text-[9px] font-bold uppercase rounded-full px-2.5 py-1 ${m.rol==='coordinador'?'bg-ink-900 text-white':'bg-amber-100 text-amber-700'}">${m.rol}</span>
-      <span class="text-ink-400">→</span>
-    </button>`).join('')
-    :'<p class="text-ink-400 text-sm bg-white border border-line rounded-2xl p-6 text-center">Aún no tienes equipos vinculados. Canjea el código que te dio tu organizador. 👆</p>';
+  MIS=(eqs.data||[]).filter(m=>vistos.has(m.equipo_id)?false:vistos.add(m.equipo_id));
+  const porTorneo={};
+  MIS.forEach(m=>{(porTorneo[m.torneo_id]=porTorneo[m.torneo_id]||[]).push(m);});
+  $('hub-lista').innerHTML=Object.values(porTorneo).map(grupo=>{
+    const t=grupo[0];
+    const soyCoord=grupo.some(m=>m.rol==='coordinador');
+    return `<div class="mb-6">
+      <div class="bg-ink-900 text-white rounded-2xl px-5 py-3 mb-2 flex items-center gap-3 flex-wrap">
+        <span class="font-display text-2xl tracking-wide">${t.torneo.toUpperCase()}</span>
+        <span class="text-xs text-white/50">${t.marca}</span>
+        ${soyCoord?`<button onclick='modalSubcoordinador("${t.torneo_id}")' class="ml-auto bg-white/10 border border-white/20 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl hover:bg-white/20">➕ SUB-COORDINADOR</button>`:''}
+      </div>
+      <div class="space-y-2">${grupo.map(m=>`
+        <button onclick='abrirEquipo("${m.equipo_id}")' class="w-full bg-white border border-line rounded-2xl px-5 py-4 flex items-center gap-4 hover:shadow-md transition text-left ${m.equipo_estado==='inactivo'?'opacity-60':''}">
+          ${escudo(m,11)}
+          <span class="flex-1 min-w-0">
+            <span class="font-bold block truncate">${m.equipo_nombre} ${m.equipo_estado==='inactivo'?'<span class="text-[9px] font-bold text-brand-600">(RETIRADO)</span>':''}</span>
+            <span class="text-xs text-ink-400">${m.categoria} · ${m.club_nombre}</span>
+          </span>
+          <span class="text-[9px] font-bold uppercase rounded-full px-2.5 py-1 ${m.rol==='coordinador'?'bg-ink-900 text-white':m.rol==='subcoordinador'?'bg-sky-100 text-sky-700':'bg-amber-100 text-amber-700'}">${m.rol==='subcoordinador'?'SUB-COORD':m.rol}</span>
+          <span class="text-ink-400">→</span>
+        </button>`).join('')}</div>
+    </div>`;
+  }).join('')
+  ||'<p class="text-ink-400 text-sm bg-white border border-line rounded-2xl p-6 text-center">Aún no tienes equipos vinculados. Acepta tu invitación 📨 o canjea el código 🎟 que te dio tu organizador.</p>';
   show('s-hub');
+}
+async function aceptarInv(id){
+  const {data,error}=await sb.rpc('aceptar_invitacion',{p_id:id});
+  if(error){toast(errNegocio(error));return;}
+  if(!data.ok){toast('⚠ '+data.msg);return;}
+  toast('✔ Invitación aceptada — ya tienes acceso a tus categorías. Crea tu contraseña con el botón 🔑 de arriba.');
+  await cargarHub();
+}
+
+/* ---- Sub-coordinadores por categoría (solo coordinador del club) ---- */
+async function modalSubcoordinador(torneoId){
+  const grupo=MIS.filter(m=>m.torneo_id===torneoId&&m.rol==='coordinador');
+  if(!grupo.length){toast('Solo el coordinador del club puede invitar sub-coordinadores');return;}
+  const clubId=grupo[0].club_id, torneo=grupo[0].torneo;
+  const cats=[...new Map(grupo.map(m=>[m.categoria_id,m.categoria])).entries()];
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">➕ SUB-COORDINADOR</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-3">Encargado de 1 o más categorías de tu club en <b>${torneo}</b>: podrá cargar y modificar la LBF solo de las categorías que marques. Recibe un email con su enlace de acceso y acepta la invitación (mismo proceso que el tuyo).</p>
+    <div id="sc-lista" class="mb-3 text-sm">Cargando…</div>
+    <div class="border-t border-line pt-3">
+      <div class="grid grid-cols-2 gap-3 text-sm mb-3">
+        <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Nombre</span><input id="sc-n" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+        <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Teléfono/WhatsApp</span><input id="sc-t" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+        <label class="col-span-2 block text-sm"><span class="text-ink-400 font-semibold text-xs">Email (obligatorio)</span><input id="sc-e" type="email" class="w-full border-b border-line py-1.5 font-semibold" placeholder="encargado@club.pe"/></label>
+      </div>
+      <p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-1.5">Categorías a su cargo</p>
+      <div class="mb-3">${cats.map(([id,n])=>`<label class="flex items-center gap-2 text-sm font-semibold py-1"><input type="checkbox" id="sc-c-${id}" class="w-4 h-4 accent-[#d9232e]"/>${n}</label>`).join('')}</div>
+      <button onclick="enviarInvitacionSub('${torneoId}','${clubId}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">📨 INVITAR SUB-COORDINADOR</button>
+    </div>`);
+  refrescarInvSub(torneoId,clubId);
+}
+async function refrescarInvSub(torneoId,clubId){
+  const {data,error}=await sb.rpc('invitaciones_de_club',{p_torneo:torneoId,p_club:clubId});
+  if(error){$('sc-lista').innerHTML=`<p class="text-brand-600 text-xs font-bold">${errNegocio(error)}</p>`;return;}
+  const subs=(data||[]).filter(i=>i.rol==='subcoordinador');
+  $('sc-lista').innerHTML=subs.length?subs.map(i=>`
+    <div class="flex items-center gap-2 py-1.5 border-b border-line last:border-0">
+      <span class="flex-1 min-w-0"><span class="font-semibold block truncate">${i.nombre||i.email}</span>
+        <span class="text-[10px] text-ink-400">${i.email}${i.categorias&&i.categorias.length?' · '+i.categorias.join(' · '):''}</span></span>
+      <span class="text-[9px] font-bold uppercase rounded-full px-2 py-0.5 ${i.estado==='aceptada'?'bg-emerald-100 text-emerald-700':i.estado==='pendiente'?'bg-amber-100 text-amber-700':'bg-paper text-ink-400'}">${i.estado}</span>
+      ${i.estado==='pendiente'?`<button onclick="revocarInvSub('${i.id}','${torneoId}','${clubId}')" class="text-ink-400 hover:text-brand-600 font-bold px-1" title="Revocar">✕</button>`:''}
+    </div>`).join(''):'<p class="text-ink-400 text-xs">Aún no invitaste sub-coordinadores en este torneo.</p>';
+}
+async function enviarInvitacionSub(torneoId,clubId){
+  const email=$('sc-e').value.trim();
+  if(!email){toast('⚠ El email es obligatorio');return;}
+  const grupo=MIS.filter(m=>m.torneo_id===torneoId&&m.rol==='coordinador');
+  const catIds=[...new Set(grupo.map(m=>m.categoria_id))].filter(id=>$('sc-c-'+id)&&$('sc-c-'+id).checked);
+  if(!catIds.length){toast('⚠ Marca al menos una categoría');return;}
+  const r=await sb.rpc('invitar_subcoordinador',{p_torneo:torneoId,p_club:clubId,p_email:email,p_nombre:$('sc-n').value.trim(),p_telefono:$('sc-t').value.trim(),p_categorias:catIds});
+  if(r.error){toast(errNegocio(r.error));return;}
+  const em=await enviarAccesoEmail(email);
+  toast(em?('Invitación registrada ✔ pero el email falló: '+em.message):'📨 Sub-coordinador invitado ✔ — le llegó el email con su acceso');
+  $('sc-e').value='';$('sc-n').value='';$('sc-t').value='';
+  refrescarInvSub(torneoId,clubId);
+}
+async function revocarInvSub(id,torneoId,clubId){
+  if(!confirm('¿Revocar esta invitación pendiente?'))return;
+  const r=await sb.rpc('revocar_invitacion',{p_id:id});
+  if(r.error){toast(errNegocio(r.error));return;}
+  toast('Invitación revocada');
+  refrescarInvSub(torneoId,clubId);
 }
 async function canjearCodigo(){
   const cod=$('cj-cod').value.trim();
