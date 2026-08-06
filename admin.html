@@ -1635,7 +1635,8 @@ async function renderFixture(){
   const htmlFechas=fechas.map(n=>{
     const jid=porFecha[n][0].jornada_id||'';
     const j=JORNADAS.find(x=>x.id===jid);
-    const btnHor=j?`<button onclick="toggleHorarios('${jid}',${j.horarios_publicados===false?'true':'false'})" title="Controla si el público ve fecha, hora y sede de esta jornada" class="text-[10px] font-bold rounded-lg px-3 py-1.5 mr-1 ${j.horarios_publicados===false?'bg-amber-100 text-amber-700 border border-amber-300':'text-ink-400 border border-line hover:bg-paper'}">${j.horarios_publicados===false?'🕒 OCULTOS EN PÚBLICO':'🕒 HORARIOS VISIBLES'}</button>`:'';
+    const btnHor=j?`<button onclick="modalJornada('${jid}')" title="Gestión de la jornada: cambiar día, intercambiar con otra fecha, eliminar" class="text-[10px] font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 mr-1 hover:bg-paper">⚙ FECHA</button>
+      <button onclick="toggleHorarios('${jid}',${j.horarios_publicados===false?'true':'false'})" title="Controla si el público ve fecha, hora y sede de esta jornada" class="text-[10px] font-bold rounded-lg px-3 py-1.5 mr-1 ${j.horarios_publicados===false?'bg-amber-100 text-amber-700 border border-amber-300':'text-ink-400 border border-line hover:bg-paper'}">${j.horarios_publicados===false?'🕒 OCULTOS EN PÚBLICO':'🕒 HORARIOS VISIBLES'}</button>`:'';
     return `<div class="bg-white border border-line rounded-2xl mb-4">
       ${header('FECHA '+(n||'?'),`${btnHor}<button onclick="modalNuevoPartido('jornada','${jid}')" class="text-xs font-bold text-brand-600 border border-brand-100 rounded-lg px-3 py-1.5 hover:bg-brand-50">+ PARTIDO</button>`)}
       ${porFecha[n].map(fila).join('')}
@@ -1661,6 +1662,87 @@ async function toggleHorarios(jid,mostrar){
   const i=JORNADAS.findIndex(x=>x.id===jid); if(i>=0) JORNADAS[i]=data;
   toast(mostrar?'🕒 Horarios PUBLICADOS ✔ — el público ya ve fecha, hora y sede de esta jornada':'🕒 Horarios OCULTOS — el público ve los cruces con "horario por confirmar" mientras terminas la programación');
   await renderFixture();
+}
+
+/* ---- Gestión de la JORNADA: cambiar día · intercambiar · eliminar ---- */
+async function diaDeJornada(jid){
+  // siempre desde la BD (el caché local puede estar desactualizado)
+  const j=(await sb.from('jornada').select('fecha').eq('id',jid).single()).data;
+  if(j&&j.fecha) return j.fecha;
+  const p=(await sb.from('partido').select('fecha').eq('jornada_id',jid).not('fecha','is',null).order('fecha').limit(1)).data;
+  return (p&&p[0]&&p[0].fecha)||null;
+}
+async function modalJornada(jid){
+  const j=JORNADAS.find(x=>x.id===jid); if(!j) return;
+  const dia=await diaDeJornada(jid);
+  const ms=(await sb.from('partido').select('id,estado').eq('jornada_id',jid)).data||[];
+  const jugados=ms.filter(m=>['finalizado','walkover','en_vivo'].includes(m.estado)).length;
+  const otras=JORNADAS.filter(x=>x.id!==jid);
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⚙ FECHA ${j.numero}</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">${ms.length} partido(s) · ${jugados} jugado(s)/en vivo</p>
+
+    <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1.5">Cambiar día de juego</p>
+    <div class="flex gap-2 mb-4">
+      <input id="jr-dia" type="date" value="${dia||''}" class="flex-1 border border-line rounded-xl px-3 py-2 text-sm font-semibold"/>
+      <button onclick="cambiarDiaJornada('${jid}')" class="bg-ink-900 text-white text-xs font-bold px-4 rounded-xl hover:bg-ink-700">APLICAR A TODA LA FECHA</button>
+    </div>
+
+    <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1.5">Intercambiar día con otra fecha</p>
+    <div class="flex gap-2 mb-1">
+      <select id="jr-swap" class="flex-1 border border-line rounded-xl px-3 py-2 text-sm font-semibold bg-white">
+        ${otras.map(o=>`<option value="${o.id}">Fecha ${o.numero}</option>`).join('')}
+      </select>
+      <button onclick="intercambiarJornada('${jid}')" class="bg-ink-900 text-white text-xs font-bold px-4 rounded-xl hover:bg-ink-700">⇄ INTERCAMBIAR</button>
+    </div>
+    <p class="text-[11px] text-ink-400 mb-4">Los cruces no cambian: la Fecha ${j.numero} se jugará el día de la otra fecha y viceversa (las horas de cada partido se conservan).</p>
+
+    <div class="border-t border-line pt-3">
+      ${jugados
+        ?`<p class="text-xs font-bold text-ink-400">🔒 Esta fecha no se puede eliminar: tiene ${jugados} partido(s) jugado(s) o en vivo.</p>`
+        :`<button onclick="eliminarJornada('${jid}')" class="w-full bg-white border border-brand-100 text-brand-600 text-sm font-bold py-2.5 rounded-xl hover:bg-brand-50">🗑 ELIMINAR LA FECHA COMPLETA (${ms.length} partido(s) programado(s))</button>`}
+    </div>`);
+}
+async function cambiarDiaJornada(jid){
+  const dia=$('jr-dia').value;
+  if(!dia){toast('⚠ Elige el nuevo día');return;}
+  const u1=await sb.from('partido').update({fecha:dia}).eq('jornada_id',jid).select('id');
+  if(u1.error){toast(errNegocio(u1.error));return;}
+  const u2=await sb.from('jornada').update({fecha:dia}).eq('id',jid).select().single();
+  if(!u2.error){const i=JORNADAS.findIndex(x=>x.id===jid); if(i>=0) JORNADAS[i]=u2.data;}
+  cerrarModal(); toast(`📅 ${u1.data.length} partido(s) movidos al ${dia} ✔`);
+  await renderFixture();
+}
+async function intercambiarJornada(jid){
+  const otraId=$('jr-swap').value;
+  if(!otraId){toast('⚠ Elige la otra fecha');return;}
+  const dA=await diaDeJornada(jid), dB=await diaDeJornada(otraId);
+  if(!dA||!dB){toast('⚠ Ambas fechas necesitan un día asignado para intercambiar');return;}
+  const jA=JORNADAS.find(x=>x.id===jid), jB=JORNADAS.find(x=>x.id===otraId);
+  if(!confirm(`¿Intercambiar días?\n\nFecha ${jA.numero} pasa a jugarse el ${dB}\nFecha ${jB.numero} pasa a jugarse el ${dA}\n\nLos cruces y las horas de cada partido se conservan.`))return;
+  const r1=await sb.from('partido').update({fecha:dB}).eq('jornada_id',jid);
+  const r2=await sb.from('partido').update({fecha:dA}).eq('jornada_id',otraId);
+  if(r1.error||r2.error){toast(errNegocio(r1.error||r2.error));return;}
+  await sb.from('jornada').update({fecha:dB}).eq('id',jid);
+  await sb.from('jornada').update({fecha:dA}).eq('id',otraId);
+  const js=await sb.from('jornada').select('*').eq('categoria_id',CAT.id).order('numero'); JORNADAS=js.data||JORNADAS;
+  cerrarModal(); toast(`⇄ Días intercambiados: Fecha ${jA.numero} → ${dB} · Fecha ${jB.numero} → ${dA} ✔`);
+  await renderFixture();
+}
+async function eliminarJornada(jid){
+  const j=JORNADAS.find(x=>x.id===jid);
+  // re-validar contra BD (otro usuario pudo cargar un resultado)
+  const ms=(await sb.from('partido').select('id,estado').eq('jornada_id',jid)).data||[];
+  if(ms.some(m=>['finalizado','walkover','en_vivo'].includes(m.estado))){
+    toast('⛔ No se puede eliminar: la fecha tiene partidos jugados o en vivo');return;
+  }
+  if(!confirm(`¿ELIMINAR la Fecha ${j.numero} completa?\n\nSe borran sus ${ms.length} partido(s) programado(s). Los equipos y la tabla no se tocan. Esta acción no se puede deshacer.`))return;
+  const d1=await sb.from('partido').delete().eq('jornada_id',jid);
+  if(d1.error){toast(errNegocio(d1.error));return;}
+  const d2=await sb.from('jornada').delete().eq('id',jid);
+  if(d2.error){toast('Partidos eliminados, pero la jornada no se pudo borrar: '+errNegocio(d2.error));}
+  else JORNADAS=JORNADAS.filter(x=>x.id!==jid);
+  cerrarModal(); toast(`🗑 Fecha ${j.numero} eliminada ✔`);
+  await renderFixture(); await renderEquipos();
 }
 
 /* ---- Gestión de partidos: editar / agregar / eliminar ---- */
