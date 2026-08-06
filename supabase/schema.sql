@@ -414,6 +414,13 @@ returns boolean language sql stable security definer set search_path = competenc
       or exists (select 1 from usuario_perfil where id = auth.uid() and es_super)
 $$;
 
+-- Normalización de nombres (sin tildes, minúsculas) para comparar clubes
+create or replace function competencias.norm_txt(t text)
+returns text language sql immutable as $$
+  select translate(lower(trim(coalesce(t,''))),
+                   'áàäâéèëêíìïîóòöôúùüûñç','aaaaeeeeiiiioooouuuunc')
+$$;
+
 -- Coordinador del club: directo, o por club HOMÓNIMO de otra marca de la MISMA
 -- organización real (mismo erp_org_id). Entre organizadores distintos NO hay
 -- extensión (protección de cartera C1).
@@ -432,7 +439,7 @@ as $$
         join club  c1 on c1.id = p_club
         join marca m1 on m1.id = c1.marca_id and m1.erp_org_id = m0.erp_org_id
         where uc.usuario_id = auth.uid() and uc.rol = 'coordinador'
-          and lower(trim(c1.nombre)) = lower(trim(c0.nombre)))
+          and competencias.norm_txt(c1.nombre) = competencias.norm_txt(c0.nombre))
 $$;
 
 create or replace function competencias.marca_de_categoria(p_cat uuid)
