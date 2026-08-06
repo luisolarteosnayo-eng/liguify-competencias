@@ -315,7 +315,7 @@ async function renderPlantel(){
   N_LBF=(ins||[]).length;
   let jug={};
   if(ins.length){
-    const js=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,fecha_nacimiento,verificado,foto_url').in('id',ins.map(i=>i.jugador_id));
+    const js=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,fecha_nacimiento,verificado,foto_url,doc_scan_frente_url,doc_scan_reverso_url').in('id',ins.map(i=>i.jugador_id));
     jug=Object.fromEntries((js.data||[]).map(j=>[j.id,j]));
   }
   const puedeEditar=EQ.permitir_delegados&&EQ.cargar_lbf&&EQ.equipo_estado==='activo'&&EQ.torneo_estado!=='finalizado'&&EQ.torneo_estado!=='archivado';
@@ -330,7 +330,7 @@ async function renderPlantel(){
           :'<span class="text-[10px] font-bold text-ink-400">Solo lectura'+(EQ.permitir_delegados?'':' — el torneo no habilita delegados')+'</span>'}
       </div>
       ${ins.length?ins.map(i=>{const j=jug[i.jugador_id]||{};
-        const edit={id:i.id,dorsal:i.dorsal,capitan:i.capitan,nombre:(j.nombres||'')+' '+(j.apellidos||''),jugador_id:i.jugador_id,foto_url:j.foto_url||null};
+        const edit={id:i.id,dorsal:i.dorsal,capitan:i.capitan,nombre:(j.nombres||'')+' '+(j.apellidos||''),jugador_id:i.jugador_id,foto_url:j.foto_url||null,dfr:j.doc_scan_frente_url||null,drv:j.doc_scan_reverso_url||null};
         return `<div class="flex items-center gap-3 px-5 py-2.5 border-b border-line last:border-0 ${i.inhabilitado?'bg-red-50/60':''}">
           <span class="w-8 h-8 rounded-full grid place-items-center text-[10px] font-bold text-white overflow-hidden relative shrink-0" style="background:#2b3550">${j.foto_url?`<img src="${j.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales((j.nombres||'')+' '+(j.apellidos||''))}</span>
           <span class="w-6 text-ink-400 font-bold text-sm">${i.dorsal??''}</span>
@@ -379,24 +379,66 @@ async function subirFotoJugador(jugadorId){
   if(error) throw error;
   return sb.storage.from('publico').getPublicUrl(ruta).data.publicUrl+'?v='+Date.now();
 }
+/* Documento (frontal/reverso): bucket PRIVADO 'documentos' — se guarda la RUTA
+   y se visualiza con URL firmada temporal (solo autenticados) */
+function docUI(pref,label,ruta){
+  return `<div class="flex items-center gap-2 mb-2 flex-wrap">
+    <span class="text-xs font-semibold w-24 shrink-0">${label}</span>
+    <input id="${pref}-file" type="file" accept="image/*" class="hidden" onchange="marcarDoc('${pref}',this)"/>
+    <input id="${pref}-cam" type="file" accept="image/*" capture="environment" class="hidden" onchange="marcarDoc('${pref}',this)"/>
+    ${esMovil()
+      ?`<button onclick="$('${pref}-cam').click()" class="text-[11px] font-bold text-white bg-ink-900 rounded-lg px-2.5 py-1.5 hover:bg-ink-700">📷</button>
+         <button onclick="$('${pref}-file').click()" class="text-[11px] font-bold text-ink-500 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper">🖼</button>`
+      :`<button onclick="$('${pref}-file').click()" class="text-[11px] font-bold text-ink-500 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper">📁 SUBIR</button>`}
+    <span id="${pref}-st" class="text-[10px] font-bold ${ruta?'text-emerald-600':'text-ink-400'}">${ruta?'✔ cargado':'— sin foto'}</span>
+    ${ruta?`<button onclick="verDoc('${ruta}')" class="text-[10px] font-bold underline text-ink-400 hover:text-ink-900">VER</button>`:''}
+  </div>`;
+}
+function marcarDoc(pref,inp){
+  const f=inp.files&&inp.files[0]; if(!f) return;
+  const otro=inp.id.endsWith('-file')?$(pref+'-cam'):$(pref+'-file'); if(otro) otro.value='';
+  const st=$(pref+'-st'); st.textContent='✔ '+f.name.slice(0,20)+' — se sube al guardar'; st.className='text-[10px] font-bold text-emerald-600';
+}
+async function subirDoc(pref,jugadorId,sufijo){
+  const f=($(pref+'-cam')&&$(pref+'-cam').files[0])||($(pref+'-file')&&$(pref+'-file').files[0]);
+  if(!f) return null;
+  const ext=(f.name.split('.').pop()||'jpg').toLowerCase();
+  const ruta=`jugadores/${jugadorId}-${sufijo}.${ext}`;
+  const {error}=await sb.storage.from('documentos').upload(ruta,f,{upsert:true,contentType:f.type});
+  if(error) throw error;
+  return ruta;
+}
+async function verDoc(ruta){
+  const {data,error}=await sb.storage.from('documentos').createSignedUrl(ruta,300);
+  if(error){toast('⚠ '+error.message);return;}
+  window.open(data.signedUrl,'_blank');
+}
 function modalEditIns(i){
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">✏️ EDITAR JUGADOR</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
     <p class="text-sm font-semibold mb-4">${i.nombre}</p>
     ${fotoUI(i.foto_url,i.nombre)}
+    <div class="border-t border-line pt-2 mb-2">
+      <p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-1.5">Documento de identidad (privado — solo staff y club)</p>
+      ${docUI('dfr','DNI frontal',i.dfr)}
+      ${docUI('drv','DNI reverso',i.drv)}
+    </div>
     <div class="grid grid-cols-2 gap-3 text-sm mb-2">
       <label class="block"><span class="text-ink-400 font-semibold text-xs">Dorsal</span>
         <input id="ei-d" type="number" min="0" value="${i.dorsal??''}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
       <label class="flex items-center gap-2 font-semibold pt-4">Capitán
         <input id="ei-c" type="checkbox" ${i.capitan?'checked':''} class="w-4 h-4 accent-[#d9232e]"/></label>
     </div>
-    <p class="text-[11px] text-ink-400 mb-4">La foto aparece en el módulo público (en blanco y negro mientras no haya consentimiento de imagen). El estado y las inhabilitaciones solo los gestiona el organizador.</p>
+    <p class="text-[11px] text-ink-400 mb-4">La foto del jugador aparece en el módulo público (B/N sin consentimiento). Las fotos del documento van a almacenamiento PRIVADO. El estado y las inhabilitaciones solo los gestiona el organizador.</p>
     <button onclick='guardarEditIns("${i.id}","${i.jugador_id}")' class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR</button>`);
 }
 async function guardarEditIns(insId,jugadorId){
   try{
     const url=await subirFotoJugador(jugadorId);
     if(url){const r=await sb.rpc('actualizar_foto_jugador',{p_jugador:jugadorId,p_url:url}); if(r.error){toast(errNegocio(r.error));return;}}
-  }catch(e){toast('Foto: '+(e.message||e));return;}
+    const fr=await subirDoc('dfr',jugadorId,'frente');
+    const rv=await subirDoc('drv',jugadorId,'reverso');
+    if(fr||rv){const r2=await sb.rpc('actualizar_docs_jugador',{p_jugador:jugadorId,p_frente:fr,p_reverso:rv}); if(r2.error){toast(errNegocio(r2.error));return;}}
+  }catch(e){toast('Fotos: '+(e.message||e));return;}
   const {error}=await sb.from('inscripcion_lbf').update({
     dorsal:+($('ei-d').value||0)||null, capitan:$('ei-c').checked}).eq('id',insId);
   if(error){toast(errNegocio(error));return;}

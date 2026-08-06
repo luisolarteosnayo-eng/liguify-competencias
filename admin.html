@@ -924,7 +924,7 @@ async function renderLBF(){
   if(error){$('lbf-lista').innerHTML='';msg(errNegocio(error),'err');return;}
   let jug={};
   if(ins.length){
-    const js=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,fecha_nacimiento,verificado,foto_url').in('id',ins.map(i=>i.jugador_id));
+    const js=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,fecha_nacimiento,verificado,foto_url,doc_scan_frente_url,doc_scan_reverso_url').in('id',ins.map(i=>i.jugador_id));
     jug=Object.fromEntries((js.data||[]).map(j=>[j.id,j]));
   }
   $('lbf-lista').innerHTML=ins.length?ins.map(i=>{const j=jug[i.jugador_id]||{};
@@ -935,7 +935,7 @@ async function renderLBF(){
       <span class="text-xs text-ink-500">🇵🇪 ${j.nro_documento||''}</span>
       <span class="text-[10px] font-bold px-2 py-1 rounded-full ${i.inhabilitado?'bg-brand-100 text-brand-600':i.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${i.inhabilitado?'INHABILITADO':i.estado.toUpperCase()}</span>
       ${i.estado==='pendiente'&&esAdmin()?`<button onclick="activarIns('${i.id}')" class="text-[10px] font-bold text-emerald-700 border border-emerald-300 rounded-lg px-2 py-1 hover:bg-emerald-50">ACTIVAR</button>`:''}
-      ${esAdmin()?`<button onclick='modalEditIns(${JSON.stringify({id:i.id,dorsal:i.dorsal,capitan:i.capitan,estado:i.estado,inhabilitado:i.inhabilitado,nombre:(j.nombres||'')+' '+(j.apellidos||''),jugador_id:i.jugador_id,foto_url:j.foto_url||null}).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1 hover:bg-paper" title="Editar foto, dorsal, capitán, estado e inhabilitación">✏️</button>
+      ${esAdmin()?`<button onclick='modalEditIns(${JSON.stringify({id:i.id,dorsal:i.dorsal,capitan:i.capitan,estado:i.estado,inhabilitado:i.inhabilitado,nombre:(j.nombres||'')+' '+(j.apellidos||''),jugador_id:i.jugador_id,foto_url:j.foto_url||null,dfr:j.doc_scan_frente_url||null,drv:j.doc_scan_reverso_url||null}).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1 hover:bg-paper" title="Editar foto, documento, dorsal, capitán, estado e inhabilitación">✏️</button>
       <button onclick='quitarIns("${i.id}","${((j.nombres||'')+' '+(j.apellidos||'')).replace(/'/g,'')}")' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1 hover:bg-brand-50 hover:text-brand-600" title="Quitar de la LBF (bloqueado si tiene participaciones)">✕</button>`:''}
     </div>`;}).join(''):'<p class="px-5 py-8 text-sm text-ink-400 text-center">Plantel vacío — agrega el primer jugador.</p>';
 }
@@ -975,10 +975,48 @@ async function subirFotoJugador(jugadorId){
   if(error) throw error;
   return sb.storage.from('publico').getPublicUrl(ruta).data.publicUrl+'?v='+Date.now();
 }
+/* Documento (frontal/reverso): bucket PRIVADO 'documentos' — ruta + URL firmada */
+function docUI(pref,label,ruta){
+  return `<div class="flex items-center gap-2 mb-2 flex-wrap">
+    <span class="text-xs font-semibold w-24 shrink-0">${label}</span>
+    <input id="${pref}-file" type="file" accept="image/*" class="hidden" onchange="marcarDoc('${pref}',this)"/>
+    <input id="${pref}-cam" type="file" accept="image/*" capture="environment" class="hidden" onchange="marcarDoc('${pref}',this)"/>
+    ${esMovil()
+      ?`<button onclick="$('${pref}-cam').click()" class="text-[11px] font-bold text-white bg-ink-900 rounded-lg px-2.5 py-1.5 hover:bg-ink-700">📷</button>
+         <button onclick="$('${pref}-file').click()" class="text-[11px] font-bold text-ink-500 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper">🖼</button>`
+      :`<button onclick="$('${pref}-file').click()" class="text-[11px] font-bold text-ink-500 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper">📁 SUBIR</button>`}
+    <span id="${pref}-st" class="text-[10px] font-bold ${ruta?'text-emerald-600':'text-ink-400'}">${ruta?'✔ cargado':'— sin foto'}</span>
+    ${ruta?`<button onclick="verDoc('${ruta}')" class="text-[10px] font-bold underline text-ink-400 hover:text-ink-900">VER</button>`:''}
+  </div>`;
+}
+function marcarDoc(pref,inp){
+  const f=inp.files&&inp.files[0]; if(!f) return;
+  const otro=inp.id.endsWith('-file')?$(pref+'-cam'):$(pref+'-file'); if(otro) otro.value='';
+  const st=$(pref+'-st'); st.textContent='✔ '+f.name.slice(0,20)+' — se sube al guardar'; st.className='text-[10px] font-bold text-emerald-600';
+}
+async function subirDoc(pref,jugadorId,sufijo){
+  const f=($(pref+'-cam')&&$(pref+'-cam').files[0])||($(pref+'-file')&&$(pref+'-file').files[0]);
+  if(!f) return null;
+  const ext=(f.name.split('.').pop()||'jpg').toLowerCase();
+  const ruta=`jugadores/${jugadorId}-${sufijo}.${ext}`;
+  const {error}=await sb.storage.from('documentos').upload(ruta,f,{upsert:true,contentType:f.type});
+  if(error) throw error;
+  return ruta;
+}
+async function verDoc(ruta){
+  const {data,error}=await sb.storage.from('documentos').createSignedUrl(ruta,300);
+  if(error){toast('⚠ '+error.message);return;}
+  window.open(data.signedUrl,'_blank');
+}
 function modalEditIns(i){
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">✏️ EDITAR JUGADOR</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
     <p class="text-sm font-semibold mb-4">${i.nombre}</p>
     ${fotoUI(i.foto_url,i.nombre)}
+    <div class="border-t border-line pt-2 mb-2">
+      <p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-1.5">Documento de identidad (privado — solo staff y club)</p>
+      ${docUI('dfr','DNI frontal',i.dfr)}
+      ${docUI('drv','DNI reverso',i.drv)}
+    </div>
     <div class="grid grid-cols-2 gap-3 text-sm mb-3">
       <label class="block"><span class="text-ink-400 font-semibold text-xs">Dorsal</span>
         <input id="ei-d" type="number" min="0" value="${i.dorsal??''}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
@@ -998,7 +1036,10 @@ async function guardarEditIns(insId,jugadorId){
   try{
     const url=await subirFotoJugador(jugadorId);
     if(url){const r=await sb.rpc('actualizar_foto_jugador',{p_jugador:jugadorId,p_url:url}); if(r.error){toast(errNegocio(r.error));return;}}
-  }catch(e){toast('Foto: '+(e.message||e));return;}
+    const fr=await subirDoc('dfr',jugadorId,'frente');
+    const rv=await subirDoc('drv',jugadorId,'reverso');
+    if(fr||rv){const r2=await sb.rpc('actualizar_docs_jugador',{p_jugador:jugadorId,p_frente:fr,p_reverso:rv}); if(r2.error){toast(errNegocio(r2.error));return;}}
+  }catch(e){toast('Fotos: '+(e.message||e));return;}
   const upd={dorsal:+($('ei-d').value||0)||null, capitan:$('ei-c').checked,
     estado:$('ei-e').value, inhabilitado:$('ei-i').checked};
   if(upd.estado==='activo') upd.fecha_apto_medico=new Date().toISOString().slice(0,10);
