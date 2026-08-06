@@ -335,10 +335,36 @@ async function renderPlantel(){
           <span class="flex-1 font-semibold text-sm">${j.nombres||'—'} ${j.apellidos||''} ${i.capitan?'<span class="text-[9px] bg-ink-900 text-white rounded px-1.5 py-0.5 ml-1 font-bold">C</span>':''} ${j.verificado?'<span class="text-emerald-500">✔</span>':''}</span>
           <span class="text-xs text-ink-500">${j.nro_documento||''}</span>
           <span class="text-[10px] font-bold px-2 py-1 rounded-full ${i.inhabilitado?'bg-brand-100 text-brand-600':i.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${i.inhabilitado?'INHABILITADO':i.estado.toUpperCase()}</span>
+          ${puedeEditar?`<button onclick='modalEditIns("${i.id}",${i.dorsal??'null'},${i.capitan?'true':'false'},"${(j.nombres||'')+' '+(j.apellidos||'')}")' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1 hover:bg-paper" title="Editar dorsal y capitán">✏️</button>
+          ${i.estado==='pendiente'?`<button onclick='quitarIns("${i.id}","${(j.nombres||'')+' '+(j.apellidos||'')}")' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1 hover:bg-brand-50 hover:text-brand-600" title="Quitar de la LBF (solo pendientes)">✕</button>`:''}`:''}
         </div>`;}).join('')
         :'<p class="px-5 py-8 text-sm text-ink-400 text-center">Plantel vacío'+(puedeEditar?' — agrega a tu primer jugador.':'.')+'</p>'}
       <p class="text-[11px] text-ink-400 px-5 py-3 bg-paper">Los jugadores que agregues quedan <b>PENDIENTES</b> hasta que el organizador valide documento y apto médico. Un jugador solo puede estar en un equipo por categoría (anti-suplantación).</p>
     </div>`;
+}
+function modalEditIns(insId,dorsal,capitan,nombre){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">✏️ EDITAR JUGADOR</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-sm font-semibold mb-4">${nombre}</p>
+    <div class="grid grid-cols-2 gap-3 text-sm mb-2">
+      <label class="block"><span class="text-ink-400 font-semibold text-xs">Dorsal</span>
+        <input id="ei-d" type="number" min="0" value="${dorsal??''}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label class="flex items-center gap-2 font-semibold pt-4">Capitán
+        <input id="ei-c" type="checkbox" ${capitan?'checked':''} class="w-4 h-4 accent-[#d9232e]"/></label>
+    </div>
+    <p class="text-[11px] text-ink-400 mb-4">El estado (pendiente/activo) y las inhabilitaciones solo los gestiona el organizador del torneo.</p>
+    <button onclick="guardarEditIns('${insId}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR</button>`);
+}
+async function guardarEditIns(insId){
+  const {error}=await sb.from('inscripcion_lbf').update({
+    dorsal:+($('ei-d').value||0)||null, capitan:$('ei-c').checked}).eq('id',insId);
+  if(error){toast(errNegocio(error));return;}
+  cerrarModal(); toast('Jugador actualizado ✔'); renderPlantel();
+}
+async function quitarIns(insId,nombre){
+  if(!confirm(`¿Quitar a ${nombre} de la LBF?\n\nSolo es posible mientras está PENDIENTE. Podrás volver a inscribirlo.`))return;
+  const {error}=await sb.from('inscripcion_lbf').delete().eq('id',insId).eq('estado','pendiente');
+  if(error){toast(errNegocio(error));return;}
+  toast('Jugador quitado de la LBF'); renderPlantel();
 }
 function modalJugador(){
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">+ AGREGAR JUGADOR/A</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>

@@ -1158,6 +1158,24 @@ create policy self_read on competencias.usuario_club_categoria for select
 grant select on competencias.usuario_club_categoria to authenticated;
 alter table competencias.invitacion_club enable row level security;  -- sin policies: solo RPC
 
+-- Blindaje LBF: el club puede editar dorsal/capitán, pero estado/inhabilitado/
+-- apto/excepción solo los cambia el staff de la marca (se revierten en silencio)
+create or replace function competencias.proteger_lbf_estado()
+returns trigger language plpgsql security definer
+set search_path = competencias, public
+as $$
+begin
+  if not competencias.es_staff_marca(competencias.marca_de_categoria(new.categoria_id)) then
+    new.estado            := old.estado;
+    new.inhabilitado      := old.inhabilitado;
+    new.fecha_apto_medico := old.fecha_apto_medico;
+    new.es_excepcion      := old.es_excepcion;
+  end if;
+  return new;
+end $$;
+create trigger t_proteger_lbf before update on competencias.inscripcion_lbf
+for each row execute function competencias.proteger_lbf_estado();
+
 -- Partido: staff (admin o mesa) de la marca
 create policy staff_all on competencias.partido for all
   using (competencias.es_staff_marca(competencias.marca_de_categoria(categoria_id)))
