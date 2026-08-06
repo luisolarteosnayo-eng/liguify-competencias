@@ -1297,7 +1297,8 @@ async function generarFixture(){
   for(let r=0;r<totalFechas;r++){
     if(!jorPorNum[r+1]){
       const d=new Date(fInicio+'T00:00:00'); d.setDate(d.getDate()+r*intervalo);
-      const nj=await sb.from('jornada').insert({categoria_id:CAT.id,numero:r+1,nombre:'Fecha '+(r+1),fecha:d.toISOString().slice(0,10)}).select().single();
+      // las fechas generadas automáticamente nacen con horarios OCULTOS al público
+      const nj=await sb.from('jornada').insert({categoria_id:CAT.id,numero:r+1,nombre:'Fecha '+(r+1),fecha:d.toISOString().slice(0,10),horarios_publicados:false}).select().single();
       if(nj.error){toast(errNegocio(nj.error));return;}
       jorPorNum[r+1]=nj.data;
     }
@@ -1320,8 +1321,10 @@ async function generarFixture(){
   }
   const ins=await sb.from('partido').insert(filas);
   if(ins.error){toast(errNegocio(ins.error));return;}
+  const jsFin=await sb.from('jornada').select('*').eq('categoria_id',CAT.id).order('numero');
+  JORNADAS=jsFin.data||JORNADAS;
   cerrarModal();
-  toast(`Fixture generado ✔ ${zonasOk.length} zona(s) → ${totalFechas} fechas compartidas, ${filas.length} partidos (todos contra todos, sin repetición)`);
+  toast(`Fixture generado ✔ ${zonasOk.length} zona(s) → ${totalFechas} fechas, ${filas.length} partidos. 🕒 Los horarios nacen OCULTOS al público: publícalos fecha por fecha cuando estén confirmados.`);
   await renderFixture(); await renderTabla();
 }
 
