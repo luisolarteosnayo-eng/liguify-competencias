@@ -924,24 +924,61 @@ async function renderLBF(){
   if(error){$('lbf-lista').innerHTML='';msg(errNegocio(error),'err');return;}
   let jug={};
   if(ins.length){
-    const js=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,fecha_nacimiento,verificado').in('id',ins.map(i=>i.jugador_id));
+    const js=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,fecha_nacimiento,verificado,foto_url').in('id',ins.map(i=>i.jugador_id));
     jug=Object.fromEntries((js.data||[]).map(j=>[j.id,j]));
   }
   $('lbf-lista').innerHTML=ins.length?ins.map(i=>{const j=jug[i.jugador_id]||{};
     return `<div class="flex items-center gap-3 px-5 py-2.5 border-b border-line last:border-0 ${i.inhabilitado?'bg-red-50/60':''}">
+      <span class="w-8 h-8 rounded-full grid place-items-center text-[10px] font-bold text-white overflow-hidden relative shrink-0" style="background:#2b3550">${j.foto_url?`<img src="${j.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales((j.nombres||'')+' '+(j.apellidos||''))}</span>
       <span class="w-6 text-ink-400 font-bold text-sm">${i.dorsal??''}</span>
       <span class="flex-1 font-semibold text-sm">${j.nombres||'—'} ${j.apellidos||''} ${i.capitan?'<span class="text-[9px] bg-ink-900 text-white rounded px-1.5 py-0.5 ml-1 font-bold">C</span>':''} ${j.verificado?'<span class="text-emerald-500">✔</span>':''}</span>
       <span class="text-xs text-ink-500">🇵🇪 ${j.nro_documento||''}</span>
       <span class="text-[10px] font-bold px-2 py-1 rounded-full ${i.inhabilitado?'bg-brand-100 text-brand-600':i.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${i.inhabilitado?'INHABILITADO':i.estado.toUpperCase()}</span>
       ${i.estado==='pendiente'&&esAdmin()?`<button onclick="activarIns('${i.id}')" class="text-[10px] font-bold text-emerald-700 border border-emerald-300 rounded-lg px-2 py-1 hover:bg-emerald-50">ACTIVAR</button>`:''}
-      ${esAdmin()?`<button onclick='modalEditIns(${JSON.stringify({id:i.id,dorsal:i.dorsal,capitan:i.capitan,estado:i.estado,inhabilitado:i.inhabilitado,nombre:(j.nombres||'')+' '+(j.apellidos||'')}).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1 hover:bg-paper" title="Editar dorsal, capitán, estado e inhabilitación">✏️</button>
+      ${esAdmin()?`<button onclick='modalEditIns(${JSON.stringify({id:i.id,dorsal:i.dorsal,capitan:i.capitan,estado:i.estado,inhabilitado:i.inhabilitado,nombre:(j.nombres||'')+' '+(j.apellidos||''),jugador_id:i.jugador_id,foto_url:j.foto_url||null}).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1 hover:bg-paper" title="Editar foto, dorsal, capitán, estado e inhabilitación">✏️</button>
       <button onclick='quitarIns("${i.id}","${((j.nombres||'')+' '+(j.apellidos||'')).replace(/'/g,'')}")' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1 hover:bg-brand-50 hover:text-brand-600" title="Quitar de la LBF (bloqueado si tiene participaciones)">✕</button>`:''}
     </div>`;}).join(''):'<p class="px-5 py-8 text-sm text-ink-400 text-center">Plantel vacío — agrega el primer jugador.</p>';
 }
 /* ---- Edición de inscripción (funcionalidad compartida con el módulo club) ---- */
+const esMovil=()=>/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)||(navigator.maxTouchPoints>1&&innerWidth<900);
+function fotoUI(fotoUrl,nombre){
+  return `<div class="flex items-center gap-3 mb-3">
+    <span id="ef-prev" class="w-16 h-16 rounded-2xl grid place-items-center text-white font-bold overflow-hidden relative shrink-0" style="background:#2b3550">${fotoUrl?`<img src="${fotoUrl}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(nombre)}</span>
+    <div class="flex-1">
+      <p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-1.5">Foto del jugador</p>
+      <input id="ef-file" type="file" accept="image/*" class="hidden" onchange="previsualizarFoto(this)"/>
+      <input id="ef-cam" type="file" accept="image/*" capture="environment" class="hidden" onchange="previsualizarFoto(this)"/>
+      <div class="flex gap-2 flex-wrap">
+        ${esMovil()
+          ?`<button onclick="$('ef-cam').click()" class="text-xs font-bold text-white bg-ink-900 rounded-lg px-3 py-2 hover:bg-ink-700">📷 TOMAR FOTO</button>
+             <button onclick="$('ef-file').click()" class="text-xs font-bold text-ink-500 border border-line rounded-lg px-3 py-2 hover:bg-paper">🖼 GALERÍA</button>`
+          :`<button onclick="$('ef-file').click()" class="text-xs font-bold text-ink-500 border border-line rounded-lg px-3 py-2 hover:bg-paper">📁 SUBIR FOTO</button>`}
+      </div>
+      <p id="ef-nombre" class="text-[10px] text-ink-400 mt-1"></p>
+    </div>
+  </div>`;
+}
+function previsualizarFoto(inp){
+  const f=inp.files&&inp.files[0]; if(!f) return;
+  const otro=inp.id==='ef-file'?$('ef-cam'):$('ef-file'); if(otro) otro.value='';
+  $('ef-nombre').textContent='✔ '+f.name+' — se sube al guardar';
+  const r=new FileReader();
+  r.onload=e=>{$('ef-prev').innerHTML=`<img src="${e.target.result}" class="absolute inset-0 w-full h-full object-cover"/>`;};
+  r.readAsDataURL(f);
+}
+async function subirFotoJugador(jugadorId){
+  const f=($('ef-cam')&&$('ef-cam').files[0])||($('ef-file')&&$('ef-file').files[0]);
+  if(!f) return null;
+  const ext=(f.name.split('.').pop()||'jpg').toLowerCase();
+  const ruta=`jugadores/${jugadorId}.${ext}`;
+  const {error}=await sb.storage.from('publico').upload(ruta,f,{upsert:true,contentType:f.type});
+  if(error) throw error;
+  return sb.storage.from('publico').getPublicUrl(ruta).data.publicUrl+'?v='+Date.now();
+}
 function modalEditIns(i){
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">✏️ EDITAR JUGADOR</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
     <p class="text-sm font-semibold mb-4">${i.nombre}</p>
+    ${fotoUI(i.foto_url,i.nombre)}
     <div class="grid grid-cols-2 gap-3 text-sm mb-3">
       <label class="block"><span class="text-ink-400 font-semibold text-xs">Dorsal</span>
         <input id="ei-d" type="number" min="0" value="${i.dorsal??''}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
@@ -955,9 +992,13 @@ function modalEditIns(i){
       <label class="flex items-center gap-2 font-semibold pt-4">Inhabilitado
         <input id="ei-i" type="checkbox" ${i.inhabilitado?'checked':''} class="w-4 h-4 accent-[#d9232e]"/></label>
     </div>
-    <button onclick="guardarEditIns('${i.id}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR</button>`);
+    <button onclick='guardarEditIns("${i.id}","${i.jugador_id}")' class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR</button>`);
 }
-async function guardarEditIns(insId){
+async function guardarEditIns(insId,jugadorId){
+  try{
+    const url=await subirFotoJugador(jugadorId);
+    if(url){const r=await sb.rpc('actualizar_foto_jugador',{p_jugador:jugadorId,p_url:url}); if(r.error){toast(errNegocio(r.error));return;}}
+  }catch(e){toast('Foto: '+(e.message||e));return;}
   const upd={dorsal:+($('ei-d').value||0)||null, capitan:$('ei-c').checked,
     estado:$('ei-e').value, inhabilitado:$('ei-i').checked};
   if(upd.estado==='activo') upd.fecha_apto_medico=new Date().toISOString().slice(0,10);
