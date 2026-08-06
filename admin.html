@@ -934,7 +934,48 @@ async function renderLBF(){
       <span class="text-xs text-ink-500">🇵🇪 ${j.nro_documento||''}</span>
       <span class="text-[10px] font-bold px-2 py-1 rounded-full ${i.inhabilitado?'bg-brand-100 text-brand-600':i.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${i.inhabilitado?'INHABILITADO':i.estado.toUpperCase()}</span>
       ${i.estado==='pendiente'&&esAdmin()?`<button onclick="activarIns('${i.id}')" class="text-[10px] font-bold text-emerald-700 border border-emerald-300 rounded-lg px-2 py-1 hover:bg-emerald-50">ACTIVAR</button>`:''}
+      ${esAdmin()?`<button onclick='modalEditIns(${JSON.stringify({id:i.id,dorsal:i.dorsal,capitan:i.capitan,estado:i.estado,inhabilitado:i.inhabilitado,nombre:(j.nombres||'')+' '+(j.apellidos||'')}).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1 hover:bg-paper" title="Editar dorsal, capitán, estado e inhabilitación">✏️</button>
+      <button onclick='quitarIns("${i.id}","${((j.nombres||'')+' '+(j.apellidos||'')).replace(/'/g,'')}")' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1 hover:bg-brand-50 hover:text-brand-600" title="Quitar de la LBF (bloqueado si tiene participaciones)">✕</button>`:''}
     </div>`;}).join(''):'<p class="px-5 py-8 text-sm text-ink-400 text-center">Plantel vacío — agrega el primer jugador.</p>';
+}
+/* ---- Edición de inscripción (funcionalidad compartida con el módulo club) ---- */
+function modalEditIns(i){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">✏️ EDITAR JUGADOR</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-sm font-semibold mb-4">${i.nombre}</p>
+    <div class="grid grid-cols-2 gap-3 text-sm mb-3">
+      <label class="block"><span class="text-ink-400 font-semibold text-xs">Dorsal</span>
+        <input id="ei-d" type="number" min="0" value="${i.dorsal??''}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label class="flex items-center gap-2 font-semibold pt-4">Capitán
+        <input id="ei-c" type="checkbox" ${i.capitan?'checked':''} class="w-4 h-4 accent-[#d9232e]"/></label>
+      <label class="block"><span class="text-ink-400 font-semibold text-xs">Estado</span>
+        <select id="ei-e" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
+          <option value="pendiente" ${i.estado==='pendiente'?'selected':''}>pendiente</option>
+          <option value="activo" ${i.estado==='activo'?'selected':''}>activo</option>
+        </select></label>
+      <label class="flex items-center gap-2 font-semibold pt-4">Inhabilitado
+        <input id="ei-i" type="checkbox" ${i.inhabilitado?'checked':''} class="w-4 h-4 accent-[#d9232e]"/></label>
+    </div>
+    <button onclick="guardarEditIns('${i.id}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR</button>`);
+}
+async function guardarEditIns(insId){
+  const upd={dorsal:+($('ei-d').value||0)||null, capitan:$('ei-c').checked,
+    estado:$('ei-e').value, inhabilitado:$('ei-i').checked};
+  if(upd.estado==='activo') upd.fecha_apto_medico=new Date().toISOString().slice(0,10);
+  const {error}=await sb.from('inscripcion_lbf').update(upd).eq('id',insId);
+  if(error){toast(errNegocio(error));return;}
+  cerrarModal(); toast('Jugador actualizado ✔'); renderLBF();
+}
+async function quitarIns(insId,nombre){
+  // trazabilidad: si el jugador tiene participaciones en planilla, NO se quita (se inhabilita)
+  const {data:pl}=await sb.from('planilla_partido').select('partido_id').eq('inscripcion_id',insId).limit(1);
+  if(pl&&pl.length){
+    toast(`⛔ ${nombre} tiene participaciones registradas en partidos: no se puede quitar de la LBF (protege la trazabilidad). Usa ✏️ → Inhabilitado si no debe seguir jugando.`);
+    return;
+  }
+  if(!confirm(`¿Quitar a ${nombre} de la LBF de este equipo?\n\nNo tiene participaciones registradas. El jugador sigue existiendo en la maestra global y puede volver a inscribirse.`))return;
+  const {error}=await sb.from('inscripcion_lbf').delete().eq('id',insId);
+  if(error){toast(errNegocio(error));return;}
+  toast('Jugador quitado de la LBF'); renderLBF();
 }
 async function activarIns(id){
   const {error}=await sb.from('inscripcion_lbf').update({estado:'activo',fecha_apto_medico:new Date().toISOString().slice(0,10)}).eq('id',id);
