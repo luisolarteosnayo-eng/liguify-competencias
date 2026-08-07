@@ -417,6 +417,12 @@ async function buscarPersonaCT(){
         <label><span class="text-ink-400 font-semibold text-xs">Apellidos *</span><input id="cta-a" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
         <label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Fecha de nacimiento *</span><input id="cta-f" type="date" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
       </div>
+      <div class="border-t border-amber-200 pt-2 mb-3">
+        <p class="text-[10px] font-bold text-amber-700 uppercase tracking-wider mb-1.5">Fotos (puedes agregarlas ahora o luego con ✏️)</p>
+        ${fotoUI(null,'CT')}
+        ${docUI('dfr','DNI frontal',null)}
+        ${docUI('drv','DNI reverso',null)}
+      </div>
       <button onclick="altaCT('${pais}','${doc}')" class="w-full bg-amber-600 text-white text-sm font-bold py-2.5 rounded-xl hover:bg-amber-700">CREAR E INSCRIBIR (queda PENDIENTE)</button></div>`;
   }
 }
@@ -431,7 +437,19 @@ async function altaCT(pais,doc){
   if(!n||!a||!f){toast('Nombres, apellidos y fecha de nacimiento son obligatorios');return;}
   const jm=await sb.from('jugador_maestro').insert({pais_documento:pais,nro_documento:doc,nombres:n,apellidos:a,fecha_nacimiento:f}).select().single();
   if(jm.error){toast(errNegocio(jm.error));return;}
-  await inscribirCT(jm.data.id);
+  const pid=jm.data.id;
+  // inscribir PRIMERO (el permiso de fotos exige pertenecer a un equipo gestionado)
+  const ins=await sb.from('comando_tecnico').insert({
+    equipo_id:EQ.equipo_id, categoria_id:EQ.categoria_id, persona_id:pid, rol:$('ctr').value, estado:'pendiente'});
+  if(ins.error){toast(errNegocio(ins.error));return;}
+  try{
+    const url=await subirFotoJugador(pid);
+    if(url){const r=await sb.rpc('actualizar_foto_jugador',{p_jugador:pid,p_url:url}); if(r.error) toast(errNegocio(r.error));}
+    const fr=await subirDoc('dfr',pid,'frente');
+    const rv=await subirDoc('drv',pid,'reverso');
+    if(fr||rv){const r2=await sb.rpc('actualizar_docs_jugador',{p_jugador:pid,p_frente:fr,p_reverso:rv}); if(r2.error) toast(errNegocio(r2.error));}
+  }catch(e){toast('Fotos: '+(e.message||e));}
+  cerrarModal(); toast('Miembro del CT creado con sus fotos — PENDIENTE de validación ✔'); renderPlantel();
 }
 function modalEditCT(i){
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">✏️ COMANDO TÉCNICO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
