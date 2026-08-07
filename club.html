@@ -15,6 +15,12 @@ tailwind.config={theme:{extend:{
   .screen{display:none}.screen.active{display:block}
   .tabbtn.active{background:#171e2e;color:#fff}
   input,select{outline:none}
+  @media (max-width:640px){
+    input,select,textarea{font-size:16px}     /* evita el zoom automático de iOS */
+    .fila-persona{row-gap:6px}
+    .fila-persona .doc{width:100%;order:9;padding-left:44px;margin-top:-4px}
+    .fila-persona button{padding:8px 12px;min-height:38px}
+  }
 </style>
 <body class="text-ink-900 font-sans min-h-screen">
 
@@ -334,14 +340,16 @@ async function renderPlantel(){
       </div>
       ${ins.length?ins.map(i=>{const j=jug[i.jugador_id]||{};
         const edit={id:i.id,dorsal:i.dorsal,capitan:i.capitan,nombre:(j.nombres||'')+' '+(j.apellidos||''),jugador_id:i.jugador_id,foto_url:j.foto_url||null,dfr:j.doc_scan_frente_url||null,drv:j.doc_scan_reverso_url||null};
-        return `<div class="flex items-center gap-3 px-5 py-2.5 border-b border-line last:border-0 ${i.inhabilitado?'bg-red-50/60':''}">
+        return `<div class="fila-persona flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 border-b border-line last:border-0 ${i.inhabilitado?'bg-red-50/60':''}">
           <span class="w-8 h-8 rounded-full grid place-items-center text-[10px] font-bold text-white overflow-hidden relative shrink-0" style="background:#2b3550">${j.foto_url?`<img src="${j.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales((j.nombres||'')+' '+(j.apellidos||''))}</span>
-          <span class="w-6 text-ink-400 font-bold text-sm">${i.dorsal??''}</span>
-          <span class="flex-1 font-semibold text-sm">${j.nombres||'—'} ${j.apellidos||''} ${i.capitan?'<span class="text-[9px] bg-ink-900 text-white rounded px-1.5 py-0.5 ml-1 font-bold">C</span>':''} ${j.verificado?'<span class="text-emerald-500">✔</span>':''}</span>
-          <span class="text-xs text-ink-500">${j.nro_documento||''}</span>
-          <span class="text-[10px] font-bold px-2 py-1 rounded-full ${i.inhabilitado?'bg-brand-100 text-brand-600':i.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${i.inhabilitado?'INHABILITADO':i.estado.toUpperCase()}</span>
-          ${puedeEditar?`<button onclick='modalEditIns(${JSON.stringify(edit).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1 hover:bg-paper" title="Editar foto, dorsal y capitán">✏️</button>
-          ${i.estado==='pendiente'?`<button onclick='quitarIns("${i.id}","${((j.nombres||'')+' '+(j.apellidos||'')).replace(/'/g,'')}")' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1 hover:bg-brand-50 hover:text-brand-600" title="Quitar de la LBF (solo pendientes)">✕</button>`:''}`:''}
+          <span class="w-6 text-ink-400 font-bold text-sm shrink-0">${i.dorsal??''}</span>
+          <span class="flex-1 min-w-[40%] font-semibold text-sm">${j.nombres||'—'} ${j.apellidos||''} ${i.capitan?'<span class="text-[9px] bg-ink-900 text-white rounded px-1.5 py-0.5 ml-1 font-bold">C</span>':''} ${j.verificado?'<span class="text-emerald-500">✔</span>':''}</span>
+          <span class="doc text-xs text-ink-500">${j.nro_documento||''}</span>
+          <span class="flex items-center gap-1.5 ml-auto">
+            <span class="text-[10px] font-bold px-2 py-1 rounded-full ${i.inhabilitado?'bg-brand-100 text-brand-600':i.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${i.inhabilitado?'INHABILITADO':i.estado.toUpperCase()}</span>
+            ${puedeEditar?`<button onclick='modalEditIns(${JSON.stringify(edit).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper" title="Editar foto, dorsal y capitán">✏️</button>
+            ${i.estado==='pendiente'?`<button onclick='quitarIns("${i.id}","${((j.nombres||'')+' '+(j.apellidos||'')).replace(/'/g,'')}")' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-brand-50 hover:text-brand-600" title="Quitar de la LBF (solo pendientes)">✕</button>`:''}`:''}
+          </span>
         </div>`;}).join('')
         :'<p class="px-5 py-8 text-sm text-ink-400 text-center">Plantel vacío'+(puedeEditar?' — agrega a tu primer jugador.':'.')+'</p>'}
       <p class="text-[11px] text-ink-400 px-5 py-3 bg-paper">Los jugadores que agregues quedan <b>PENDIENTES</b> hasta que el organizador valide documento y apto médico. Un jugador solo puede estar en un equipo por categoría (anti-suplantación).</p>
@@ -373,14 +381,16 @@ async function renderCT(puedeEditar){
     </div>
     ${ct.length?ct.map(i=>{const p=per[i.persona_id]||{};
       const edit={id:i.id,rol:i.rol,nombre:(p.nombres||'')+' '+(p.apellidos||''),persona_id:i.persona_id,foto_url:p.foto_url||null,dfr:p.doc_scan_frente_url||null,drv:p.doc_scan_reverso_url||null};
-      return `<div class="flex items-center gap-3 px-5 py-2.5 border-b border-line last:border-0 ${i.inhabilitado?'bg-red-50/60':''}">
+      return `<div class="fila-persona flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 border-b border-line last:border-0 ${i.inhabilitado?'bg-red-50/60':''}">
         <span class="w-8 h-8 rounded-full grid place-items-center text-[10px] font-bold text-white overflow-hidden relative shrink-0" style="background:#2b3550">${p.foto_url?`<img src="${p.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales((p.nombres||'')+' '+(p.apellidos||''))}</span>
-        <span class="text-[9px] font-bold bg-sky-100 text-sky-700 rounded px-1.5 py-0.5 whitespace-nowrap">${i.rol}</span>
-        <span class="flex-1 font-semibold text-sm">${p.nombres||'—'} ${p.apellidos||''} ${p.verificado?'<span class="text-emerald-500">✔</span>':''}</span>
-        <span class="text-xs text-ink-500">${p.nro_documento||''}</span>
-        <span class="text-[10px] font-bold px-2 py-1 rounded-full ${i.inhabilitado?'bg-brand-100 text-brand-600':i.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${i.inhabilitado?'INHABILITADO':i.estado.toUpperCase()}</span>
-        ${puedeEditar?`<button onclick='modalEditCT(${JSON.stringify(edit).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1 hover:bg-paper" title="Editar rol, foto y documento">✏️</button>
-        ${i.estado==='pendiente'?`<button onclick='quitarCT("${i.id}","${((p.nombres||'')+' '+(p.apellidos||'')).replace(/'/g,'')}")' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1 hover:bg-brand-50 hover:text-brand-600" title="Quitar (solo pendientes)">✕</button>`:''}`:''}
+        <span class="text-[9px] font-bold bg-sky-100 text-sky-700 rounded px-1.5 py-0.5 whitespace-nowrap shrink-0">${i.rol}</span>
+        <span class="flex-1 min-w-[40%] font-semibold text-sm">${p.nombres||'—'} ${p.apellidos||''} ${p.verificado?'<span class="text-emerald-500">✔</span>':''}</span>
+        <span class="doc text-xs text-ink-500">${p.nro_documento||''}</span>
+        <span class="flex items-center gap-1.5 ml-auto">
+          <span class="text-[10px] font-bold px-2 py-1 rounded-full ${i.inhabilitado?'bg-brand-100 text-brand-600':i.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${i.inhabilitado?'INHABILITADO':i.estado.toUpperCase()}</span>
+          ${puedeEditar?`<button onclick='modalEditCT(${JSON.stringify(edit).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper" title="Editar rol, foto y documento">✏️</button>
+          ${i.estado==='pendiente'?`<button onclick='quitarCT("${i.id}","${((p.nombres||'')+' '+(p.apellidos||'')).replace(/'/g,'')}")' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-brand-50 hover:text-brand-600" title="Quitar (solo pendientes)">✕</button>`:''}`:''}
+        </span>
       </div>`;}).join('')
       :'<p class="px-5 py-6 text-sm text-ink-400 text-center">Sin comando técnico registrado'+(puedeEditar?' — agrega al entrenador.':'.')+'</p>'}
     <p class="text-[11px] text-ink-400 px-5 py-3 bg-paper">Entrenador, asistente, preparadores y médico. Quedan <b>PENDIENTES</b> hasta la validación del organizador. Documento único por país: si la persona ya existe en Liguify, se inscribe sin re-digitar.</p>
