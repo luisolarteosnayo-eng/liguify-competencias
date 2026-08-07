@@ -167,6 +167,13 @@ const sb = supabase.createClient(
 );
 const $=id=>document.getElementById(id);
 let MARCA=null, MARCAS=[], ROLES=[], ES_SUPER=false, TORNEO=null, CAT=null, EQUIPO=null;
+let CATALOGO={};   // atributos configurables del maestro de datos (pie_habil, posicion, …)
+async function cargarCatalogo(){
+  const {data}=await sb.from('catalogo_atributo').select('*').eq('activo',true).order('orden');
+  CATALOGO={}; (data||[]).forEach(c=>{(CATALOGO[c.atributo]=CATALOGO[c.atributo]||[]).push(c.valor);});
+}
+const optsCatalogo=(atributo,sel)=>'<option value="">—</option>'+
+  (CATALOGO[atributo]||[]).map(v=>`<option ${v===sel?'selected':''}>${v}</option>`).join('');
 let CLUBES={}, EQUIPOS={}, ZONAS=[], FASES=[], JORNADAS=[];
 
 function toast(m){const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.add('hidden'),4200);}
@@ -215,6 +222,7 @@ async function iniciar(){
   ROLES=um.data;
   const perf=await sb.from('usuario_perfil').select('es_super').eq('id',session.user.id).single();
   ES_SUPER=!!(perf.data&&perf.data.es_super);
+  await cargarCatalogo();
   const ids=[...new Set(um.data.map(r=>r.marca_id))];
   const {data:mks}=await sb.from('marca').select('*').in('id',ids).order('nombre');
   MARCAS=mks||[];
@@ -238,7 +246,8 @@ async function cargarTorneos(){
   const selMarcas=(MARCAS.length>1||ES_SUPER)?`<div class="flex gap-2 mb-3 flex-wrap items-center">
     <span class="text-[10px] uppercase tracking-widest text-ink-400 font-bold">Mis marcas:</span>
     ${MARCAS.map(m=>`<button onclick="cambiarMarca('${m.id}')" class="text-xs font-bold px-4 py-2 rounded-xl border ${m.id===MARCA.id?'bg-ink-900 text-white border-ink-900':'bg-white border-line text-ink-500 hover:bg-paper'}">${m.nombre.toUpperCase()}</button>`).join('')}
-    ${ES_SUPER?`<button onclick="modalNuevaMarca()" class="text-xs font-bold px-4 py-2 rounded-xl border border-dashed border-brand-500 text-brand-600 hover:bg-brand-50">+ NUEVA MARCA</button>`:''}
+    ${ES_SUPER?`<button onclick="modalNuevaMarca()" class="text-xs font-bold px-4 py-2 rounded-xl border border-dashed border-brand-500 text-brand-600 hover:bg-brand-50">+ NUEVA MARCA</button>
+    <button onclick="modalCatalogos()" title="Maestro de datos: valores de Posición, Pie hábil y futuros atributos" class="text-xs font-bold px-4 py-2 rounded-xl border border-line text-ink-500 hover:bg-paper">⚙ CATÁLOGOS</button>`:''}
   </div>`:'';
   $('marca-card').innerHTML=selMarcas+`<div class="bg-ink-900 text-white rounded-2xl p-5 flex items-center gap-4 flex-wrap">
     <span class="w-14 h-14 rounded-2xl grid place-items-center font-display text-2xl overflow-hidden relative" style="background:#d9232e">${MARCA.logo_url?`<img src="${MARCA.logo_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(MARCA.nombre)}</span>
@@ -342,6 +351,42 @@ async function guardarMarca(){
     if(error){toast(errNegocio(error));return;}
     MARCA=data; cerrarModal(); toast('Marca actualizada ✔ — visible en el módulo público'); cargarTorneos();
   }catch(e){toast('Logo: '+(e.message||e)+' — ¿creaste el bucket "publico" en Storage?');}
+}
+
+/* ---- CATÁLOGOS del maestro de datos (solo super-admin) ---- */
+const ATRIBUTOS_NOM={pie_habil:'Pie hábil', posicion:'Posición'};
+async function modalCatalogos(){
+  const {data,error}=await sb.from('catalogo_atributo').select('*').order('atributo').order('orden');
+  if(error){toast(errNegocio(error));return;}
+  const grupos={};
+  (data||[]).forEach(c=>{(grupos[c.atributo]=grupos[c.atributo]||[]).push(c);});
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⚙ CATÁLOGOS</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">Maestro de datos del sistema: estos valores alimentan los formularios de jugadores en TODAS las marcas. Desactivar un valor lo oculta de los formularios sin borrar los datos ya registrados.</p>
+    ${Object.entries(grupos).map(([atr,vals])=>`
+      <div class="mb-4">
+        <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1.5">${ATRIBUTOS_NOM[atr]||atr}</p>
+        ${vals.map(v=>`<div class="flex items-center gap-2 py-1 border-b border-line last:border-0 text-sm ${v.activo?'':'opacity-50'}">
+          <span class="flex-1 font-semibold">${v.valor}</span>
+          <button onclick="catToggle('${v.id}',${v.activo?'false':'true'})" class="text-[10px] font-bold rounded-lg px-2.5 py-1.5 ${v.activo?'text-ink-400 border border-line hover:bg-paper':'text-emerald-700 border border-emerald-300 hover:bg-emerald-50'}">${v.activo?'DESACTIVAR':'ACTIVAR'}</button>
+        </div>`).join('')}
+        <div class="flex gap-2 mt-1.5">
+          <input id="cat-nuevo-${atr}" placeholder="Nuevo valor…" class="flex-1 border border-line rounded-lg px-3 py-1.5 text-sm font-semibold" onkeydown="if(event.key==='Enter')catAgregar('${atr}')"/>
+          <button onclick="catAgregar('${atr}')" class="bg-ink-900 text-white text-xs font-bold px-3 rounded-lg hover:bg-ink-700">+ AGREGAR</button>
+        </div>
+      </div>`).join('')}`);
+}
+async function catAgregar(atr){
+  const v=$('cat-nuevo-'+atr).value.trim();
+  if(!v){toast('⚠ Escribe el valor');return;}
+  const {data:ex}=await sb.from('catalogo_atributo').select('orden').eq('atributo',atr).order('orden',{ascending:false}).limit(1);
+  const {error}=await sb.from('catalogo_atributo').insert({atributo:atr, valor:v, orden:((ex&&ex[0])?ex[0].orden:0)+1});
+  if(error){toast(errNegocio(error));return;}
+  await cargarCatalogo(); toast(`"${v}" agregado al catálogo ✔`); modalCatalogos();
+}
+async function catToggle(id,activo){
+  const {error}=await sb.from('catalogo_atributo').update({activo}).eq('id',id);
+  if(error){toast(errNegocio(error));return;}
+  await cargarCatalogo(); modalCatalogos();
 }
 
 /* ---- ALTA DE MARCAS (solo super-admin) + USUARIOS por marca ---- */
@@ -1082,19 +1127,20 @@ async function renderLBF(){
   if(error){$('lbf-lista').innerHTML='';msg(errNegocio(error),'err');return;}
   let jug={};
   if(ins.length){
-    const js=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,fecha_nacimiento,verificado,foto_url,doc_scan_frente_url,doc_scan_reverso_url').in('id',ins.map(i=>i.jugador_id));
+    const js=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,fecha_nacimiento,verificado,foto_url,doc_scan_frente_url,doc_scan_reverso_url,pie_habil,posicion').in('id',ins.map(i=>i.jugador_id));
     jug=Object.fromEntries((js.data||[]).map(j=>[j.id,j]));
   }
   $('lbf-lista').innerHTML=ins.length?ins.map(i=>{const j=jug[i.jugador_id]||{};
     return `<div class="fila-persona flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 border-b border-line last:border-0 ${i.inhabilitado?'bg-red-50/60':''}">
       <span class="w-8 h-8 rounded-full grid place-items-center text-[10px] font-bold text-white overflow-hidden relative shrink-0" style="background:#2b3550">${j.foto_url?`<img src="${j.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales((j.nombres||'')+' '+(j.apellidos||''))}</span>
       <span class="w-6 text-ink-400 font-bold text-sm shrink-0">${i.dorsal??''}</span>
-      <span class="flex-1 min-w-[40%] font-semibold text-sm">${j.nombres||'—'} ${j.apellidos||''} ${i.capitan?'<span class="text-[9px] bg-ink-900 text-white rounded px-1.5 py-0.5 ml-1 font-bold">C</span>':''} ${j.verificado?'<span class="text-emerald-500">✔</span>':''}</span>
+      <span class="flex-1 min-w-[40%] font-semibold text-sm">${j.nombres||'—'} ${j.apellidos||''} ${i.capitan?'<span class="text-[9px] bg-ink-900 text-white rounded px-1.5 py-0.5 ml-1 font-bold">C</span>':''} ${j.verificado?'<span class="text-emerald-500">✔</span>':''}
+        ${(j.posicion||j.pie_habil)?`<span class="block text-[10px] text-ink-400 font-normal">${[j.posicion,j.pie_habil].filter(Boolean).join(' · ')}</span>`:''}</span>
       <span class="doc text-xs text-ink-500">🇵🇪 ${j.nro_documento||''}</span>
       <span class="flex items-center gap-1.5 ml-auto flex-wrap">
         <span class="text-[10px] font-bold px-2 py-1 rounded-full ${i.inhabilitado?'bg-brand-100 text-brand-600':i.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${i.inhabilitado?'INHABILITADO':i.estado.toUpperCase()}</span>
         ${i.estado==='pendiente'&&esAdmin()?`<button onclick="activarIns('${i.id}')" class="text-[10px] font-bold text-emerald-700 border border-emerald-300 rounded-lg px-2.5 py-1.5 hover:bg-emerald-50">ACTIVAR</button>`:''}
-        ${esAdmin()?`<button onclick='modalEditIns(${JSON.stringify({id:i.id,dorsal:i.dorsal,capitan:i.capitan,estado:i.estado,inhabilitado:i.inhabilitado,nombre:(j.nombres||'')+' '+(j.apellidos||''),jugador_id:i.jugador_id,foto_url:j.foto_url||null,dfr:j.doc_scan_frente_url||null,drv:j.doc_scan_reverso_url||null}).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper" title="Editar foto, documento, dorsal, capitán, estado e inhabilitación">✏️</button>
+        ${esAdmin()?`<button onclick='modalEditIns(${JSON.stringify({id:i.id,dorsal:i.dorsal,capitan:i.capitan,estado:i.estado,inhabilitado:i.inhabilitado,nombre:(j.nombres||'')+' '+(j.apellidos||''),jugador_id:i.jugador_id,foto_url:j.foto_url||null,dfr:j.doc_scan_frente_url||null,drv:j.doc_scan_reverso_url||null,pie:j.pie_habil||null,pos:j.posicion||null}).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper" title="Editar foto, documento, dorsal, capitán, posición, pie hábil, estado e inhabilitación">✏️</button>
         <button onclick='quitarIns("${i.id}","${((j.nombres||'')+' '+(j.apellidos||'')).replace(/'/g,'')}")' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-brand-50 hover:text-brand-600" title="Quitar de la LBF (bloqueado si tiene participaciones)">✕</button>`:''}
       </span>
     </div>`;}).join(''):'<p class="px-5 py-8 text-sm text-ink-400 text-center">Plantel vacío — agrega el primer jugador.</p>';
@@ -1182,6 +1228,10 @@ function modalEditIns(i){
         <input id="ei-d" type="number" min="0" value="${i.dorsal??''}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
       <label class="flex items-center gap-2 font-semibold pt-4">Capitán
         <input id="ei-c" type="checkbox" ${i.capitan?'checked':''} class="w-4 h-4 accent-[#d9232e]"/></label>
+      <label class="block"><span class="text-ink-400 font-semibold text-xs">Posición</span>
+        <select id="ei-pos" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${optsCatalogo('posicion',i.pos)}</select></label>
+      <label class="block"><span class="text-ink-400 font-semibold text-xs">Pie hábil</span>
+        <select id="ei-pie" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${optsCatalogo('pie_habil',i.pie)}</select></label>
       <label class="block"><span class="text-ink-400 font-semibold text-xs">Estado</span>
         <select id="ei-e" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
           <option value="pendiente" ${i.estado==='pendiente'?'selected':''}>pendiente</option>
@@ -1200,6 +1250,8 @@ async function guardarEditIns(insId,jugadorId){
     const rv=await subirDoc('drv',jugadorId,'reverso');
     if(fr||rv){const r2=await sb.rpc('actualizar_docs_jugador',{p_jugador:jugadorId,p_frente:fr,p_reverso:rv}); if(r2.error){toast(errNegocio(r2.error));return;}}
   }catch(e){toast('Fotos: '+(e.message||e));return;}
+  const ra=await sb.rpc('actualizar_atributos_jugador',{p_jugador:jugadorId,p_pie:$('ei-pie')?$('ei-pie').value:'',p_posicion:$('ei-pos')?$('ei-pos').value:''});
+  if(ra.error){toast(errNegocio(ra.error));return;}
   const upd={dorsal:+($('ei-d').value||0)||null, capitan:$('ei-c').checked,
     estado:$('ei-e').value, inhabilitado:$('ei-i').checked};
   if(upd.estado==='activo') upd.fecha_apto_medico=new Date().toISOString().slice(0,10);
@@ -1301,6 +1353,8 @@ async function buscarJugador(){
         <label><span class="text-ink-400 font-semibold text-xs">Apellidos *</span><input id="al-a" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
         <label><span class="text-ink-400 font-semibold text-xs">Fecha de nacimiento *</span><input id="al-f" type="date" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
         <label><span class="text-ink-400 font-semibold text-xs">Dorsal</span><input id="al-d" type="number" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
+        <label><span class="text-ink-400 font-semibold text-xs">Posición</span><select id="al-pos" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${optsCatalogo('posicion','')}</select></label>
+        <label><span class="text-ink-400 font-semibold text-xs">Pie hábil</span><select id="al-pie" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${optsCatalogo('pie_habil','')}</select></label>
       </div>
       <button onclick="altaJugador('${pais}','${doc}')" class="w-full bg-amber-600 text-white text-sm font-bold py-2.5 rounded-xl hover:bg-amber-700">CREAR E INSCRIBIR (queda PENDIENTE)</button></div>`;
   }
@@ -1321,6 +1375,9 @@ async function altaJugador(pais,doc){
   const ins=await sb.from('inscripcion_lbf').insert({equipo_id:EQUIPO.id,jugador_id:jm.data.id,categoria_id:CAT.id,
     dorsal:+($('al-d').value||0)||null,estado:'pendiente',es_excepcion:anio!==CAT.anio_nacimiento});
   if(ins.error){toast(errNegocio(ins.error));return;}
+  if(($('al-pos')&&$('al-pos').value)||($('al-pie')&&$('al-pie').value)){
+    await sb.rpc('actualizar_atributos_jugador',{p_jugador:jm.data.id,p_pie:$('al-pie').value,p_posicion:$('al-pos').value});
+  }
   cerrarModal();
   toast(anio!==CAT.anio_nacimiento?`⚠ Creado e inscrito como EXCEPCIÓN POR EDAD (nació ${anio}, categoría ${CAT.anio_nacimiento})`:'Jugador creado en la maestra e inscrito — PENDIENTE ✔');
   renderLBF();

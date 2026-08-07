@@ -99,6 +99,13 @@ const sb = supabase.createClient(
 );
 const $=id=>document.getElementById(id);
 let MIS=[], EQ=null;
+let CATALOGO={};
+async function cargarCatalogo(){
+  const {data}=await sb.from('catalogo_atributo').select('*').eq('activo',true).order('orden');
+  CATALOGO={}; (data||[]).forEach(c=>{(CATALOGO[c.atributo]=CATALOGO[c.atributo]||[]).push(c.valor);});
+}
+const optsCatalogo=(atributo,sel)=>'<option value="">—</option>'+
+  (CATALOGO[atributo]||[]).map(v=>`<option ${v===sel?'selected':''}>${v}</option>`).join('');
 
 function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));$(id).classList.add('active');window.scrollTo(0,0);}
 function toast(t){const e=$('toast');e.textContent=t;e.classList.remove('hidden');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.add('hidden'),5000);}
@@ -179,6 +186,7 @@ async function iniciar(){
   $('hdr-user').textContent=session.user.email;
   $('hdr-out').classList.remove('hidden');
   $('hdr-key').classList.remove('hidden');
+  await cargarCatalogo();
   await cargarHub();
 }
 
@@ -324,7 +332,7 @@ async function renderPlantel(){
   N_LBF=(ins||[]).length;
   let jug={};
   if(ins.length){
-    const js=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,fecha_nacimiento,verificado,foto_url,doc_scan_frente_url,doc_scan_reverso_url').in('id',ins.map(i=>i.jugador_id));
+    const js=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,fecha_nacimiento,verificado,foto_url,doc_scan_frente_url,doc_scan_reverso_url,pie_habil,posicion').in('id',ins.map(i=>i.jugador_id));
     jug=Object.fromEntries((js.data||[]).map(j=>[j.id,j]));
   }
   const puedeEditar=EQ.permitir_delegados&&EQ.cargar_lbf&&EQ.equipo_estado==='activo'&&EQ.torneo_estado!=='finalizado'&&EQ.torneo_estado!=='archivado';
@@ -339,11 +347,12 @@ async function renderPlantel(){
           :'<span class="text-[10px] font-bold text-ink-400">Solo lectura'+(EQ.permitir_delegados?'':' — el torneo no habilita delegados')+'</span>'}
       </div>
       ${ins.length?ins.map(i=>{const j=jug[i.jugador_id]||{};
-        const edit={id:i.id,dorsal:i.dorsal,capitan:i.capitan,nombre:(j.nombres||'')+' '+(j.apellidos||''),jugador_id:i.jugador_id,foto_url:j.foto_url||null,dfr:j.doc_scan_frente_url||null,drv:j.doc_scan_reverso_url||null};
+        const edit={id:i.id,dorsal:i.dorsal,capitan:i.capitan,nombre:(j.nombres||'')+' '+(j.apellidos||''),jugador_id:i.jugador_id,foto_url:j.foto_url||null,dfr:j.doc_scan_frente_url||null,drv:j.doc_scan_reverso_url||null,pie:j.pie_habil||null,pos:j.posicion||null};
         return `<div class="fila-persona flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 border-b border-line last:border-0 ${i.inhabilitado?'bg-red-50/60':''}">
           <span class="w-8 h-8 rounded-full grid place-items-center text-[10px] font-bold text-white overflow-hidden relative shrink-0" style="background:#2b3550">${j.foto_url?`<img src="${j.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales((j.nombres||'')+' '+(j.apellidos||''))}</span>
           <span class="w-6 text-ink-400 font-bold text-sm shrink-0">${i.dorsal??''}</span>
-          <span class="flex-1 min-w-[40%] font-semibold text-sm">${j.nombres||'—'} ${j.apellidos||''} ${i.capitan?'<span class="text-[9px] bg-ink-900 text-white rounded px-1.5 py-0.5 ml-1 font-bold">C</span>':''} ${j.verificado?'<span class="text-emerald-500">✔</span>':''}</span>
+          <span class="flex-1 min-w-[40%] font-semibold text-sm">${j.nombres||'—'} ${j.apellidos||''} ${i.capitan?'<span class="text-[9px] bg-ink-900 text-white rounded px-1.5 py-0.5 ml-1 font-bold">C</span>':''} ${j.verificado?'<span class="text-emerald-500">✔</span>':''}
+            ${(j.posicion||j.pie_habil)?`<span class="block text-[10px] text-ink-400 font-normal">${[j.posicion,j.pie_habil].filter(Boolean).join(' · ')}</span>`:''}</span>
           <span class="doc text-xs text-ink-500">${j.nro_documento||''}</span>
           <span class="flex items-center gap-1.5 ml-auto">
             <span class="text-[10px] font-bold px-2 py-1 rounded-full ${i.inhabilitado?'bg-brand-100 text-brand-600':i.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${i.inhabilitado?'INHABILITADO':i.estado.toUpperCase()}</span>
@@ -576,6 +585,10 @@ function modalEditIns(i){
         <input id="ei-d" type="number" min="0" value="${i.dorsal??''}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
       <label class="flex items-center gap-2 font-semibold pt-4">Capitán
         <input id="ei-c" type="checkbox" ${i.capitan?'checked':''} class="w-4 h-4 accent-[#d9232e]"/></label>
+      <label class="block"><span class="text-ink-400 font-semibold text-xs">Posición</span>
+        <select id="ei-pos" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${optsCatalogo('posicion',i.pos)}</select></label>
+      <label class="block"><span class="text-ink-400 font-semibold text-xs">Pie hábil</span>
+        <select id="ei-pie" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${optsCatalogo('pie_habil',i.pie)}</select></label>
     </div>
     <p class="text-[11px] text-ink-400 mb-4">La foto del jugador aparece en el módulo público (B/N sin consentimiento). Las fotos del documento van a almacenamiento PRIVADO. El estado y las inhabilitaciones solo los gestiona el organizador.</p>
     <button onclick='guardarEditIns("${i.id}","${i.jugador_id}")' class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR</button>`);
@@ -588,6 +601,8 @@ async function guardarEditIns(insId,jugadorId){
     const rv=await subirDoc('drv',jugadorId,'reverso');
     if(fr||rv){const r2=await sb.rpc('actualizar_docs_jugador',{p_jugador:jugadorId,p_frente:fr,p_reverso:rv}); if(r2.error){toast(errNegocio(r2.error));return;}}
   }catch(e){toast('Fotos: '+(e.message||e));return;}
+  const ra=await sb.rpc('actualizar_atributos_jugador',{p_jugador:jugadorId,p_pie:$('ei-pie')?$('ei-pie').value:'',p_posicion:$('ei-pos')?$('ei-pos').value:''});
+  if(ra.error){toast(errNegocio(ra.error));return;}
   const {error}=await sb.from('inscripcion_lbf').update({
     dorsal:+($('ei-d').value||0)||null, capitan:$('ei-c').checked}).eq('id',insId);
   if(error){toast(errNegocio(error));return;}
@@ -630,6 +645,8 @@ async function buscarJugador(){
         <label><span class="text-ink-400 font-semibold text-xs">Apellidos *</span><input id="al-a" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
         <label><span class="text-ink-400 font-semibold text-xs">Fecha de nacimiento *</span><input id="al-f" type="date" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
         <label><span class="text-ink-400 font-semibold text-xs">Dorsal</span><input id="al-d" type="number" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
+        <label><span class="text-ink-400 font-semibold text-xs">Posición</span><select id="al-pos" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${optsCatalogo('posicion','')}</select></label>
+        <label><span class="text-ink-400 font-semibold text-xs">Pie hábil</span><select id="al-pie" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${optsCatalogo('pie_habil','')}</select></label>
       </div>
       <button onclick="altaJugador('${pais}','${doc}')" class="w-full bg-amber-600 text-white text-sm font-bold py-2.5 rounded-xl hover:bg-amber-700">CREAR E INSCRIBIR (queda PENDIENTE)</button></div>`;
   }
@@ -650,6 +667,9 @@ async function altaJugador(pais,doc){
   const ins=await sb.from('inscripcion_lbf').insert({equipo_id:EQ.equipo_id,jugador_id:jm.data.id,categoria_id:EQ.categoria_id,
     dorsal:+($('al-d').value||0)||null,estado:'pendiente',es_excepcion:anio!==EQ.anio});
   if(ins.error){toast(errNegocio(ins.error));return;}
+  if(($('al-pos')&&$('al-pos').value)||($('al-pie')&&$('al-pie').value)){
+    await sb.rpc('actualizar_atributos_jugador',{p_jugador:jm.data.id,p_pie:$('al-pie').value,p_posicion:$('al-pos').value});
+  }
   cerrarModal();
   toast(anio!==EQ.anio?`⚠ Inscrito como EXCEPCIÓN POR EDAD (nació ${anio}, categoría ${EQ.anio}) — PENDIENTE`:'Jugador creado e inscrito — PENDIENTE ✔');
   renderPlantel();

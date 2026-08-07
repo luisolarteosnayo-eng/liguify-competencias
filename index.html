@@ -461,7 +461,8 @@ async function irEquipoId(id){
         ${j.foto_url?`<img src="${j.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(j.nombres+' '+j.apellidos)}
       </span>
       <span class="w-6 text-ink-400 font-bold text-sm">${j.dorsal??''}</span>
-      <span class="flex-1 font-semibold text-sm">${j.nombres} ${j.apellidos} ${j.capitan?'<span class="text-[9px] bg-ink-900 text-white rounded px-1.5 py-0.5 ml-1 font-bold">C</span>':''}</span>
+      <span class="flex-1 font-semibold text-sm">${j.nombres} ${j.apellidos} ${j.capitan?'<span class="text-[9px] bg-ink-900 text-white rounded px-1.5 py-0.5 ml-1 font-bold">C</span>':''}
+        ${(j.posicion||j.pie_habil)?`<span class="block text-[10px] text-ink-400 font-normal">${[j.posicion,j.pie_habil].filter(Boolean).join(' · ')}</span>`:''}</span>
       <span class="text-xs text-ink-400">nac. ${j.anio_nacimiento}</span>
     </div>`).join(''):'<p class="px-5 py-8 text-sm text-ink-400 text-center">Este equipo aún no publica su plantel.</p>';
   show('s-equipo');
