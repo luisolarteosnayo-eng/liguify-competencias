@@ -134,8 +134,11 @@ sb.auth.onAuthStateChange((ev)=>{
 const sbMail=supabase.createClient('https://bpsczjjomgzhnjxnzmhj.supabase.co',
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwc2N6ampvbWd6aG5qeG56bWhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1MDg5MTgsImV4cCI6MjA5ODA4NDkxOH0.3O92Q-3xxdCmF1LStCQrlCtz1s_EfdlayXnL_mEElOw',
   {auth:{storageKey:'sb-competencias-mail', persistSession:false}});
-async function enviarAccesoEmail(email){
-  const {error}=await sbMail.auth.signInWithOtp({email, options:{emailRedirectTo:'https://www.liguify.com/club', shouldCreateUser:true}});
+async function enviarAccesoEmail(email,ctx){
+  // ctx {torneo, club}: personaliza el email vía user_metadata (solo aplica a cuentas NUEVAS)
+  const {error}=await sbMail.auth.signInWithOtp({email, options:{
+    emailRedirectTo:'https://www.liguify.com/club', shouldCreateUser:true,
+    data: ctx?{torneo_invitacion:ctx.torneo||null, club_invitacion:ctx.club||null}:undefined}});
   return error;
 }
 async function olvidePassword(){
@@ -263,7 +266,7 @@ async function enviarInvitacionSub(torneoId,clubId){
   if(!catIds.length){toast('⚠ Marca al menos una categoría');return;}
   const r=await sb.rpc('invitar_subcoordinador',{p_torneo:torneoId,p_club:clubId,p_email:email,p_nombre:$('sc-n').value.trim(),p_telefono:$('sc-t').value.trim(),p_categorias:catIds});
   if(r.error){toast(errNegocio(r.error));return;}
-  const em=await enviarAccesoEmail(email);
+  const em=await enviarAccesoEmail(email,{torneo:grupo[0].torneo, club:grupo[0].club_nombre});
   toast(em?('Invitación registrada ✔ pero el email falló: '+em.message):'📨 Sub-coordinador invitado ✔ — le llegó el email con su acceso');
   $('sc-e').value='';$('sc-n').value='';$('sc-t').value='';
   refrescarInvSub(torneoId,clubId);

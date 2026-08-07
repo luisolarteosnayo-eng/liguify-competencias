@@ -968,8 +968,11 @@ async function quitarCT(id,nombre){
 const sbMail=supabase.createClient('https://bpsczjjomgzhnjxnzmhj.supabase.co',
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwc2N6ampvbWd6aG5qeG56bWhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1MDg5MTgsImV4cCI6MjA5ODA4NDkxOH0.3O92Q-3xxdCmF1LStCQrlCtz1s_EfdlayXnL_mEElOw',
   {auth:{storageKey:'sb-competencias-mail', persistSession:false}});
-async function enviarAccesoEmail(email){
-  const {error}=await sbMail.auth.signInWithOtp({email, options:{emailRedirectTo:'https://www.liguify.com/club', shouldCreateUser:true}});
+async function enviarAccesoEmail(email,ctx){
+  // ctx {torneo, club}: personaliza el email vía user_metadata (solo aplica a cuentas NUEVAS)
+  const {error}=await sbMail.auth.signInWithOtp({email, options:{
+    emailRedirectTo:'https://www.liguify.com/club', shouldCreateUser:true,
+    data: ctx?{torneo_invitacion:ctx.torneo||null, club_invitacion:ctx.club||null}:undefined}});
   return error;
 }
 async function modalCoordinadorClub(clubId){
@@ -1005,7 +1008,7 @@ async function enviarInvitacionCoordinador(clubId){
   if(!email){toast('⚠ El email es obligatorio');return;}
   const r=await sb.rpc('invitar_coordinador',{p_torneo:TORNEO.id,p_club:clubId,p_email:email,p_nombre:$('ic-n').value.trim(),p_telefono:$('ic-t').value.trim()});
   if(r.error){toast(errNegocio(r.error));return;}
-  const em=await enviarAccesoEmail(email);
+  const em=await enviarAccesoEmail(email,{torneo:TORNEO.nombre, club:(CLUBES[clubId]||{}).nombre});
   toast(em?('Invitación registrada ✔ pero el email falló: '+em.message+' — puedes reenviar el acceso desde esta pantalla'):'📨 Invitación enviada ✔ — le llegó un email con su enlace de acceso a liguify.com/club');
   $('ic-e').value=''; $('ic-n').value=''; $('ic-t').value='';
   refrescarInvitaciones(clubId);
