@@ -143,6 +143,7 @@ tailwind.config={theme:{extend:{
       </div>
       <div id="lbf-lista"></div>
     </div>
+    <div id="ct-card" class="mt-4"></div>
   </section>
 </main>
 
@@ -458,6 +459,7 @@ function modalTorneo(t){
       ${campo('tc-ama','Amarillas para suspensión (vacío = sin)',t.amarillas_suspension)}
       ${campo('tc-amaf','Fecha límite acum. amarillas',t.fecha_limite_amarillas,'date')}
       ${campo('tc-lbf','Máx. jugadores LBF por equipo',t.lbf_max_jugadores,'number')}
+      ${campo('tc-ct','Máx. comando técnico por equipo',t.ct_max_personas??5,'number')}
       ${campo('tc-flim','Fecha límite carga equipo',t.fecha_limite_carga_equipo,'date')}
     </div>
     ${toggleC('tc-clbf','Cargar jugadores en LBF',t.cargar_lbf)}
@@ -479,7 +481,8 @@ async function guardarTorneo(id){
       orden_tabla:orden.length?orden:['PJ','PUNTOS','DIF_GOL','GF','GC'],
       mostrar_tabla_general:$('tc-tg').checked, mostrar_excepciones_edad:$('tc-exc').checked,
       amarillas_suspension:$('tc-ama').value?+$('tc-ama').value:null, fecha_limite_amarillas:$('tc-amaf').value||null,
-      lbf_max_jugadores:+$('tc-lbf').value||30, fecha_limite_carga_equipo:$('tc-flim').value||null,
+      lbf_max_jugadores:+$('tc-lbf').value||30, ct_max_personas:+$('tc-ct').value||5,
+      fecha_limite_carga_equipo:$('tc-flim').value||null,
       cargar_lbf:$('tc-clbf').checked, scan_dni_obligatorio:$('tc-scan').checked,
       permitir_delegados:$('tc-del').checked, permitir_modificacion_equipo:$('tc-modif').checked,
       descripcion:$('tc-desc').value.trim()||null};
@@ -834,7 +837,132 @@ async function abrirLBF(eqId){
     ${esAdmin()?`<button onclick="modalClub('${EQUIPO.club_id}')" class="bg-white/10 border border-white/20 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/20">🛡️ ESCUDO DEL CLUB</button>
       <button onclick="modalCoordinadorClub('${EQUIPO.club_id}')" class="bg-white/10 border border-white/20 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/20">👤 COORDINADOR</button>`:''}
   </div>`;
-  await renderLBF(); show('s-lbf');
+  await Promise.all([renderLBF(),renderCT()]); show('s-lbf');
+}
+/* ---- COMANDO TÉCNICO (por equipo/torneo; misma maestra global de personas) ---- */
+const CT_ROLES=['Entrenador','Asistente Técnico','Preparador físico','Preparador de arqueros','Médico'];
+async function renderCT(){
+  const {data:ct,error}=await sb.from('comando_tecnico').select('*').eq('equipo_id',EQUIPO.id).order('created_at');
+  if(error){$('ct-card').innerHTML=`<p class="text-brand-600 text-xs font-bold">${errNegocio(error)}</p>`;return;}
+  let per={};
+  if(ct.length){
+    const ps=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,verificado,foto_url,doc_scan_frente_url,doc_scan_reverso_url').in('id',ct.map(i=>i.persona_id));
+    per=Object.fromEntries((ps.data||[]).map(p=>[p.id,p]));
+  }
+  const max=TORNEO.ct_max_personas??5;
+  const lleno=ct.length>=max;
+  $('ct-card').innerHTML=`<div class="bg-white border border-line rounded-2xl overflow-hidden">
+    <div class="px-5 py-3 border-b border-line flex items-center justify-between flex-wrap gap-2">
+      <p class="font-display text-xl tracking-wide">COMANDO TÉCNICO <span class="text-xs font-sans text-ink-400 font-semibold">${ct.length}/${max}</span></p>
+      ${lleno?'<span class="text-[10px] font-bold text-amber-600">Máximo del torneo alcanzado</span>'
+        :`<button onclick="modalCT()" class="bg-ink-900 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-ink-700">+ AGREGAR MIEMBRO</button>`}
+    </div>
+    ${ct.length?ct.map(i=>{const p=per[i.persona_id]||{};
+      const edit={id:i.id,rol:i.rol,estado:i.estado,inhabilitado:i.inhabilitado,nombre:(p.nombres||'')+' '+(p.apellidos||''),persona_id:i.persona_id,foto_url:p.foto_url||null,dfr:p.doc_scan_frente_url||null,drv:p.doc_scan_reverso_url||null};
+      return `<div class="flex items-center gap-3 px-5 py-2.5 border-b border-line last:border-0 ${i.inhabilitado?'bg-red-50/60':''}">
+        <span class="w-8 h-8 rounded-full grid place-items-center text-[10px] font-bold text-white overflow-hidden relative shrink-0" style="background:#2b3550">${p.foto_url?`<img src="${p.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales((p.nombres||'')+' '+(p.apellidos||''))}</span>
+        <span class="text-[9px] font-bold bg-sky-100 text-sky-700 rounded px-1.5 py-0.5 whitespace-nowrap">${i.rol}</span>
+        <span class="flex-1 font-semibold text-sm">${p.nombres||'—'} ${p.apellidos||''} ${p.verificado?'<span class="text-emerald-500">✔</span>':''}</span>
+        <span class="text-xs text-ink-500">${p.nro_documento||''}</span>
+        <span class="text-[10px] font-bold px-2 py-1 rounded-full ${i.inhabilitado?'bg-brand-100 text-brand-600':i.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${i.inhabilitado?'INHABILITADO':i.estado.toUpperCase()}</span>
+        ${i.estado==='pendiente'&&esAdmin()?`<button onclick="activarCT('${i.id}')" class="text-[10px] font-bold text-emerald-700 border border-emerald-300 rounded-lg px-2 py-1 hover:bg-emerald-50">ACTIVAR</button>`:''}
+        ${esAdmin()?`<button onclick='modalEditCT(${JSON.stringify(edit).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1 hover:bg-paper" title="Editar rol, foto, documento, estado">✏️</button>
+        <button onclick='quitarCT("${i.id}","${((p.nombres||'')+' '+(p.apellidos||'')).replace(/'/g,'')}")' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1 hover:bg-brand-50 hover:text-brand-600" title="Quitar del comando técnico">✕</button>`:''}
+      </div>`;}).join('')
+      :'<p class="px-5 py-6 text-sm text-ink-400 text-center">Sin comando técnico registrado.</p>'}
+    <p class="text-[11px] text-ink-400 px-5 py-3 bg-paper">Entrenador, asistente, preparadores y médico. Mismos datos que un jugador (documento único por país): si la persona ya existe en Liguify, se inscribe sin re-digitar.</p>
+  </div>`;
+}
+function modalCT(){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">+ COMANDO TÉCNICO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Rol</span>
+      <select id="ctr" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${CT_ROLES.map(r=>`<option>${r}</option>`).join('')}</select></label>
+    <p class="text-xs text-ink-400 mb-3">Busca por documento: si la persona ya existe en Liguify (como jugador o miembro de otro CT), se inscribe sin re-digitar sus datos.</p>
+    <div class="flex gap-2 mb-3">
+      <select id="ctp" class="border border-line rounded-xl px-2 py-2 text-sm font-semibold bg-white"><option>PE</option><option>AR</option><option>BO</option><option>BR</option><option>CL</option><option>CO</option><option>EC</option><option>UY</option><option>VE</option></select>
+      <input id="ctd" placeholder="N° de documento" class="flex-1 border border-line rounded-xl px-3 py-2 text-sm font-semibold" onkeydown="if(event.key==='Enter')buscarPersonaCT()"/>
+      <button onclick="buscarPersonaCT()" class="bg-ink-900 text-white text-xs font-bold px-4 rounded-xl hover:bg-ink-700">BUSCAR</button>
+    </div>
+    <div id="ct-res"></div>`);
+}
+async function buscarPersonaCT(){
+  const pais=$('ctp').value, doc=$('ctd').value.trim();
+  if(!doc) return;
+  const {data,error}=await sb.rpc('buscar_jugador_censurado',{p_pais:pais,p_doc:doc});
+  if(error){$('ct-res').innerHTML=`<p class="text-sm text-brand-600 font-semibold">${errNegocio(error)}</p>`;return;}
+  if(data&&data.length){
+    const j=data[0];
+    $('ct-res').innerHTML=`<div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+      <p class="font-bold text-emerald-700 text-sm mb-2">✔ Persona ya registrada en Liguify (censurada por privacidad)</p>
+      <p class="font-semibold text-sm mb-3">🔒 ${j.nombre_censurado} · Nac. ${j.anio_nacimiento}-**-**</p>
+      <button onclick="inscribirCT('${j.jugador_id}')" class="w-full bg-emerald-600 text-white text-sm font-bold py-2.5 rounded-xl hover:bg-emerald-700">INSCRIBIR EN EL COMANDO TÉCNICO</button></div>`;
+  } else {
+    $('ct-res').innerHTML=`<div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+      <p class="font-bold text-amber-700 text-sm mb-2">Documento no registrado — alta nueva</p>
+      <div class="grid grid-cols-2 gap-3 text-sm mb-3">
+        <label><span class="text-ink-400 font-semibold text-xs">Nombres *</span><input id="cta-n" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
+        <label><span class="text-ink-400 font-semibold text-xs">Apellidos *</span><input id="cta-a" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
+        <label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Fecha de nacimiento *</span><input id="cta-f" type="date" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
+      </div>
+      <button onclick="altaCT('${pais}','${doc}')" class="w-full bg-amber-600 text-white text-sm font-bold py-2.5 rounded-xl hover:bg-amber-700">CREAR E INSCRIBIR (queda PENDIENTE)</button></div>`;
+  }
+}
+async function inscribirCT(personaId){
+  const {error}=await sb.from('comando_tecnico').insert({
+    equipo_id:EQUIPO.id, categoria_id:CAT.id, persona_id:personaId, rol:$('ctr').value, estado:'pendiente'});
+  if(error){$('ct-res').innerHTML=`<div class="bg-brand-50 border border-brand-100 rounded-xl p-4 text-sm font-semibold text-brand-700">${errNegocio(error)}</div>`;return;}
+  cerrarModal(); toast('Miembro del comando técnico inscrito — PENDIENTE de validación ✔'); renderCT();
+}
+async function altaCT(pais,doc){
+  const n=$('cta-n').value.trim(), a=$('cta-a').value.trim(), f=$('cta-f').value;
+  if(!n||!a||!f){toast('Nombres, apellidos y fecha de nacimiento son obligatorios');return;}
+  const jm=await sb.from('jugador_maestro').insert({pais_documento:pais,nro_documento:doc,nombres:n,apellidos:a,fecha_nacimiento:f}).select().single();
+  if(jm.error){toast(errNegocio(jm.error));return;}
+  await inscribirCT(jm.data.id);
+}
+async function activarCT(id){
+  const {error}=await sb.from('comando_tecnico').update({estado:'activo'}).eq('id',id);
+  if(error){toast(errNegocio(error));return;}
+  toast('Miembro del CT ACTIVADO ✔'); renderCT();
+}
+function modalEditCT(i){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">✏️ COMANDO TÉCNICO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-sm font-semibold mb-4">${i.nombre}</p>
+    ${fotoUI(i.foto_url,i.nombre)}
+    <div class="border-t border-line pt-2 mb-2">
+      <p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-1.5">Documento de identidad (privado)</p>
+      ${docUI('dfr','DNI frontal',i.dfr)}
+      ${docUI('drv','DNI reverso',i.drv)}
+    </div>
+    <div class="grid grid-cols-2 gap-3 text-sm mb-3">
+      <label class="block"><span class="text-ink-400 font-semibold text-xs">Rol</span>
+        <select id="ec-r" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${CT_ROLES.map(r=>`<option ${i.rol===r?'selected':''}>${r}</option>`).join('')}</select></label>
+      <label class="block"><span class="text-ink-400 font-semibold text-xs">Estado</span>
+        <select id="ec-e" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
+          <option value="pendiente" ${i.estado==='pendiente'?'selected':''}>pendiente</option>
+          <option value="activo" ${i.estado==='activo'?'selected':''}>activo</option></select></label>
+      <label class="flex items-center gap-2 font-semibold">Inhabilitado
+        <input id="ec-i" type="checkbox" ${i.inhabilitado?'checked':''} class="w-4 h-4 accent-[#d9232e]"/></label>
+    </div>
+    <button onclick='guardarEditCT("${i.id}","${i.persona_id}")' class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR</button>`);
+}
+async function guardarEditCT(id,personaId){
+  try{
+    const url=await subirFotoJugador(personaId);
+    if(url){const r=await sb.rpc('actualizar_foto_jugador',{p_jugador:personaId,p_url:url}); if(r.error){toast(errNegocio(r.error));return;}}
+    const fr=await subirDoc('dfr',personaId,'frente');
+    const rv=await subirDoc('drv',personaId,'reverso');
+    if(fr||rv){const r2=await sb.rpc('actualizar_docs_jugador',{p_jugador:personaId,p_frente:fr,p_reverso:rv}); if(r2.error){toast(errNegocio(r2.error));return;}}
+  }catch(e){toast('Fotos: '+(e.message||e));return;}
+  const {error}=await sb.from('comando_tecnico').update({rol:$('ec-r').value, estado:$('ec-e').value, inhabilitado:$('ec-i').checked}).eq('id',id);
+  if(error){toast(errNegocio(error));return;}
+  cerrarModal(); toast('Comando técnico actualizado ✔'); renderCT();
+}
+async function quitarCT(id,nombre){
+  if(!confirm(`¿Quitar a ${nombre} del comando técnico de este equipo?\n\nLa persona sigue existiendo en la maestra global.`))return;
+  const {error}=await sb.from('comando_tecnico').delete().eq('id',id);
+  if(error){toast(errNegocio(error));return;}
+  toast('Quitado del comando técnico'); renderCT();
 }
 /* ---- Coordinador del club: invitación por email (enlace de acceso) ---- */
 const sbMail=supabase.createClient('https://bpsczjjomgzhnjxnzmhj.supabase.co',
