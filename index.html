@@ -75,6 +75,7 @@ tailwind.config={theme:{extend:{
         <p id="t-meta" class="text-ink-500 text-sm"></p>
       </div>
     </div>
+    <div id="t-docs" class="mb-4"></div>
     <h2 class="font-display text-2xl tracking-wide mb-3">CATEGORÍAS</h2>
     <div class="space-y-2" id="categorias"></div>
   </section>
@@ -196,6 +197,12 @@ async function irTorneo(){
   $('bc-marca').textContent='← '+MARCA.nombre;
   $('t-nombre').textContent=TORNEO.nombre.toUpperCase();
   $('t-meta').textContent=`Temporada ${TORNEO.anio}${TORNEO.sede?' · '+TORNEO.sede:''}`;
+  // documentos del torneo (reglamento, bases…)
+  sb.from('torneo_documento').select('*').eq('torneo_id',TORNEO.id).order('created_at').then(({data})=>{
+    $('t-docs').innerHTML=(data&&data.length)?`<div class="flex flex-wrap gap-2">
+      ${data.map(d=>`<a href="${d.url}" target="_blank" download class="inline-flex items-center gap-1.5 bg-white border border-line rounded-xl px-4 py-2 text-sm font-bold text-ink-700 hover:shadow-md hover:text-brand-600 transition">📄 ${d.titulo} <span class="text-ink-400">⬇</span></a>`).join('')}
+    </div>`:'';
+  });
   const {data:cs,error}=await sb.from('categoria').select('*').eq('torneo_id',TORNEO.id).order('anio_nacimiento',{ascending:false});
   if(error){err(error.message);return;}
   $('categorias').innerHTML=cs.map(c=>`

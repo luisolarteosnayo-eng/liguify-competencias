@@ -519,7 +519,18 @@ function modalTorneo(t){
     ${toggleC('tc-modif','Permitir modificación de equipo',t.permitir_modificacion_equipo)}
     <label class="block text-sm my-3"><span class="text-ink-400 font-semibold text-xs">Descripción</span>
       <textarea id="tc-desc" rows="2" class="w-full border border-line rounded-xl p-2.5 mt-1 text-sm">${t.descripcion||''}</textarea></label>
+    <div class="border-t border-line pt-3 mb-4">
+      <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-2">Documentos del torneo (reglamento, bases…) — descargables en el público</p>
+      <div id="td-lista" class="mb-2 text-sm">Cargando…</div>
+      <div class="flex gap-2 items-end flex-wrap">
+        <label class="flex-1 min-w-40 text-sm"><span class="text-ink-400 font-semibold text-xs">Título</span>
+          <input id="td-titulo" placeholder="Reglamento 2026" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+        <input id="td-file" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,image/*" class="text-xs max-w-44"/>
+        <button onclick="subirDocTorneo('${t.id}')" class="bg-ink-900 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-ink-700">📄 PUBLICAR</button>
+      </div>
+    </div>
     <button onclick="guardarTorneo('${t.id}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR TORNEO</button>`);
+  renderDocsTorneo(t.id);
 }
 async function guardarTorneo(id){
   try{
@@ -542,6 +553,40 @@ async function guardarTorneo(id){
     if(error){toast(errNegocio(error));return;}
     cerrarModal(); toast('Torneo guardado ✔ — reglas y logo actualizados'); cargarTorneos();
   }catch(e){toast('Logo: '+(e.message||e)+' — ¿creaste el bucket "publico" en Storage?');}
+}
+
+/* ---- Documentos del torneo (reglamento, bases…) ---- */
+async function renderDocsTorneo(tid){
+  const {data,error}=await sb.from('torneo_documento').select('*').eq('torneo_id',tid).order('created_at');
+  if(error){$('td-lista').innerHTML=`<p class="text-brand-600 text-xs font-bold">${errNegocio(error)}</p>`;return;}
+  $('td-lista').innerHTML=(data||[]).length?data.map(d=>`
+    <div class="flex items-center gap-2 py-1.5 border-b border-line last:border-0">
+      <a href="${d.url}" target="_blank" class="flex-1 min-w-0 text-sm font-semibold text-brand-600 hover:underline truncate">📄 ${d.titulo}</a>
+      <button onclick="quitarDocTorneo('${d.id}','${tid}')" class="text-ink-400 hover:text-brand-600 font-bold px-1" title="Quitar documento">✕</button>
+    </div>`).join(''):'<p class="text-ink-400 text-xs">Sin documentos publicados.</p>';
+}
+async function subirDocTorneo(tid){
+  const f=$('td-file').files&&$('td-file').files[0];
+  const titulo=$('td-titulo').value.trim();
+  if(!titulo){toast('⚠ Escribe el título del documento (ej. Reglamento 2026)');return;}
+  if(!f){toast('⚠ Elige el archivo');return;}
+  const ext=(f.name.split('.').pop()||'pdf').toLowerCase();
+  const ruta=`torneos/${tid}-doc-${Date.now()}.${ext}`;
+  const up=await sb.storage.from('publico').upload(ruta,f,{upsert:true,contentType:f.type});
+  if(up.error){toast('Archivo: '+up.error.message);return;}
+  const url=sb.storage.from('publico').getPublicUrl(ruta).data.publicUrl;
+  const {error}=await sb.from('torneo_documento').insert({torneo_id:tid,titulo,url});
+  if(error){toast(errNegocio(error));return;}
+  $('td-titulo').value=''; $('td-file').value='';
+  toast('📄 Documento publicado ✔ — ya es descargable en el módulo público');
+  renderDocsTorneo(tid);
+}
+async function quitarDocTorneo(id,tid){
+  if(!confirm('¿Quitar este documento del torneo? Dejará de verse en el público.'))return;
+  const {error}=await sb.from('torneo_documento').delete().eq('id',id);
+  if(error){toast(errNegocio(error));return;}
+  toast('Documento quitado');
+  renderDocsTorneo(tid);
 }
 
 function modalNuevoTorneo(){
