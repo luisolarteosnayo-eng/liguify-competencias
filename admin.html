@@ -59,9 +59,12 @@ tailwind.config={theme:{extend:{
   <!-- MIS TORNEOS -->
   <section id="s-torneos" class="screen">
     <div id="marca-card"></div>
-    <div class="flex items-center justify-between mb-3 mt-6">
+    <div class="flex items-center justify-between mb-3 mt-6 flex-wrap gap-2">
       <h2 class="font-display text-2xl tracking-wide">TORNEOS DE LA MARCA</h2>
-      <button onclick="modalNuevoTorneo()" id="btn-nuevo-torneo" class="hidden bg-brand-500 text-white font-bold px-4 py-2 rounded-xl text-sm hover:bg-brand-600">+ NUEVO TORNEO</button>
+      <div class="flex gap-2">
+        <button onclick="modalDuplicados()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper" title="Jugadores con el mismo documento en más de un equipo de la marca">🔎 DUPLICADOS</button>
+        <button onclick="modalNuevoTorneo()" id="btn-nuevo-torneo" class="hidden bg-brand-500 text-white font-bold px-4 py-2 rounded-xl text-sm hover:bg-brand-600">+ NUEVO TORNEO</button>
+      </div>
     </div>
     <div class="space-y-2" id="lista-torneos"></div>
   </section>
@@ -555,6 +558,23 @@ async function guardarTorneo(id){
   }catch(e){toast('Logo: '+(e.message||e)+' — ¿creaste el bucket "publico" en Storage?');}
 }
 
+/* ---- Reporte de jugadores duplicados (misma persona en varios equipos) ---- */
+async function modalDuplicados(){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">🔎 JUGADORES DUPLICADOS</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-3">Personas (mismo documento) inscritas en <b>más de un equipo</b> en los torneos de ${MARCA.nombre}. Dentro de una misma categoría la BD ya lo impide; estos son cruces entre categorías o torneos, para tu revisión.</p>
+    <div id="dup-lista" class="max-h-96 overflow-y-auto text-sm">Cargando…</div>`);
+  const {data,error}=await sb.rpc('reporte_duplicados',{p_marca:MARCA.id});
+  if(error){$('dup-lista').innerHTML=`<p class="text-brand-600 text-xs font-bold">${errNegocio(error)}</p>`;return;}
+  $('dup-lista').innerHTML=(data||[]).length?data.map(d=>`
+    <div class="border border-line rounded-xl p-3 mb-2">
+      <p class="font-bold text-sm">${d.nombres} ${d.apellidos} <span class="text-xs text-ink-500 font-semibold">· ${d.pais} ${d.documento}</span>
+        <span class="text-[9px] font-bold bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 ml-1">${d.equipos.length} EQUIPOS</span></p>
+      ${d.equipos.map(e=>`<p class="text-xs text-ink-500 mt-1">• <b>${e.equipo}</b> — ${e.categoria} · ${e.torneo}
+        <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full ${e.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${e.estado.toUpperCase()}</span></p>`).join('')}
+    </div>`).join('')
+    :'<p class="text-emerald-700 text-sm font-semibold bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">✔ Sin duplicados: ningún jugador está inscrito en más de un equipo de tu marca.</p>';
+}
+
 /* ---- Documentos del torneo (reglamento, bases…) ---- */
 async function renderDocsTorneo(tid){
   const {data,error}=await sb.from('torneo_documento').select('*').eq('torneo_id',tid).order('created_at');
@@ -682,6 +702,10 @@ async function renderEquipos(){
   const ez=ZONAS.length?await sb.from('equipo_en_zona').select('*').in('zona_id',ZONAS.map(z=>z.id)):{data:[]};
   const porZona={}; (ez.data||[]).forEach(x=>{(porZona[x.zona_id]=porZona[x.zona_id]||[]).push(x.equipo_id);});
   const asignados=new Set((ez.data||[]).map(x=>x.equipo_id));
+  // conteo de jugadores en LBF por equipo (alerta rápida de equipos sin plantel)
+  const lbfc=await sb.from('inscripcion_lbf').select('equipo_id').eq('categoria_id',CAT.id);
+  const N_LBF_EQ={}; (lbfc.data||[]).forEach(x=>N_LBF_EQ[x.equipo_id]=(N_LBF_EQ[x.equipo_id]||0)+1);
+  const btnLBF=e=>`${(N_LBF_EQ[e.id]||0)===0?'<span class="text-[9px] font-bold bg-amber-100 text-amber-700 rounded px-1.5 py-0.5 mr-1">⚠ SIN LBF</span>':''}<button onclick='abrirLBF("${e.id}")' class="text-xs font-bold ${(N_LBF_EQ[e.id]||0)===0?'text-amber-600':'text-brand-600'} hover:underline">LBF (${N_LBF_EQ[e.id]||0}) →</button>`;
   const btnRetirar=e=>{
     const p=EQ_CON_PARTIDOS[e.id];
     return p?`<button disabled title="No se puede retirar: tiene ${p.jug} partido(s) jugado(s)/en vivo y ${p.prog} programado(s) en esta categoría. Resuelve o elimina sus partidos primero." class="text-xs font-bold text-ink-300 border border-line rounded-lg px-2 py-1.5 opacity-50 cursor-not-allowed">RETIRAR</button>`
@@ -697,7 +721,7 @@ async function renderEquipos(){
         ${esAdmin()&&ZONAS.length?`<select id="az-${e.id}" class="border border-line rounded-lg px-2 py-1.5 text-xs font-semibold bg-white">${ZONAS.map(z=>`<option value="${z.id}">Zona ${z.nombre}</option>`).join('')}</select>
           <button onclick="asignarZona('${e.id}')" class="text-xs font-bold text-white bg-amber-500 rounded-lg px-3 py-1.5 hover:bg-amber-600">ASIGNAR</button>`
           :ZONAS.length?'':'<span class="text-[10px] text-amber-600 font-bold">crea una zona primero</span>'}
-        <button onclick='abrirLBF("${e.id}")' class="text-xs font-bold text-brand-600 hover:underline">LBF →</button>
+        ${btnLBF(e)}
         ${esAdmin()?`<button onclick="modalCodigoDelegado('${e.id}')" title="Acceso del delegado (código de un solo uso)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-paper">🎟</button>
         ${btnRetirar(e)}`:''}
       </div>`).join('')}
@@ -722,7 +746,7 @@ async function renderEquipos(){
       ${(porZona[z.id]||[]).map(eqId=>{const e=EQUIPOS[eqId]; if(!e||e.estado!=='activo') return '';
         return `<div class="flex items-center gap-3 px-5 py-2.5 border-b border-line last:border-0">
           ${badgeEq(e)}<span class="flex-1 font-semibold text-sm">${nomEq(e)}</span>
-          <button onclick='abrirLBF("${e.id}")' class="text-xs font-bold text-brand-600 hover:underline">LBF →</button>
+          ${btnLBF(e)}
           ${esAdmin()?`<button onclick="modalCodigoDelegado('${e.id}')" title="Acceso del delegado (código de un solo uso)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-paper">🎟</button>
           <button onclick="modalZonaEquipo('${e.id}','${z.id}')" title="Mover de zona o quitar de la zona (validado contra sus partidos)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-paper">⇄ ZONA</button>
           ${btnRetirar(e)}`:''}
