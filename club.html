@@ -228,7 +228,10 @@ async function cargarHub(){
         </button>`).join('')}</div>
     </div>`;
   }).join('')
-  ||'<p class="text-ink-400 text-sm bg-white border border-line rounded-2xl p-6 text-center">Aún no tienes equipos vinculados. Acepta tu invitación 📨 o canjea el código 🎟 que te dio tu organizador.</p>';
+  ||`<div class="text-sm bg-white border border-line rounded-2xl p-6 text-center">
+      <p class="text-ink-400 mb-3">Aún no tienes equipos vinculados. Acepta tu invitación 📨 o canjea el código 🎟 que te dio tu organizador.</p>
+      <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-left">💡 Estás conectado como <b>${(await sb.auth.getSession()).data.session?.user?.email||''}</b>. Las invitaciones llegan al correo EXACTO que registró tu organizador: si te invitó a otro correo, entra con ese (usa el enlace del email que te llegó) o pídele que reenvíe la invitación a este.</p>
+    </div>`;
   show('s-hub');
 }
 async function aceptarInv(id){
