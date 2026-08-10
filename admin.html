@@ -185,7 +185,7 @@ function msg(texto,tipo){const e=$('msg'); if(!texto){e.classList.add('hidden');
   e.textContent=texto; e.classList.remove('hidden');}
 function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));$(id).classList.add('active');window.scrollTo({top:0});}
 function cerrarModal(){const m=$('modal');m.classList.add('hidden');m.classList.remove('flex');}
-function abrirModal(html){$('modal-body').innerHTML=html;const m=$('modal');m.classList.remove('hidden');m.classList.add('flex');}
+function abrirModal(html,ancho){const b=$('modal-body');b.innerHTML=html;b.style.maxWidth=ancho?'880px':'';const m=$('modal');m.classList.remove('hidden');m.classList.add('flex');}
 const iniciales=n=>(n||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
 function badgeEq(e,sz=7){const cl=CLUBES[e.club_id]||{};return `<span class="inline-grid place-items-center w-${sz} h-${sz} rounded-lg text-white text-[10px] font-bold align-middle overflow-hidden relative" style="background:${cl.color||'#334155'}">${cl.escudo_url?`<img src="${cl.escudo_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(cl.nombre)}</span>`;}
 const nomEq=e=>e.nombre||(CLUBES[e.club_id]||{}).nombre||'—';
@@ -2357,8 +2357,6 @@ async function modalResultado(m){
     <input id="st-a-${i.id}" type="number" min="0" value="${p.amarillas||0}" title="Tarjetas amarillas" class="w-10 border border-yellow-300 bg-yellow-50 rounded-lg text-center py-1 text-xs font-bold"/>
     <input id="st-r-${i.id}" type="number" min="0" value="${p.rojas||0}" title="Tarjetas rojas" class="w-10 border border-brand-100 bg-brand-50 rounded-lg text-center py-1 text-xs font-bold"/>
   </div>`;};
-  const bloque=(eqId,nom)=>{const list=RS_INS.filter(i=>i.equipo_id===eqId);
-    return list.length?`<p class="text-[10px] font-bold text-ink-500 uppercase tracking-wider mt-2">${nom}</p>${list.map(filaJ).join('')}`:'';};
   const optsFig=RS_INS.length?[[m.local_id,L?nomEq(L):''],[m.visita_id,V?nomEq(V):'']].map(([eqId,nom])=>{
     const list=RS_INS.filter(i=>i.equipo_id===eqId);
     return list.length?`<optgroup label="${nom}">${list.map(i=>`<option value="${i.id}" ${m.figura_inscripcion_id===i.id?'selected':''}>${i.dorsal?i.dorsal+' · ':''}${i.nombre}</option>`).join('')}</optgroup>`:'';
@@ -2387,18 +2385,24 @@ async function modalResultado(m){
       </span>
     </div>
     ${RS_INS.length?`<div class="border-t border-line pt-2 mb-3">
-      <div class="flex items-center justify-between">
-        <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px]">Estadísticas por jugador (opcional)</p>
-        <span class="flex gap-2 text-[9px] font-bold text-ink-400 pr-1"><span class="w-10 text-center">⚽</span><span class="w-10 text-center">🟨</span><span class="w-10 text-center">🟥</span></span>
+      <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-2">Estadísticas por jugador (opcional)</p>
+      <div class="grid sm:grid-cols-2 gap-x-6 gap-y-2">
+        ${[[m.local_id,L?nomEq(L):''],[m.visita_id,V?nomEq(V):'']].map(([eqId,nom])=>`
+        <div class="min-w-0">
+          <div class="flex items-center justify-between border-b-2 border-ink-900 pb-1">
+            <p class="font-display text-lg tracking-wide truncate">${nom}</p>
+            <span class="flex gap-2 text-[10px] font-bold text-ink-400 shrink-0"><span class="w-10 text-center">⚽</span><span class="w-10 text-center">🟨</span><span class="w-10 text-center">🟥</span></span>
+          </div>
+          <div class="max-h-72 overflow-y-auto">${RS_INS.filter(i=>i.equipo_id===eqId).map(filaJ).join('')||'<p class="text-xs text-ink-400 py-3 text-center">Sin jugadores en LBF.</p>'}</div>
+        </div>`).join('')}
       </div>
-      <div class="max-h-52 overflow-y-auto">${bloque(m.local_id,L?nomEq(L):'')+bloque(m.visita_id,V?nomEq(V):'')}</div>
       <label class="block text-sm mt-3"><span class="text-ink-400 font-semibold text-xs">⭐ Figura del partido</span>
         <select id="rs-fig" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
           <option value="">— sin elegir —</option>${optsFig}
         </select></label>
     </div>`:''}
     <button onclick="guardarResultado('${m.id}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR EN LA BD</button>
-    <p class="text-[10px] text-ink-400 mt-2 text-center">Al guardar: standings + estadísticas recalculados y publicados en vivo.</p>`);
+    <p class="text-[10px] text-ink-400 mt-2 text-center">Al guardar: standings + estadísticas recalculados y publicados en vivo.</p>`, RS_INS.length>0);
 }
 async function guardarResultado(id){
   const gl=$('rs-l').value, gv=$('rs-v').value;
