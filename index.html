@@ -454,13 +454,6 @@ async function renderFixture(){
   data.forEach(m=>{ PART_IDX[m.id]=m;
     if(m.jornada&&m.jornada.horarios_publicados===false) return;   // fecha OCULTA: no se muestra en el público
     const k=m.etapa||('FECHA '+((m.jornada&&m.jornada.numero)||'?')); (grupos[k]=grupos[k]||[]).push(m); });
-  // figuras del partido (⭐)
-  const figIds=[...new Set(data.map(m=>m.figura_inscripcion_id).filter(Boolean))];
-  let FIGN={};
-  if(figIds.length){
-    const f=await sb.from('vista_lbf_publica').select('inscripcion_id,nombres,apellidos').in('inscripcion_id',figIds);
-    FIGN=Object.fromEntries((f.data||[]).map(x=>[x.inscripcion_id,(x.nombres||'')+' '+(x.apellidos||'')]));
-  }
   $('tab-fixture').innerHTML=Object.entries(grupos).map(([g,ms])=>`
     <div class="bg-white rounded-2xl border border-line mb-4">
       <div class="px-4 py-2.5 border-b border-line font-display text-lg tracking-wide">${g.toUpperCase()}</div>
@@ -472,17 +465,19 @@ async function renderFixture(){
           :`<span class="italic text-ink-400">${etiquetaCupo(ori)}</span>`;
         const gL=fin&&(m.penales?(m.penales_local??0)>(m.penales_visita??0):m.goles_local>m.goles_visita);
         const gV=fin&&(m.penales?(m.penales_visita??0)>(m.penales_local??0):m.goles_visita>m.goles_local);
-        return `<div onclick="abrirDetallePartido('${m.id}')" class="flex items-center px-4 py-3 border-b border-line last:border-0 cursor-pointer hover:bg-paper" title="Ver detalle del partido">
-          <div class="flex-1 flex items-center justify-end gap-2 text-sm ${gL?'font-bold':''}">${lado(L,m.local_origen,false)}</div>
-          <div class="w-28 text-center">
-            ${vivo?`<span class="flex items-center justify-center gap-1 text-[9px] font-bold text-brand-600"><span class="live-dot"></span>EN VIVO</span>`
-              :`<span class="block text-[9px] font-bold uppercase ${fin?'text-emerald-600':'text-ink-400'}">${(!m.local_id||!m.visita_id)?'por definir':m.estado}</span>`}
-            <span class="font-display text-2xl">${m.goles_local??'–'} : ${m.goles_visita??'–'}</span>
-            ${m.penales?`<span class="block text-[11px] text-ink-400 -mt-0.5">penales ${m.penales_local} x ${m.penales_visita}</span>`:''}
+        return `<div onclick="abrirDetallePartido('${m.id}')" class="px-3 sm:px-4 py-3 border-b border-line last:border-0 cursor-pointer hover:bg-paper" title="Ver detalle del partido">
+          <div class="flex items-center gap-1 sm:gap-2">
+            <div class="flex-1 min-w-0 flex items-center justify-end gap-1.5 sm:gap-2 text-xs sm:text-sm ${gL?'font-bold':''}">${lado(L,m.local_origen,false)}</div>
+            <div class="w-24 sm:w-28 text-center shrink-0">
+              ${vivo?`<span class="flex items-center justify-center gap-1 text-[9px] font-bold text-brand-600"><span class="live-dot"></span>EN VIVO</span>`
+                :`<span class="block text-[9px] font-bold uppercase ${fin?'text-emerald-600':'text-ink-400'}">${(!m.local_id||!m.visita_id)?'por definir':m.estado}</span>`}
+              <span class="font-display text-2xl">${m.goles_local??'–'} : ${m.goles_visita??'–'}</span>
+              ${m.penales?`<span class="block text-[11px] text-ink-400 -mt-0.5">penales ${m.penales_local} x ${m.penales_visita}</span>`:''}
+            </div>
+            <div class="flex-1 min-w-0 flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm ${gV?'font-bold':''}">${lado(V,m.visita_origen,true)}</div>
           </div>
-          <div class="flex-1 flex items-center gap-2 text-sm ${gV?'font-bold':''}">${lado(V,m.visita_origen,true)}</div>
-        </div>
-        <p class="text-[10px] text-ink-400 text-center pb-2 -mt-1">${(m.jornada&&m.jornada.horarios_publicados===false)?'🕒 horario por confirmar':`${m.fecha||''} ${m.hora?('· '+m.hora.slice(0,5)):''} ${m.sede?('· '+m.sede):''}`}${m.figura_inscripcion_id&&FIGN[m.figura_inscripcion_id]?` · <span class="text-amber-600 font-bold">⭐ ${FIGN[m.figura_inscripcion_id]}</span>`:''}</p>`;
+          <p class="text-[11px] font-semibold text-ink-500 text-center mt-1.5">${(m.jornada&&m.jornada.horarios_publicados===false)?'🕒 Horario por confirmar':`📅 ${m.fecha||'Día por definir'}  ·  🕒 ${m.hora?m.hora.slice(0,5):'--:--'}${m.sede?'  ·  📍 '+m.sede:''}`}</p>
+        </div>`;
       }).join('')}
     </div>`).join('') || '<p class="text-ink-400 text-sm">Sin partidos programados.</p>';
 }
