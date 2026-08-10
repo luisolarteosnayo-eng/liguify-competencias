@@ -248,6 +248,21 @@ function renderTabs(act){
 
 /* Tabla: columnas Y desempate desde orden_tabla del torneo (T1) */
 const COLDEF={PJ:{h:'PJ',f:'pj'},PUNTOS:{h:'PTS',f:'pts'},PG:{h:'PG',f:'pg'},PE:{h:'PE',f:'pe'},PP:{h:'PP',f:'pp'},GF:{h:'GF',f:'gf'},GC:{h:'GC',f:'gc'},DIF_GOL:{h:'DG',f:'dg'}};
+async function goleadoresHTML(categoriaId){
+  const {data,error}=await sb.from('vista_goleadores').select('*').eq('categoria_id',categoriaId)
+    .gt('goles',0).order('goles',{ascending:false}).order('apellidos').limit(6);
+  if(error||!data||!data.length) return '';
+  return `<div class="bg-white rounded-2xl border border-line mb-4 overflow-hidden">
+    <div class="px-4 py-3 border-b border-line font-display text-xl tracking-wide">⚽ GOLEADORES</div>
+    ${data.map((g,i)=>`<div class="flex items-center gap-3 px-4 py-2 border-b border-line last:border-0 ${i===0?'bg-amber-50/60':''}">
+      <span class="w-5 text-ink-400 font-bold text-sm text-center shrink-0">${i+1}</span>
+      <span class="w-9 h-9 rounded-full grid place-items-center text-[10px] font-bold text-white overflow-hidden relative shrink-0" style="background:#2b3550;${g.consentimiento_imagen?'':'filter:grayscale(1);opacity:.85'}">${g.foto_url?`<img src="${g.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(g.nombres+' '+g.apellidos)}</span>
+      <span class="flex-1 min-w-0"><span class="font-semibold text-sm block truncate">${g.nombres} ${g.apellidos}${i===0?' <span class="text-amber-600">👑</span>':''}</span>
+        <span class="text-[10px] text-ink-400">${g.equipo||''}</span></span>
+      <span class="font-display text-2xl">${g.goles}</span>
+    </div>`).join('')}
+  </div>`;
+}
 let TABLA_MODO='zonas';
 function setTablaModo(m){ TABLA_MODO=m; renderTabla(); }
 async function renderTabla(){
@@ -261,6 +276,7 @@ async function renderTabla(){
   const toggle=zonas.length>1?`<div class="flex gap-2 mb-3">
     ${[['zonas','POR ZONA'],['puestos','⚖ MEJORES POR PUESTO']].map(([m,l])=>`<button onclick="setTablaModo('${m}')" class="text-xs font-bold px-4 py-2 rounded-xl border ${TABLA_MODO===m?'bg-ink-900 text-white border-ink-900':'bg-white border-line text-ink-500 hover:bg-paper'}">${l}</button>`).join('')}
   </div>`:'';
+  const golHTML=await goleadoresHTML(CAT.id);
   if(TABLA_MODO==='puestos'&&zonas.length>1){
     const porPuesto={};
     zonas.forEach(z=>{data.filter(r=>r.zona===z).sort(cmp).forEach((r,i)=>{(porPuesto[i+1]=porPuesto[i+1]||[]).push({...r,_zona:z});});});
@@ -281,7 +297,7 @@ async function renderTabla(){
               <td class="text-center text-xs font-bold text-ink-500">${r._zona}</td>
               ${celdas(r)}
             </tr>`).join('')}</tbody></table></div>`;
-      }).join('');
+      }).join('')+golHTML;
     return;
   }
   $('tab-tabla').innerHTML=toggle+zonas.map(z=>{
@@ -298,7 +314,7 @@ async function renderTabla(){
           <td><button onclick='irEquipoId("${r.equipo_id}")' class="flex items-center gap-2.5 font-semibold text-sm hover:text-brand-600">${EQUIPOS[r.equipo_id]?badge(EQUIPOS[r.equipo_id]):''}<span>${r.equipo}</span></button></td>
           ${orden.map(k=>{const v=r[COLDEF[k].f];return `<td class="text-center text-sm ${k==='PUNTOS'?'font-extrabold':k==='DIF_GOL'?(v>0?'text-emerald-600 font-semibold':v<0?'text-brand-600 font-semibold':'text-ink-400'):'text-ink-400'}">${k==='DIF_GOL'&&v>0?'+':''}${v}</td>`;}).join('')}
         </tr>`).join('')}</tbody></table></div>`;
-  }).join('') || '<p class="text-ink-400 text-sm">Sin equipos en zonas todavía.</p>';
+  }).join('')+golHTML || '<p class="text-ink-400 text-sm">Sin equipos en zonas todavía.</p>';
 }
 
 /* Fixture: partidos agrupados por jornada, desde la BD */

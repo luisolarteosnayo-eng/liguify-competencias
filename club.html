@@ -724,7 +724,22 @@ async function renderPartidos(){
     :'<p class="text-ink-400 text-sm bg-white border border-line rounded-2xl p-6 text-center">Sin partidos programados todavía.</p>';
 }
 
-/* ---- TABLA (posición del equipo resaltada) ---- */
+/* ---- TABLA (posición del equipo resaltada) + goleadores ---- */
+async function goleadoresHTML(categoriaId){
+  const {data,error}=await sb.from('vista_goleadores').select('*').eq('categoria_id',categoriaId)
+    .gt('goles',0).order('goles',{ascending:false}).order('apellidos').limit(6);
+  if(error||!data||!data.length) return '';
+  return `<div class="bg-white rounded-2xl border border-line mb-4 overflow-hidden">
+    <div class="px-4 py-3 border-b border-line font-display text-xl tracking-wide">⚽ GOLEADORES</div>
+    ${data.map((g,i)=>`<div class="flex items-center gap-3 px-4 py-2 border-b border-line last:border-0 ${i===0?'bg-amber-50/60':''} ${g.equipo_id===EQ.equipo_id?'bg-emerald-50/40':''}">
+      <span class="w-5 text-ink-400 font-bold text-sm text-center shrink-0">${i+1}</span>
+      <span class="w-9 h-9 rounded-full grid place-items-center text-[10px] font-bold text-white overflow-hidden relative shrink-0" style="background:#2b3550">${g.foto_url?`<img src="${g.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(g.nombres+' '+g.apellidos)}</span>
+      <span class="flex-1 min-w-0"><span class="font-semibold text-sm block truncate">${g.nombres} ${g.apellidos}${i===0?' <span class="text-amber-600">👑</span>':''}</span>
+        <span class="text-[10px] text-ink-400">${g.equipo||''}</span></span>
+      <span class="font-display text-2xl">${g.goles}</span>
+    </div>`).join('')}
+  </div>`;
+}
 async function renderTablaEq(){
   const {data,error}=await sb.from('vista_tabla_zona').select('*').eq('categoria_id',EQ.categoria_id);
   if(error){$('tab-tabla').innerHTML='';return;}
@@ -743,7 +758,7 @@ async function renderTablaEq(){
         <td class="text-center text-sm font-semibold ${r.dg>0?'text-emerald-600':r.dg<0?'text-brand-600':'text-ink-400'}">${r.dg>0?'+':''}${r.dg}</td>
         <td class="text-center text-sm text-ink-400">${r.gf}</td>
         <td class="text-center text-sm text-ink-400">${r.gc}</td></tr>`).join('')}</tbody></table></div>`;
-  }).join('')||'<p class="text-ink-400 text-sm bg-white border border-line rounded-2xl p-6 text-center">Tu equipo aún no está asignado a una zona.</p>';
+  }).join('')+await goleadoresHTML(EQ.categoria_id)||'<p class="text-ink-400 text-sm bg-white border border-line rounded-2xl p-6 text-center">Tu equipo aún no está asignado a una zona.</p>';
 }
 
 iniciar();
