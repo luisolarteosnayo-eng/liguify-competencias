@@ -302,6 +302,7 @@ create table competencias.partido (
   penales      boolean not null default false,
   penales_local  int,
   penales_visita int,
+  figura_inscripcion_id uuid references competencias.inscripcion_lbf(id),  -- ⭐ figura del partido
   comentario   text,
   visible      boolean not null default true,
   created_by   uuid,

@@ -311,6 +311,13 @@ async function renderFixture(){
   data.forEach(m=>{ PART_IDX[m.id]=m;
     if(m.jornada&&m.jornada.horarios_publicados===false) return;   // fecha OCULTA: no se muestra en el público
     const k=m.etapa||('FECHA '+((m.jornada&&m.jornada.numero)||'?')); (grupos[k]=grupos[k]||[]).push(m); });
+  // figuras del partido (⭐)
+  const figIds=[...new Set(data.map(m=>m.figura_inscripcion_id).filter(Boolean))];
+  let FIGN={};
+  if(figIds.length){
+    const f=await sb.from('vista_lbf_publica').select('inscripcion_id,nombres,apellidos').in('inscripcion_id',figIds);
+    FIGN=Object.fromEntries((f.data||[]).map(x=>[x.inscripcion_id,(x.nombres||'')+' '+(x.apellidos||'')]));
+  }
   $('tab-fixture').innerHTML=Object.entries(grupos).map(([g,ms])=>`
     <div class="bg-white rounded-2xl border border-line mb-4">
       <div class="px-4 py-2.5 border-b border-line font-display text-lg tracking-wide">${g.toUpperCase()}</div>
@@ -332,7 +339,7 @@ async function renderFixture(){
           </div>
           <div class="flex-1 flex items-center gap-2 text-sm ${gV?'font-bold':''}">${lado(V,m.visita_origen,true)}</div>
         </div>
-        <p class="text-[10px] text-ink-400 text-center pb-2 -mt-1">${(m.jornada&&m.jornada.horarios_publicados===false)?'🕒 horario por confirmar':`${m.fecha||''} ${m.hora?('· '+m.hora.slice(0,5)):''} ${m.sede?('· '+m.sede):''}`}</p>`;
+        <p class="text-[10px] text-ink-400 text-center pb-2 -mt-1">${(m.jornada&&m.jornada.horarios_publicados===false)?'🕒 horario por confirmar':`${m.fecha||''} ${m.hora?('· '+m.hora.slice(0,5)):''} ${m.sede?('· '+m.sede):''}`}${m.figura_inscripcion_id&&FIGN[m.figura_inscripcion_id]?` · <span class="text-amber-600 font-bold">⭐ ${FIGN[m.figura_inscripcion_id]}</span>`:''}</p>`;
       }).join('')}
     </div>`).join('') || '<p class="text-ink-400 text-sm">Sin partidos programados.</p>';
 }

@@ -2336,8 +2336,33 @@ async function eliminarPartido(m){
   toast('Partido eliminado — tabla recalculada ⟳');
   await renderFixture(); await renderTabla(); await renderEquipos();
 }
-function modalResultado(m){
+let RS_INS=[], RS_PLANILLA={}, RS_M=null;
+async function modalResultado(m){
+  RS_M=m;
   const L=EQUIPOS[m.local_id],V=EQUIPOS[m.visita_id];
+  // jugadores en LBF de ambos equipos + planilla ya registrada del partido
+  const [ins,pl]=await Promise.all([
+    sb.from('inscripcion_lbf').select('id,equipo_id,dorsal,jugador_id').in('equipo_id',[m.local_id,m.visita_id]).eq('en_lbf',true).eq('inhabilitado',false),
+    sb.from('planilla_partido').select('*').eq('partido_id',m.id)
+  ]);
+  const jids=(ins.data||[]).map(i=>i.jugador_id);
+  const js=jids.length?await sb.from('jugador_maestro').select('id,nombres,apellidos').in('id',jids):{data:[]};
+  const jn=Object.fromEntries((js.data||[]).map(j=>[j.id,(j.nombres||'')+' '+(j.apellidos||'')]));
+  RS_INS=(ins.data||[]).map(i=>({...i,nombre:jn[i.jugador_id]||'—'})).sort((a,b)=>(a.dorsal??99)-(b.dorsal??99));
+  RS_PLANILLA=Object.fromEntries((pl.data||[]).map(p=>[p.inscripcion_id,p]));
+  const filaJ=i=>{const p=RS_PLANILLA[i.id]||{};return `<div class="flex items-center gap-2 py-1 border-b border-line last:border-0">
+    <span class="w-5 text-ink-400 font-bold text-xs text-right shrink-0">${i.dorsal??''}</span>
+    <span class="flex-1 min-w-0 text-xs font-semibold truncate">${i.nombre}</span>
+    <input id="st-g-${i.id}" type="number" min="0" value="${p.goles||0}" title="Goles" class="w-10 border border-line rounded-lg text-center py-1 text-xs font-bold"/>
+    <input id="st-a-${i.id}" type="number" min="0" value="${p.amarillas||0}" title="Tarjetas amarillas" class="w-10 border border-yellow-300 bg-yellow-50 rounded-lg text-center py-1 text-xs font-bold"/>
+    <input id="st-r-${i.id}" type="number" min="0" value="${p.rojas||0}" title="Tarjetas rojas" class="w-10 border border-brand-100 bg-brand-50 rounded-lg text-center py-1 text-xs font-bold"/>
+  </div>`;};
+  const bloque=(eqId,nom)=>{const list=RS_INS.filter(i=>i.equipo_id===eqId);
+    return list.length?`<p class="text-[10px] font-bold text-ink-500 uppercase tracking-wider mt-2">${nom}</p>${list.map(filaJ).join('')}`:'';};
+  const optsFig=RS_INS.length?[[m.local_id,L?nomEq(L):''],[m.visita_id,V?nomEq(V):'']].map(([eqId,nom])=>{
+    const list=RS_INS.filter(i=>i.equipo_id===eqId);
+    return list.length?`<optgroup label="${nom}">${list.map(i=>`<option value="${i.id}" ${m.figura_inscripcion_id===i.id?'selected':''}>${i.dorsal?i.dorsal+' · ':''}${i.nombre}</option>`).join('')}</optgroup>`:'';
+  }).join(''):'';
   abrirModal(`<div class="flex items-center justify-between mb-4"><h3 class="font-display text-2xl tracking-wide">CARGAR RESULTADO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
     <div class="flex items-center justify-center gap-3 mb-4">
       <div class="text-center flex-1">${L?badgeEq(L,9):''}<p class="text-xs font-bold mt-1">${L?nomEq(L):''}</p></div>
@@ -2350,7 +2375,7 @@ function modalResultado(m){
       <select id="rs-e" class="border border-line rounded-lg px-2 py-1 font-semibold bg-white">
         ${['finalizado','programado','en_vivo','suspendido','walkover'].map(s=>`<option ${m.estado===s&&s!=='programado'?'selected':s==='finalizado'&&m.estado==='programado'?'selected':''}>${s}</option>`).join('')}
       </select></label>
-    <div class="flex items-center justify-center gap-3 text-sm font-semibold mb-4">
+    <div class="flex items-center justify-center gap-3 text-sm font-semibold mb-3">
       <label class="flex items-center gap-2">
         <input id="rs-pen" type="checkbox" ${m.penales?'checked':''} onchange="$('rs-penbox').classList.toggle('hidden',!this.checked)" class="w-4 h-4 accent-[#d9232e]"/>
         Definición por penales
@@ -2361,17 +2386,47 @@ function modalResultado(m){
         <input id="rs-pv" type="number" min="0" value="${m.penales_visita??0}" class="w-12 border border-line rounded-lg text-center py-1 font-bold"/>
       </span>
     </div>
+    ${RS_INS.length?`<div class="border-t border-line pt-2 mb-3">
+      <div class="flex items-center justify-between">
+        <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px]">Estadísticas por jugador (opcional)</p>
+        <span class="flex gap-2 text-[9px] font-bold text-ink-400 pr-1"><span class="w-10 text-center">⚽</span><span class="w-10 text-center">🟨</span><span class="w-10 text-center">🟥</span></span>
+      </div>
+      <div class="max-h-52 overflow-y-auto">${bloque(m.local_id,L?nomEq(L):'')+bloque(m.visita_id,V?nomEq(V):'')}</div>
+      <label class="block text-sm mt-3"><span class="text-ink-400 font-semibold text-xs">⭐ Figura del partido</span>
+        <select id="rs-fig" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
+          <option value="">— sin elegir —</option>${optsFig}
+        </select></label>
+    </div>`:''}
     <button onclick="guardarResultado('${m.id}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR EN LA BD</button>
-    <p class="text-[10px] text-ink-400 mt-2 text-center">Al guardar: standings recalculados por Postgres + push Realtime al módulo público.</p>`);
+    <p class="text-[10px] text-ink-400 mt-2 text-center">Al guardar: standings + estadísticas recalculados y publicados en vivo.</p>`);
 }
 async function guardarResultado(id){
   const gl=$('rs-l').value, gv=$('rs-v').value;
   if(gl===''||gv===''){toast('Ingresa ambos marcadores');return;}
+  // estadísticas por jugador: detectar cambios y validar coherencia con el marcador
+  const cambios=[]; let sumL=0, sumV=0;
+  RS_INS.forEach(i=>{
+    const g=+($('st-g-'+i.id)?.value||0), a=+($('st-a-'+i.id)?.value||0), r=+($('st-r-'+i.id)?.value||0);
+    if(i.equipo_id===RS_M.local_id) sumL+=g; else sumV+=g;
+    const p=RS_PLANILLA[i.id];
+    const antes=p||{goles:0,amarillas:0,rojas:0};
+    if(g!==(antes.goles||0)||a!==(antes.amarillas||0)||r!==(antes.rojas||0)){
+      cambios.push({partido_id:id, inscripcion_id:i.id, jugo:p?p.jugo:(g+a+r>0), goles:g, amarillas:a, rojas:r});
+    }
+  });
+  if((sumL||sumV)&&(sumL!==+gl||sumV!==+gv)){
+    if(!confirm(`⚠ La suma de goles por jugador (${sumL} : ${sumV}) no coincide con el marcador (${gl} : ${gv}).\n\nPuede ser válido (autogol) — ¿guardar de todos modos?`))return;
+  }
   const pen=$('rs-pen').checked;
   const {error}=await sb.from('partido').update({goles_local:+gl,goles_visita:+gv,estado:$('rs-e').value,
-    penales:pen, penales_local:pen?+$('rs-pl').value||0:null, penales_visita:pen?+$('rs-pv').value||0:null}).eq('id',id);
+    penales:pen, penales_local:pen?+$('rs-pl').value||0:null, penales_visita:pen?+$('rs-pv').value||0:null,
+    figura_inscripcion_id:($('rs-fig')&&$('rs-fig').value)||null}).eq('id',id);
   if(error){toast(errNegocio(error));return;}
-  cerrarModal(); toast('Resultado guardado ✔ — tabla recalculada por la BD y publicada en vivo ⚡');
+  if(cambios.length){
+    const up=await sb.from('planilla_partido').upsert(cambios,{onConflict:'partido_id,inscripcion_id'});
+    if(up.error){toast('Resultado guardado, pero las estadísticas fallaron: '+errNegocio(up.error));return;}
+  }
+  cerrarModal(); toast(`Resultado guardado ✔${cambios.length?` — estadísticas de ${cambios.length} jugador(es) registradas`:''} — tabla recalculada y publicada en vivo ⚡`);
   await renderFixture(); await renderTabla();
 }
 
