@@ -155,12 +155,16 @@ async function abrirDetallePartido(id){
   if(m.figura_inscripcion_id){
     let f=(pl||[]).find(p=>p.inscripcion_id===m.figura_inscripcion_id);
     if(!f){const q=await sb.from('vista_lbf_publica').select('*').eq('inscripcion_id',m.figura_inscripcion_id).limit(1); f=(q.data||[])[0];}
-    if(f) figHTML=`<div class="mt-4 bg-ink-900 text-white rounded-2xl p-4 flex items-center gap-4">
-      <span class="w-16 h-16 rounded-full grid place-items-center font-bold overflow-hidden relative shrink-0" style="background:#2b3550;${f.consentimiento_imagen?'':'filter:grayscale(1)'}">${f.foto_url?`<img src="${f.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales((f.nombres||'')+' '+(f.apellidos||''))}</span>
-      <div class="min-w-0"><p class="text-[10px] font-bold tracking-widest text-amber-400 uppercase">⭐ Figura del partido</p>
+    if(f){
+      window.__FIG={m,f};
+      figHTML=`<div class="mt-4 bg-ink-900 text-white rounded-2xl p-4 flex items-center gap-4 flex-wrap">
+      <span class="w-20 h-20 rounded-full grid place-items-center font-bold overflow-hidden relative shrink-0 ring-4 ring-amber-400/60" style="background:#2b3550;${f.consentimiento_imagen?'':'filter:grayscale(1)'}">${f.foto_url?`<img src="${f.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales((f.nombres||'')+' '+(f.apellidos||''))}</span>
+      <div class="min-w-0 flex-1"><p class="text-[10px] font-bold tracking-widest text-amber-400 uppercase">⭐ Figura del partido</p>
         <p class="font-display text-2xl tracking-wide truncate">${f.nombres} ${f.apellidos}</p>
         <p class="text-white/50 text-xs">${EQUIPOS[f.equipo_id]?nomEq(EQUIPOS[f.equipo_id]):''}</p></div>
+      <button onclick="compartirFigura()" class="bg-amber-400 text-ink-900 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-amber-300 shrink-0">📤 COMPARTIR</button>
     </div>`;
+    }
   }
   const ctx=m.etapa?`🏆 ${m.etapa}`:(m.jornada&&m.jornada.numero?`Fecha ${m.jornada.numero}`:'');
   abrirModal(`<div class="flex items-center justify-between mb-3"><h3 class="font-display text-2xl tracking-wide">DETALLE DEL PARTIDO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
@@ -176,6 +180,81 @@ async function abrirDetallePartido(id){
     <p class="text-[10px] text-ink-400 text-center mb-4">${ctx}${m.fecha?' · '+m.fecha:''}${m.hora?' '+m.hora.slice(0,5):''}${m.sede?' · '+m.sede:''}</p>
     <div class="grid sm:grid-cols-2 gap-x-6 gap-y-3">${col(m.local_id,L?nomEq(L):'')+col(m.visita_id,V?nomEq(V):'')}</div>
     ${figHTML}`);
+}
+/* Imagen cuadrada de la FIGURA DEL PARTIDO (1080×1080 para redes) */
+function cargarImg(url){
+  return new Promise(res=>{
+    if(!url){res(null);return;}
+    const im=new Image(); im.crossOrigin='anonymous';
+    const t=setTimeout(()=>res(null),6000);
+    im.onload=()=>{clearTimeout(t);res(im)};
+    im.onerror=()=>{clearTimeout(t);res(null)};
+    im.src=url;
+  });
+}
+async function compartirFigura(){
+  if(!window.__FIG) return;
+  const {m,f}=window.__FIG;
+  const L=EQUIPOS[m.local_id], V=EQUIPOS[m.visita_id];
+  await Promise.all([document.fonts.load('90px "Bebas Neue"'),document.fonts.load('700 30px Inter'),document.fonts.load('600 26px Inter')]);
+  const [foto,logo,escL,escV]=await Promise.all([
+    cargarImg(f.foto_url),
+    cargarImg(TORNEO.logo_url||MARCA.logo_url),
+    cargarImg(L?(CLUBES[L.club_id]||{}).escudo_url:null),
+    cargarImg(V?(CLUBES[V.club_id]||{}).escudo_url:null)
+  ]);
+  const W=1080, cv=document.createElement('canvas'); cv.width=W; cv.height=W;
+  const x=cv.getContext('2d');
+  const fitText=(t,font,max)=>{let s=parseInt(font.match(/(\d+)px/)[1]);
+    for(;s>18;s--){x.font=font.replace(/\d+px/,s+'px'); if(x.measureText(t).width<=max) break;} return x.font;};
+  const circulo=(img,cx,cy,r,color,ini,bn)=>{
+    x.save(); x.beginPath(); x.arc(cx,cy,r,0,7); x.clip();
+    if(img){ if(bn) x.filter='grayscale(1)'; x.drawImage(img,cx-r,cy-r,r*2,r*2); x.filter='none'; }
+    else{ x.fillStyle=color; x.fillRect(cx-r,cy-r,r*2,r*2);
+      x.fillStyle='#fff'; x.font=`700 ${Math.round(r*0.7)}px Inter`; x.textAlign='center'; x.textBaseline='middle'; x.fillText(ini,cx,cy+4); }
+    x.restore(); x.textAlign='left'; x.textBaseline='alphabetic';
+  };
+  // fondo con textura sutil
+  x.fillStyle='#171e2e'; x.fillRect(0,0,W,W);
+  x.fillStyle='rgba(255,255,255,.03)'; x.font='560px "Bebas Neue"'; x.textAlign='center';
+  x.fillText('⭐',W/2,W-120); x.textAlign='left';
+  // cabecera
+  circulo(logo,104,104,52,'#d9232e',iniciales(MARCA.nombre));
+  x.fillStyle='#fff'; x.font=fitText(TORNEO.nombre.toUpperCase(),'62px "Bebas Neue"',760);
+  x.fillText(TORNEO.nombre.toUpperCase(),186,112);
+  x.fillStyle='rgba(255,255,255,.45)'; x.font='600 26px Inter';
+  x.fillText((CAT.nombre_display||('Categoría '+CAT.anio_nacimiento+' / '+CAT.modalidad)),188,152);
+  x.fillStyle='#d9232e'; x.fillRect(0,196,W,6);
+  // foto central con anillo dorado
+  const cy=470, r=220;
+  x.beginPath(); x.arc(W/2,cy,r+12,0,7); x.strokeStyle='#ffd166'; x.lineWidth=10; x.stroke();
+  circulo(foto,W/2,cy,r,'#2b3550',iniciales((f.nombres||'')+' '+(f.apellidos||'')),!f.consentimiento_imagen);
+  // etiqueta + nombre + equipo
+  x.textAlign='center';
+  x.fillStyle='#ffd166'; x.font='44px "Bebas Neue"'; x.fillText('⭐ FIGURA DEL PARTIDO',W/2,768);
+  const nomFig=((f.nombres||'')+' '+(f.apellidos||'')).toUpperCase();
+  x.fillStyle='#fff'; x.font=fitText(nomFig,'80px "Bebas Neue"',980); x.fillText(nomFig,W/2,846);
+  x.fillStyle='rgba(255,255,255,.55)'; x.font='600 28px Inter';
+  x.fillText(EQUIPOS[f.equipo_id]?nomEq(EQUIPOS[f.equipo_id]):'',W/2,886);
+  // franja del partido
+  const nomL=L?nomEq(L).toUpperCase():'', nomV=V?nomEq(V).toUpperCase():'';
+  circulo(escL,W/2-330,952,34,(L&&CLUBES[L.club_id]||{}).color||'#334155',iniciales((L&&CLUBES[L.club_id]||{}).nombre||'?'));
+  circulo(escV,W/2+330,952,34,(V&&CLUBES[V.club_id]||{}).color||'#334155',iniciales((V&&CLUBES[V.club_id]||{}).nombre||'?'));
+  x.textAlign='center'; x.fillStyle='#fff';
+  const marc=`${nomL}  ${m.goles_local??''} : ${m.goles_visita??''}  ${nomV}`;
+  x.font=fitText(marc,'46px "Bebas Neue"',540); x.fillText(marc,W/2,966);
+  x.fillStyle='rgba(255,255,255,.4)'; x.font='600 22px Inter';
+  x.fillText(`${m.etapa?m.etapa+' · ':''}${m.fecha||''}  ·  ⚡ Powered by Liguify · liguify.com/${MARCA.slug||''}`,W/2,1030);
+  x.textAlign='left';
+  window.__CVF=cv;
+  cv.toBlob(async b=>{
+    const file=new File([b],`figura-${(f.apellidos||'partido').toLowerCase().replace(/\s+/g,'-')}.png`,{type:'image/png'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      try{ await navigator.share({files:[file],title:'Figura del partido'}); return; }catch(e){}
+    }
+    const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=file.name; a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+  },'image/png');
 }
 /* Llaves con plantilla (§13): etiqueta del cupo cuando el equipo aún no se define */
 let PART_IDX={};

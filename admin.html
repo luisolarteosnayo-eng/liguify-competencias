@@ -1196,7 +1196,7 @@ async function renderLBF(){
   if(error){$('lbf-lista').innerHTML='';msg(errNegocio(error),'err');return;}
   let jug={};
   if(ins.length){
-    const js=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,fecha_nacimiento,verificado,foto_url,doc_scan_frente_url,doc_scan_reverso_url,pie_habil,posicion').in('id',ins.map(i=>i.jugador_id));
+    const js=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,fecha_nacimiento,verificado,foto_url,doc_scan_frente_url,doc_scan_reverso_url,pie_habil,posicion,consentimiento_imagen').in('id',ins.map(i=>i.jugador_id));
     jug=Object.fromEntries((js.data||[]).map(j=>[j.id,j]));
   }
   $('lbf-lista').innerHTML=ins.length?ins.map(i=>{const j=jug[i.jugador_id]||{};
@@ -1209,7 +1209,7 @@ async function renderLBF(){
       <span class="flex items-center gap-1.5 ml-auto flex-wrap">
         <span class="text-[10px] font-bold px-2 py-1 rounded-full ${i.inhabilitado?'bg-brand-100 text-brand-600':i.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${i.inhabilitado?'INHABILITADO':i.estado.toUpperCase()}</span>
         ${i.estado==='pendiente'&&esAdmin()?`<button onclick="activarIns('${i.id}')" class="text-[10px] font-bold text-emerald-700 border border-emerald-300 rounded-lg px-2.5 py-1.5 hover:bg-emerald-50">ACTIVAR</button>`:''}
-        ${esAdmin()?`<button onclick='modalEditIns(${JSON.stringify({id:i.id,dorsal:i.dorsal,capitan:i.capitan,estado:i.estado,inhabilitado:i.inhabilitado,nombre:(j.nombres||'')+' '+(j.apellidos||''),jugador_id:i.jugador_id,foto_url:j.foto_url||null,dfr:j.doc_scan_frente_url||null,drv:j.doc_scan_reverso_url||null,pie:j.pie_habil||null,pos:j.posicion||null}).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper" title="Editar foto, documento, dorsal, capitán, posición, pie hábil, estado e inhabilitación">✏️</button>
+        ${esAdmin()?`<button onclick='modalEditIns(${JSON.stringify({id:i.id,dorsal:i.dorsal,capitan:i.capitan,estado:i.estado,inhabilitado:i.inhabilitado,nombre:(j.nombres||'')+' '+(j.apellidos||''),jugador_id:i.jugador_id,foto_url:j.foto_url||null,dfr:j.doc_scan_frente_url||null,drv:j.doc_scan_reverso_url||null,pie:j.pie_habil||null,pos:j.posicion||null,con:j.consentimiento_imagen?1:0}).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper" title="Editar foto, documento, dorsal, capitán, posición, pie hábil, consentimiento, estado e inhabilitación">✏️</button>
         <button onclick='quitarIns("${i.id}","${((j.nombres||'')+' '+(j.apellidos||'')).replace(/'/g,'')}")' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-brand-50 hover:text-brand-600" title="Quitar de la LBF (bloqueado si tiene participaciones)">✕</button>`:''}
       </span>
     </div>`;}).join(''):'<p class="px-5 py-8 text-sm text-ink-400 text-center">Plantel vacío — agrega el primer jugador.</p>';
@@ -1308,6 +1308,9 @@ function modalEditIns(i){
         </select></label>
       <label class="flex items-center gap-2 font-semibold pt-4">Inhabilitado
         <input id="ei-i" type="checkbox" ${i.inhabilitado?'checked':''} class="w-4 h-4 accent-[#d9232e]"/></label>
+      <label class="col-span-2 flex items-center justify-between font-semibold text-sm border border-line rounded-xl px-3 py-2">
+        <span>Consentimiento de imagen<br><span class="text-[10px] text-ink-400 font-normal">Con consentimiento la foto sale a COLOR en el público; sin él, en blanco y negro.</span></span>
+        <input id="ei-con" type="checkbox" ${i.con?'checked':''} class="w-4 h-4 accent-[#d9232e]"/></label>
     </div>
     <button onclick='guardarEditIns("${i.id}","${i.jugador_id}")' class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR</button>`);
 }
@@ -1321,6 +1324,10 @@ async function guardarEditIns(insId,jugadorId){
   }catch(e){toast('Fotos: '+(e.message||e));return;}
   const ra=await sb.rpc('actualizar_atributos_jugador',{p_jugador:jugadorId,p_pie:$('ei-pie')?$('ei-pie').value:'',p_posicion:$('ei-pos')?$('ei-pos').value:''});
   if(ra.error){toast(errNegocio(ra.error));return;}
+  if($('ei-con')){
+    const rc=await sb.rpc('actualizar_consentimiento',{p_jugador:jugadorId,p_valor:$('ei-con').checked});
+    if(rc.error){toast(errNegocio(rc.error));return;}
+  }
   const upd={dorsal:+($('ei-d').value||0)||null, capitan:$('ei-c').checked,
     estado:$('ei-e').value, inhabilitado:$('ei-i').checked};
   if(upd.estado==='activo') upd.fecha_apto_medico=new Date().toISOString().slice(0,10);
