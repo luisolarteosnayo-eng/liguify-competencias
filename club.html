@@ -243,13 +243,33 @@ async function aceptarInv(id){
 }
 
 /* ---- Sub-coordinadores por categoría (solo coordinador del club) ---- */
+/* Un coordinador puede tener VARIOS clubes en el mismo torneo: el modal pide
+   primero el club y recién ahí muestra sus categorías (el acceso es por club). */
+let SC_TORNEO=null;
+function scClubActual(){
+  const sel=$('sc-club');
+  if(sel) return sel.value;
+  const grupo=MIS.filter(m=>m.torneo_id===SC_TORNEO&&m.rol==='coordinador');
+  return grupo[0]?.club_id;
+}
+function scRenderClub(){
+  const grupo=MIS.filter(m=>m.torneo_id===SC_TORNEO&&m.rol==='coordinador');
+  const clubId=scClubActual();
+  const club=grupo.find(m=>m.club_id===clubId);
+  const cats=[...new Map(grupo.filter(m=>m.club_id===clubId).map(m=>[m.categoria_id,m.categoria])).entries()];
+  $('sc-cats').innerHTML=cats.map(([id,n])=>`<label class="flex items-center gap-2 text-sm font-semibold py-1"><input type="checkbox" id="sc-c-${id}" class="w-4 h-4 accent-[#d9232e]"/>${n} <span class="text-[10px] text-ink-400 font-normal">· ${club?.club_nombre||''}</span></label>`).join('');
+  refrescarInvSub(SC_TORNEO,clubId);
+}
 async function modalSubcoordinador(torneoId){
   const grupo=MIS.filter(m=>m.torneo_id===torneoId&&m.rol==='coordinador');
   if(!grupo.length){toast('Solo el coordinador del club puede invitar sub-coordinadores');return;}
-  const clubId=grupo[0].club_id, torneo=grupo[0].torneo;
-  const cats=[...new Map(grupo.map(m=>[m.categoria_id,m.categoria])).entries()];
+  SC_TORNEO=torneoId;
+  const torneo=grupo[0].torneo;
+  const clubes=[...new Map(grupo.map(m=>[m.club_id,m.club_nombre])).entries()];
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">➕ SUB-COORDINADOR</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
-    <p class="text-xs text-ink-400 mb-3">Encargado de 1 o más categorías de tu club en <b>${torneo}</b>: podrá cargar y modificar la LBF solo de las categorías que marques. Recibe un email con su enlace de acceso y acepta la invitación (mismo proceso que el tuyo).</p>
+    <p class="text-xs text-ink-400 mb-3">Encargado de 1 o más categorías de ${clubes.length>1?'<b>un club</b>':'tu club <b>'+clubes[0][1]+'</b>'} en <b>${torneo}</b>: podrá cargar y modificar la LBF solo de las categorías que marques. Recibe un email con su enlace de acceso y acepta la invitación (mismo proceso que el tuyo).</p>
+    ${clubes.length>1?`<label class="block text-sm mb-3"><span class="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Club</span>
+      <select id="sc-club" onchange="scRenderClub()" class="w-full border border-line rounded-xl p-2.5 mt-1 text-sm font-bold bg-white">${clubes.map(([id,n])=>`<option value="${id}">${n}</option>`).join('')}</select></label>`:''}
     <div id="sc-lista" class="mb-3 text-sm">Cargando…</div>
     <div class="border-t border-line pt-3">
       <div class="grid grid-cols-2 gap-3 text-sm mb-3">
@@ -258,10 +278,10 @@ async function modalSubcoordinador(torneoId){
         <label class="col-span-2 block text-sm"><span class="text-ink-400 font-semibold text-xs">Email (obligatorio)</span><input id="sc-e" type="email" class="w-full border-b border-line py-1.5 font-semibold" placeholder="encargado@club.pe"/></label>
       </div>
       <p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-1.5">Categorías a su cargo</p>
-      <div class="mb-3">${cats.map(([id,n])=>`<label class="flex items-center gap-2 text-sm font-semibold py-1"><input type="checkbox" id="sc-c-${id}" class="w-4 h-4 accent-[#d9232e]"/>${n}</label>`).join('')}</div>
-      <button onclick="enviarInvitacionSub('${torneoId}','${clubId}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">📨 INVITAR SUB-COORDINADOR</button>
+      <div id="sc-cats" class="mb-3"></div>
+      <button onclick="enviarInvitacionSub('${torneoId}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">📨 INVITAR SUB-COORDINADOR</button>
     </div>`);
-  refrescarInvSub(torneoId,clubId);
+  scRenderClub();
 }
 async function refrescarInvSub(torneoId,clubId){
   const {data,error}=await sb.rpc('invitaciones_de_club',{p_torneo:torneoId,p_club:clubId});
@@ -275,10 +295,12 @@ async function refrescarInvSub(torneoId,clubId){
       ${i.estado==='pendiente'?`<button onclick="revocarInvSub('${i.id}','${torneoId}','${clubId}')" class="text-ink-400 hover:text-brand-600 font-bold px-1" title="Revocar">✕</button>`:''}
     </div>`).join(''):'<p class="text-ink-400 text-xs">Aún no invitaste sub-coordinadores en este torneo.</p>';
 }
-async function enviarInvitacionSub(torneoId,clubId){
+async function enviarInvitacionSub(torneoId){
   const email=$('sc-e').value.trim();
   if(!email){toast('⚠ El email es obligatorio');return;}
-  const grupo=MIS.filter(m=>m.torneo_id===torneoId&&m.rol==='coordinador');
+  const clubId=scClubActual();
+  const grupo=MIS.filter(m=>m.torneo_id===torneoId&&m.rol==='coordinador'&&m.club_id===clubId);
+  if(!grupo.length){toast('⚠ Elige el club');return;}
   const catIds=[...new Set(grupo.map(m=>m.categoria_id))].filter(id=>$('sc-c-'+id)&&$('sc-c-'+id).checked);
   if(!catIds.length){toast('⚠ Marca al menos una categoría');return;}
   const r=await sb.rpc('invitar_subcoordinador',{p_torneo:torneoId,p_club:clubId,p_email:email,p_nombre:$('sc-n').value.trim(),p_telefono:$('sc-t').value.trim(),p_categorias:catIds});
