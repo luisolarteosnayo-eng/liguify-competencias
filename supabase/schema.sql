@@ -657,7 +657,8 @@ language plpgsql security definer
 set search_path = competencias, public
 as $$
 declare
-  v_marca uuid; v_org bigint; v_club uuid; v_link bigint; r record;
+  v_marca uuid; v_org bigint; v_club uuid; v_link bigint; v_creado boolean; r record;
+  v_email text;
   n_reusados int := 0; n_adoptados int := 0; n_creados int := 0;
   n_eq int := 0; n_omitidos int := 0;
 begin
@@ -675,7 +676,8 @@ begin
 
   for r in
     select e.id as eq_id, e.nombre as sub_nombre,
-           c.id as club_id, c.nombre as club_nombre, c.telefono as club_tel
+           c.id as club_id, c.nombre as club_nombre, c.telefono as club_tel,
+           c.email as club_email, c.logo_url as club_logo
     from public.equipos e
     join public.clubes c on c.id = e.club_id
     where e.torneo_id = p_erp_torneo and e.id = any(p_ids)
@@ -686,6 +688,8 @@ begin
                where tt.marca_id = v_marca and q.erp_equipo_id = r.eq_id) then
       n_omitidos := n_omitidos + 1; continue;   -- re-importar no duplica (dentro de la marca)
     end if;
+    v_creado := false;
+    v_email  := nullif(trim(coalesce(r.club_email,'')),'');
     select id into v_club from competencias.club
     where marca_id = v_marca and erp_club_id = r.club_id;
     if v_club is not null then
@@ -700,19 +704,29 @@ begin
       limit 1;
       if v_club is not null then
         if v_link is null then
-          update competencias.club
-          set erp_club_id = r.club_id, contacto_tel = coalesce(contacto_tel, r.club_tel)
-          where id = v_club;
+          update competencias.club set erp_club_id = r.club_id where id = v_club;
           n_adoptados := n_adoptados + 1;
         else
           n_reusados := n_reusados + 1;
         end if;
       else
-        insert into competencias.club (marca_id, nombre, contacto_tel, erp_club_id)
-        values (v_marca, trim(r.club_nombre), r.club_tel, r.club_id)
+        insert into competencias.club (marca_id, nombre, contacto_tel, contacto_email, escudo_url, erp_club_id)
+        values (v_marca, trim(r.club_nombre), r.club_tel, v_email, r.club_logo, r.club_id)
         returning id into v_club;
         n_creados := n_creados + 1;
+        v_creado := true;
       end if;
+    end if;
+    -- Club existente: completar SOLO los campos vacíos (nunca sobrescribir)
+    if not v_creado then
+      update competencias.club set
+        escudo_url     = coalesce(escudo_url, r.club_logo),
+        contacto_email = coalesce(contacto_email, v_email),
+        contacto_tel   = coalesce(contacto_tel, r.club_tel)
+      where id = v_club
+        and ( (escudo_url is null and r.club_logo is not null)
+           or (contacto_email is null and v_email is not null)
+           or (contacto_tel is null and r.club_tel is not null) );
     end if;
     insert into competencias.equipo (categoria_id, club_id, nombre, erp_equipo_id)
     values (p_categoria, v_club, nullif(trim(coalesce(r.sub_nombre,'')),''), r.eq_id);
