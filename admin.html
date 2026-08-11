@@ -187,7 +187,7 @@ function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.re
 function cerrarModal(){const m=$('modal');m.classList.add('hidden');m.classList.remove('flex');}
 function abrirModal(html,ancho){const b=$('modal-body');b.innerHTML=html;b.style.maxWidth=ancho?'880px':'';const m=$('modal');m.classList.remove('hidden');m.classList.add('flex');}
 const iniciales=n=>(n||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-function badgeEq(e,sz=7){const cl=CLUBES[e.club_id]||{};return `<span class="inline-grid place-items-center w-${sz} h-${sz} rounded-lg text-white text-[10px] font-bold align-middle overflow-hidden relative" style="background:${cl.color||'#334155'}">${cl.escudo_url?`<img src="${cl.escudo_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(cl.nombre)}</span>`;}
+function badgeEq(e,sz=7){const cl=CLUBES[e.club_id]||{};return `<span class="inline-grid place-items-center w-${sz} h-${sz} rounded-lg text-white text-[10px] font-bold align-middle overflow-hidden relative" style="background:${cl.escudo_url?'#fff':(cl.color||'#334155')}">${cl.escudo_url?`<img src="${cl.escudo_url}" class="absolute inset-0 w-full h-full object-contain"/>`:iniciales(cl.nombre)}</span>`;}
 const nomEq=e=>e.nombre||(CLUBES[e.club_id]||{}).nombre||'—';
 // errores de BD → mensajes de negocio
 function errNegocio(error){
@@ -1166,7 +1166,7 @@ function modalClub(clubId){
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">CLUB · ESCUDO Y DATOS</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
     <p class="text-xs text-ink-400 mb-4">El club es <b>único en tu marca</b>: su escudo aplica a todos sus equipos en todos los torneos de ${MARCA.nombre}.</p>
     <div class="flex items-center gap-3 mb-3">
-      <span class="w-16 h-16 rounded-2xl grid place-items-center text-white font-display text-xl overflow-hidden relative shrink-0" style="background:${cl.color}">${cl.escudo_url?`<img src="${cl.escudo_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(cl.nombre)}</span>
+      <span class="w-16 h-16 rounded-2xl grid place-items-center text-white font-display text-xl overflow-hidden relative shrink-0" style="background:${cl.escudo_url?'#fff':(cl.color||'#334155')}">${cl.escudo_url?`<img src="${cl.escudo_url}" class="absolute inset-0 w-full h-full object-contain"/>`:iniciales(cl.nombre)}</span>
       <label class="text-sm flex-1"><span class="text-ink-400 font-semibold text-xs">Escudo del club (subir imagen)</span>
         <input id="cb-esc" type="file" accept="image/*" class="w-full text-xs mt-1"/></label>
     </div>

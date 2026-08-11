@@ -135,7 +135,7 @@ function show(id){
 const iniciales=n=>(n||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
 function badge(eq,sz=7){
   const cl=CLUBES[eq.club_id]||{};
-  return `<span class="relative inline-grid place-items-center w-${sz} h-${sz} rounded-lg text-white text-[10px] font-bold shrink-0 overflow-hidden align-middle" style="background:${cl.color||'#334155'}">${cl.escudo_url?`<img src="${cl.escudo_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(cl.nombre)}${eq.color_dot?`<span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white" style="background:${eq.color_dot}"></span>`:''}</span>`;
+  return `<span class="relative inline-grid place-items-center w-${sz} h-${sz} rounded-lg text-white text-[10px] font-bold shrink-0 overflow-hidden align-middle" style="background:${cl.escudo_url?'#fff':(cl.color||'#334155')}">${cl.escudo_url?`<img src="${cl.escudo_url}" class="absolute inset-0 w-full h-full object-contain"/>`:iniciales(cl.nombre)}${eq.color_dot?`<span class="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white" style="background:${eq.color_dot}"></span>`:''}</span>`;
 }
 const nomEq=eq=>eq.nombre||(CLUBES[eq.club_id]||{}).nombre||'—';
 /* Modal (detalle del partido) */

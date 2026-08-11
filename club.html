@@ -120,7 +120,7 @@ function errNegocio(e){
   if(e.code==='42501') return '⚠ Sin permiso: tu acceso de delegado no alcanza para esta acción.';
   return '⚠ '+m;
 }
-const escudo=(m,sz=9)=>`<span class="relative inline-grid place-items-center w-${sz} h-${sz} rounded-xl text-white font-bold text-xs overflow-hidden shrink-0" style="background:${m.color||'#334155'}">${m.escudo_url?`<img src="${m.escudo_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(m.club_nombre)}</span>`;
+const escudo=(m,sz=9)=>`<span class="relative inline-grid place-items-center w-${sz} h-${sz} rounded-xl text-white font-bold text-xs overflow-hidden shrink-0" style="background:${m.escudo_url?'#fff':(m.color||'#334155')}">${m.escudo_url?`<img src="${m.escudo_url}" class="absolute inset-0 w-full h-full object-contain"/>`:iniciales(m.club_nombre)}</span>`;
 
 /* ============ AUTH ============ */
 async function entrar(){
@@ -717,7 +717,7 @@ async function renderPartidos(){
   }
   CLUB_PIDX={}; (pms||[]).forEach(m=>CLUB_PIDX[m.id]=m); CLUB_EQNOM=eqs;
   const lado=(id,der)=>{const e=eqs[id];if(!e)return '<span class="italic text-ink-400">Por definir</span>';
-    const b=`<span class="relative inline-grid place-items-center w-7 h-7 rounded-lg text-white text-[10px] font-bold shrink-0 overflow-hidden" style="background:${e.club.color||'#334155'}">${e.club.escudo_url?`<img src="${e.club.escudo_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(e.club.nombre)}</span>`;
+    const b=`<span class="relative inline-grid place-items-center w-7 h-7 rounded-lg text-white text-[10px] font-bold shrink-0 overflow-hidden" style="background:${e.club.escudo_url?'#fff':(e.club.color||'#334155')}">${e.club.escudo_url?`<img src="${e.club.escudo_url}" class="absolute inset-0 w-full h-full object-contain"/>`:iniciales(e.club.nombre)}</span>`;
     return der?`${b} ${e.nombre}`:`${e.nombre} ${b}`;};
   const fila=m=>{
     const fin=['finalizado','walkover'].includes(m.estado), vivo=m.estado==='en_vivo';
