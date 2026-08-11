@@ -98,7 +98,7 @@ const sb = supabase.createClient(
   { db:{schema:'competencias'}, auth:{storageKey:'sb-competencias-club'} }   // cajón propio; jamás toca ERP/Academias/Admin
 );
 const $=id=>document.getElementById(id);
-let MIS=[], EQ=null;
+let MIS=[], EQ=null, REQ_AUT=false;
 let CATALOGO={};
 async function cargarCatalogo(){
   const {data}=await sb.from('catalogo_atributo').select('*').eq('activo',true).order('orden');
@@ -352,12 +352,17 @@ async function abrirEquipo(id){
 /* ---- PLANTEL (LBF) ---- */
 let N_LBF=0;
 async function renderPlantel(){
-  const {data:ins,error}=await sb.from('inscripcion_lbf').select('*').eq('equipo_id',EQ.equipo_id).order('dorsal');
+  const [insQ,tq]=await Promise.all([
+    sb.from('inscripcion_lbf').select('*').eq('equipo_id',EQ.equipo_id).order('dorsal'),
+    sb.from('torneo').select('requiere_autorizacion').eq('id',EQ.torneo_id).single()
+  ]);
+  const ins=insQ.data, error=insQ.error;
+  REQ_AUT=!!(tq.data&&tq.data.requiere_autorizacion);
   if(error){$('tab-plantel').innerHTML=`<p class="text-brand-600 text-sm font-bold">${errNegocio(error)}</p>`;return;}
   N_LBF=(ins||[]).length;
   let jug={};
   if(ins.length){
-    const js=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,fecha_nacimiento,verificado,foto_url,doc_scan_frente_url,doc_scan_reverso_url,pie_habil,posicion').in('id',ins.map(i=>i.jugador_id));
+    const js=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,fecha_nacimiento,verificado,foto_url,doc_scan_frente_url,doc_scan_reverso_url,pie_habil,posicion,autorizacion_url').in('id',ins.map(i=>i.jugador_id));
     jug=Object.fromEntries((js.data||[]).map(j=>[j.id,j]));
   }
   const puedeEditar=EQ.permitir_delegados&&EQ.cargar_lbf&&EQ.equipo_estado==='activo'&&EQ.torneo_estado!=='finalizado'&&EQ.torneo_estado!=='archivado';
@@ -372,7 +377,7 @@ async function renderPlantel(){
           :'<span class="text-[10px] font-bold text-ink-400">Solo lectura'+(EQ.permitir_delegados?'':' — el torneo no habilita delegados')+'</span>'}
       </div>
       ${ins.length?ins.map(i=>{const j=jug[i.jugador_id]||{};
-        const edit={id:i.id,dorsal:i.dorsal,capitan:i.capitan,nombre:(j.nombres||'')+' '+(j.apellidos||''),jugador_id:i.jugador_id,foto_url:j.foto_url||null,dfr:j.doc_scan_frente_url||null,drv:j.doc_scan_reverso_url||null,pie:j.pie_habil||null,pos:j.posicion||null};
+        const edit={id:i.id,dorsal:i.dorsal,capitan:i.capitan,nombre:(j.nombres||'')+' '+(j.apellidos||''),jugador_id:i.jugador_id,foto_url:j.foto_url||null,dfr:j.doc_scan_frente_url||null,drv:j.doc_scan_reverso_url||null,pie:j.pie_habil||null,pos:j.posicion||null,aut:j.autorizacion_url||null,estado:i.estado};
         return `<div class="fila-persona flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 border-b border-line last:border-0 ${i.inhabilitado?'bg-red-50/60':''}">
           <span class="w-8 h-8 rounded-full grid place-items-center text-[10px] font-bold text-white overflow-hidden relative shrink-0" style="background:#2b3550">${j.foto_url?`<img src="${j.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales((j.nombres||'')+' '+(j.apellidos||''))}</span>
           <span class="w-6 text-ink-400 font-bold text-sm shrink-0">${i.dorsal??''}</span>
@@ -380,6 +385,7 @@ async function renderPlantel(){
             ${(j.posicion||j.pie_habil)?`<span class="block text-[10px] text-ink-400 font-normal">${[j.posicion,j.pie_habil].filter(Boolean).join(' · ')}</span>`:''}</span>
           <span class="doc text-xs text-ink-500">${j.nro_documento||''}</span>
           <span class="flex items-center gap-1.5 ml-auto">
+            ${REQ_AUT&&!j.autorizacion_url?'<span class="text-[9px] font-bold bg-amber-100 text-amber-700 rounded-full px-2 py-0.5" title="Falta la autorización de Padre/Tutor">📄 AUT. PENDIENTE</span>':''}
             <span class="text-[10px] font-bold px-2 py-1 rounded-full ${i.inhabilitado?'bg-brand-100 text-brand-600':i.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${i.inhabilitado?'INHABILITADO':i.estado.toUpperCase()}</span>
             ${puedeEditar?`<button onclick='modalEditIns(${JSON.stringify(edit).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper" title="Editar foto, dorsal y capitán">✏️</button>
             ${i.estado==='pendiente'?`<button onclick='quitarIns("${i.id}","${((j.nombres||'')+' '+(j.apellidos||'')).replace(/'/g,'')}")' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-brand-50 hover:text-brand-600" title="Quitar de la LBF (solo pendientes)">✕</button>`:''}`:''}
@@ -617,6 +623,28 @@ async function verDoc(ruta){
   if(error){toast('⚠ '+error.message);return;}
   window.open(data.signedUrl,'_blank');
 }
+function autUI(i){
+  return `<div class="border-t border-line pt-2 mb-2">
+    <p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-1.5">Autorización de Padre/Tutor (única por jugador — vale para todos los torneos)</p>
+    <div class="flex items-center gap-2 mb-1 flex-wrap">
+      <input id="aut-file" type="file" accept="application/pdf,image/*" class="hidden" onchange="marcarDoc('aut',this)"/>
+      <input id="aut-cam" type="file" accept="image/*" capture="environment" class="hidden" onchange="marcarDoc('aut',this)"/>
+      ${esMovil()
+        ?`<button onclick="$('aut-cam').click()" class="text-[11px] font-bold text-white bg-ink-900 rounded-lg px-2.5 py-1.5 hover:bg-ink-700">📷</button>
+           <button onclick="$('aut-file').click()" class="text-[11px] font-bold text-ink-500 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper">📁 PDF</button>`
+        :`<button onclick="$('aut-file').click()" class="text-[11px] font-bold text-ink-500 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper">📁 SUBIR PDF</button>`}
+      <span id="aut-st" class="text-[10px] font-bold ${i.aut?'text-emerald-600':'text-amber-600'}">${i.aut?'✔ autorización cargada':'— pendiente de subir'}</span>
+      ${i.aut?`<button onclick="verDoc('${i.aut}')" class="text-[10px] font-bold underline text-ink-400 hover:text-ink-900">VER</button>`:''}
+    </div>
+    ${i.aut&&i.estado==='pendiente'?`<button onclick='activarConAutorizacion("${i.id}","${i.jugador_id}")' class="w-full bg-emerald-600 text-white text-xs font-bold py-2 rounded-xl hover:bg-emerald-700 mb-1">✔ YA TIENE AUTORIZACIÓN — ACTIVAR EN ESTE TORNEO</button>`:''}
+    <p class="text-[10px] text-ink-400 mb-2">Al subirla, el jugador pasa a <b>ACTIVO</b> en este torneo y su foto sale a <b>color</b> en el público.</p>
+  </div>`;
+}
+async function activarConAutorizacion(insId,jugadorId){
+  const r=await sb.rpc('subir_autorizacion_jugador',{p_jugador:jugadorId,p_inscripcion:insId,p_ruta:null});
+  if(r.error){toast(errNegocio(r.error));return;}
+  cerrarModal(); toast(r.data&&r.data.activado?'✔ Jugador ACTIVO — su autorización ya estaba registrada':'Autorización verificada ✔'); renderPlantel();
+}
 function modalEditIns(i){
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">✏️ EDITAR JUGADOR</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
     <p class="text-sm font-semibold mb-4">${i.nombre}</p>
@@ -626,6 +654,7 @@ function modalEditIns(i){
       ${docUI('dfr','DNI frontal',i.dfr)}
       ${docUI('drv','DNI reverso',i.drv)}
     </div>
+    ${REQ_AUT?autUI(i):''}
     <div class="grid grid-cols-2 gap-3 text-sm mb-2">
       <label class="block"><span class="text-ink-400 font-semibold text-xs">Dorsal</span>
         <input id="ei-d" type="number" min="0" value="${i.dorsal??''}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
@@ -640,19 +669,28 @@ function modalEditIns(i){
     <button onclick='guardarEditIns("${i.id}","${i.jugador_id}")' class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR</button>`);
 }
 async function guardarEditIns(insId,jugadorId){
+  let autActivado=false;
   try{
     const url=await subirFotoJugador(jugadorId);
     if(url){const r=await sb.rpc('actualizar_foto_jugador',{p_jugador:jugadorId,p_url:url}); if(r.error){toast(errNegocio(r.error));return;}}
     const fr=await subirDoc('dfr',jugadorId,'frente');
     const rv=await subirDoc('drv',jugadorId,'reverso');
     if(fr||rv){const r2=await sb.rpc('actualizar_docs_jugador',{p_jugador:jugadorId,p_frente:fr,p_reverso:rv}); if(r2.error){toast(errNegocio(r2.error));return;}}
+    // Autorización Padre/Tutor: única por jugador; al subirla el organizador
+    // recibe al jugador ACTIVO y su foto sale a color
+    const au=await subirDoc('aut',jugadorId,'autorizacion');
+    if(au){
+      const r3=await sb.rpc('subir_autorizacion_jugador',{p_jugador:jugadorId,p_inscripcion:insId,p_ruta:au});
+      if(r3.error){toast(errNegocio(r3.error));return;}
+      if(r3.data&&r3.data.activado) autActivado=true;
+    }
   }catch(e){toast('Fotos: '+(e.message||e));return;}
   const ra=await sb.rpc('actualizar_atributos_jugador',{p_jugador:jugadorId,p_pie:$('ei-pie')?$('ei-pie').value:'',p_posicion:$('ei-pos')?$('ei-pos').value:''});
   if(ra.error){toast(errNegocio(ra.error));return;}
   const {error}=await sb.from('inscripcion_lbf').update({
     dorsal:+($('ei-d').value||0)||null, capitan:$('ei-c').checked}).eq('id',insId);
   if(error){toast(errNegocio(error));return;}
-  cerrarModal(); toast('Jugador actualizado ✔'); renderPlantel();
+  cerrarModal(); toast(autActivado?'Autorización subida ✔ — jugador ACTIVO y foto a color':'Jugador actualizado ✔'); renderPlantel();
 }
 async function quitarIns(insId,nombre){
   if(!confirm(`¿Quitar a ${nombre} de la LBF?\n\nSolo es posible mientras está PENDIENTE. Podrás volver a inscribirlo.`))return;
