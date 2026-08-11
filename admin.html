@@ -1241,9 +1241,30 @@ function previsualizarFoto(inp){
   r.onload=e=>{$('ef-prev').innerHTML=`<img src="${e.target.result}" class="absolute inset-0 w-full h-full object-cover"/>`;};
   r.readAsDataURL(f);
 }
+/* Resize automático en el navegador antes de subir (no saturar el storage):
+   fotos de persona → cuadrado centrado 800px · documentos → máx 1600px de lado */
+async function redimensionar(f, maxLado, calidad, cuadrado){
+  if(!f || !/^image\//.test(f.type)) return f;
+  try{
+    const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=URL.createObjectURL(f);});
+    let sw=img.naturalWidth, sh=img.naturalHeight, sx=0, sy=0;
+    if(cuadrado){const lado=Math.min(sw,sh); sx=(sw-lado)/2; sy=(sh-lado)/2; sw=sh=lado;}
+    const esc=Math.min(1, maxLado/Math.max(sw,sh));
+    const w=Math.max(1,Math.round(sw*esc)), h=Math.max(1,Math.round(sh*esc));
+    const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+    const x=cv.getContext('2d');
+    x.fillStyle='#fff'; x.fillRect(0,0,w,h);   // fondo blanco (PNG transparente → JPG)
+    x.drawImage(img,sx,sy,sw,sh,0,0,w,h);
+    URL.revokeObjectURL(img.src);
+    const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',calidad));
+    if(!blob || (blob.size>=f.size && esc===1 && !cuadrado)) return f;
+    return new File([blob], f.name.replace(/\.\w+$/,'')+'.jpg', {type:'image/jpeg'});
+  }catch(e){ return f; }   // si algo falla, sube el original
+}
 async function subirFotoJugador(jugadorId){
-  const f=($('ef-cam')&&$('ef-cam').files[0])||($('ef-file')&&$('ef-file').files[0]);
+  let f=($('ef-cam')&&$('ef-cam').files[0])||($('ef-file')&&$('ef-file').files[0]);
   if(!f) return null;
+  f=await redimensionar(f, 800, 0.85, true);
   const ext=(f.name.split('.').pop()||'jpg').toLowerCase();
   const ruta=`jugadores/${jugadorId}.${ext}`;
   const {error}=await sb.storage.from('publico').upload(ruta,f,{upsert:true,contentType:f.type});
@@ -1270,8 +1291,9 @@ function marcarDoc(pref,inp){
   const st=$(pref+'-st'); st.textContent='✔ '+f.name.slice(0,20)+' — se sube al guardar'; st.className='text-[10px] font-bold text-emerald-600';
 }
 async function subirDoc(pref,jugadorId,sufijo){
-  const f=($(pref+'-cam')&&$(pref+'-cam').files[0])||($(pref+'-file')&&$(pref+'-file').files[0]);
+  let f=($(pref+'-cam')&&$(pref+'-cam').files[0])||($(pref+'-file')&&$(pref+'-file').files[0]);
   if(!f) return null;
+  f=await redimensionar(f, 1600, 0.85, false);
   const ext=(f.name.split('.').pop()||'jpg').toLowerCase();
   const ruta=`jugadores/${jugadorId}-${sufijo}.${ext}`;
   const {error}=await sb.storage.from('documentos').upload(ruta,f,{upsert:true,contentType:f.type});
