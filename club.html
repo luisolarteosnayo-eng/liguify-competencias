@@ -880,6 +880,8 @@ async function detallePartidoClub(id){
     </div>`;
   }
   const ctx=m.etapa?`🏆 ${m.etapa}`:(m.jornada&&m.jornada.numero?`Fecha ${m.jornada.numero}`:'');
+  const miPartido=(m.local_id===EQ.equipo_id||m.visita_id===EQ.equipo_id);
+  const puedeStats=miPartido&&(fin||vivo)&&EQ.permitir_delegados&&EQ.equipo_estado==='activo'&&EQ.torneo_estado!=='archivado';
   abrirModal(`<div class="flex items-center justify-between mb-3"><h3 class="font-display text-2xl tracking-wide">DETALLE DEL PARTIDO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
     <div class="text-center mb-1">
       <p class="text-sm font-bold">${nomDe(m.local_id)} <span class="text-ink-400 font-normal">vs</span> ${nomDe(m.visita_id)}</p>
@@ -889,7 +891,43 @@ async function detallePartidoClub(id){
       <p class="text-[10px] text-ink-400">${ctx}${m.fecha?' · '+m.fecha:''}${m.hora?' '+m.hora.slice(0,5):''}${m.sede?' · '+m.sede:''}</p>
     </div>
     <div class="grid sm:grid-cols-2 gap-x-6 gap-y-3 mt-3">${col(m.local_id)+col(m.visita_id)}</div>
-    ${figHTML}`);
+    ${figHTML}
+    ${puedeStats?`<button onclick="modalStatsClub('${m.id}')" class="w-full mt-4 bg-ink-900 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-ink-700">⏱ MINUTOS Y ASISTENCIAS DE MI EQUIPO</button>`:''}`);
+}
+/* ---- El club gestiona minutos y asistencias de SUS jugadores (goles y
+   tarjetas siguen siendo oficiales del organizador) ---- */
+let SC_STATS=[];
+async function modalStatsClub(partidoId){
+  const [ins,pl]=await Promise.all([
+    sb.from('inscripcion_lbf').select('id,dorsal,jugador_id').eq('equipo_id',EQ.equipo_id).eq('en_lbf',true).eq('inhabilitado',false),
+    sb.from('planilla_partido').select('inscripcion_id,goles,minutos,asistencias').eq('partido_id',partidoId)
+  ]);
+  const jids=(ins.data||[]).map(i=>i.jugador_id);
+  const js=jids.length?await sb.from('jugador_maestro').select('id,nombres,apellidos').in('id',jids):{data:[]};
+  const jn=Object.fromEntries((js.data||[]).map(j=>[j.id,(j.nombres||'')+' '+(j.apellidos||'')]));
+  const pmap=Object.fromEntries((pl.data||[]).map(p=>[p.inscripcion_id,p]));
+  SC_STATS=(ins.data||[]).map(i=>({id:i.id,dorsal:i.dorsal,nombre:jn[i.jugador_id]||'—'})).sort((a,b)=>(a.dorsal??99)-(b.dorsal??99));
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⏱ MINUTOS Y ASISTENCIAS</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-3">Registra los minutos jugados y pases de gol de tus jugadores en este partido. Los minutos &gt; 0 cuentan como partido jugado (PJ). Los goles y tarjetas los registra el organizador.</p>
+    <div class="flex items-center justify-end gap-1.5 text-[10px] font-bold text-ink-400 border-b-2 border-ink-900 pb-1 mb-1">
+      <span class="w-12 text-center" title="Minutos jugados">⏱ MIN</span><span class="w-12 text-center" title="Asistencias (pases de gol)">🅰 AST</span>
+    </div>
+    <div class="max-h-80 overflow-y-auto mb-3">
+      ${SC_STATS.map(i=>{const p=pmap[i.id]||{};return `<div class="flex items-center gap-1.5 py-1 border-b border-line last:border-0">
+        <span class="w-5 text-ink-400 font-bold text-xs text-right shrink-0">${i.dorsal??''}</span>
+        <span class="flex-1 min-w-0 text-xs font-semibold truncate">${i.nombre}${p.goles?` <span class="text-[10px]">${'⚽'.repeat(Math.min(p.goles,3))}${p.goles>3?'×'+p.goles:''}</span>`:''}</span>
+        <input id="sm-m-${i.id}" type="number" min="0" value="${p.minutos||0}" class="w-12 border border-sky-200 bg-sky-50 rounded-lg text-center py-1 text-xs font-bold"/>
+        <input id="sm-a-${i.id}" type="number" min="0" value="${p.asistencias||0}" class="w-12 border border-emerald-200 bg-emerald-50 rounded-lg text-center py-1 text-xs font-bold"/>
+      </div>`;}).join('')||'<p class="text-xs text-ink-400 py-3 text-center">Sin jugadores en LBF.</p>'}
+    </div>
+    <button onclick="guardarStatsClub('${partidoId}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR</button>`);
+}
+async function guardarStatsClub(partidoId){
+  const stats=SC_STATS.map(i=>({inscripcion:i.id, minutos:+($('sm-m-'+i.id)?.value||0), asistencias:+($('sm-a-'+i.id)?.value||0)}));
+  const r=await sb.rpc('actualizar_stats_club',{p_equipo:EQ.equipo_id,p_partido:partidoId,p_stats:stats});
+  if(r.error){toast(errNegocio(r.error));return;}
+  cerrarModal();
+  toast(`⏱ Estadísticas guardadas ✔ (${(r.data&&r.data.actualizados)||0} jugador(es)) — ya se reflejan en 📊 del plantel`);
 }
 
 /* ---- TABLA (posición del equipo resaltada) + goleadores ---- */
