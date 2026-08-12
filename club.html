@@ -354,16 +354,25 @@ let N_LBF=0;
 async function renderPlantel(){
   const [insQ,tq]=await Promise.all([
     sb.from('inscripcion_lbf').select('*').eq('equipo_id',EQ.equipo_id).order('dorsal'),
-    sb.from('torneo').select('requiere_autorizacion').eq('id',EQ.torneo_id).single()
+    sb.from('torneo').select('requiere_autorizacion,duracion_partido').eq('id',EQ.torneo_id).single()
   ]);
   const ins=insQ.data, error=insQ.error;
   REQ_AUT=!!(tq.data&&tq.data.requiere_autorizacion);
+  const DUR=(tq.data&&tq.data.duracion_partido)||90;
   if(error){$('tab-plantel').innerHTML=`<p class="text-brand-600 text-sm font-bold">${errNegocio(error)}</p>`;return;}
   N_LBF=(ins||[]).length;
-  let jug={};
+  let jug={}, stats={};
   if(ins.length){
-    const js=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,fecha_nacimiento,verificado,foto_url,doc_scan_frente_url,doc_scan_reverso_url,pie_habil,posicion,autorizacion_url').in('id',ins.map(i=>i.jugador_id));
+    const [js,pl]=await Promise.all([
+      sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,fecha_nacimiento,verificado,foto_url,doc_scan_frente_url,doc_scan_reverso_url,pie_habil,posicion,autorizacion_url').in('id',ins.map(i=>i.jugador_id)),
+      sb.from('planilla_partido').select('inscripcion_id,jugo,goles,minutos,asistencias').in('inscripcion_id',ins.map(i=>i.id))
+    ]);
     jug=Object.fromEntries((js.data||[]).map(j=>[j.id,j]));
+    (pl.data||[]).forEach(p=>{
+      const s=stats[p.inscripcion_id]=stats[p.inscripcion_id]||{pj:0,min:0,g:0,as:0};
+      if(p.jugo||(p.minutos||0)>0) s.pj++;
+      s.min+=p.minutos||0; s.g+=p.goles||0; s.as+=p.asistencias||0;
+    });
   }
   const puedeEditar=EQ.permitir_delegados&&EQ.cargar_lbf&&EQ.equipo_estado==='activo'&&EQ.torneo_estado!=='finalizado'&&EQ.torneo_estado!=='archivado';
   const lleno=N_LBF>=EQ.lbf_max;
@@ -394,6 +403,43 @@ async function renderPlantel(){
         :'<p class="px-5 py-8 text-sm text-ink-400 text-center">Plantel vacío'+(puedeEditar?' — agrega a tu primer jugador.':'.')+'</p>'}
       <p class="text-[11px] text-ink-400 px-5 py-3 bg-paper">Los jugadores que agregues quedan <b>PENDIENTES</b> hasta que el organizador valide documento y apto médico. Un jugador solo puede estar en un equipo por categoría (anti-suplantación).</p>
     </div>
+    ${ins.length?(()=>{
+      const filas=ins.map(i=>{
+        const j=jug[i.jugador_id]||{}, s=stats[i.id]||{pj:0,min:0,g:0,as:0};
+        const part=s.pj>0?Math.round(100*s.min/(s.pj*DUR)):0;
+        const mprom=s.min>0?Math.round(s.min/s.pj):0;
+        const g90=s.min>0?(s.g/s.min*DUR):0;
+        const a90=s.min>0?(s.as/s.min*DUR):0;
+        return {n:((j.nombres||'')+' '+(j.apellidos||'')).trim()||'—', d:i.dorsal, s, part, mprom, g90, a90};
+      }).sort((a,b)=>b.s.g-a.s.g||b.s.min-a.s.min);
+      return `<div class="bg-white border border-line rounded-2xl overflow-hidden mt-4">
+      <div class="px-5 py-3 border-b border-line"><p class="font-display text-xl tracking-wide">📊 ESTADÍSTICAS DEL TORNEO <span class="text-xs font-sans text-ink-400 font-semibold">partido de ${DUR}'</span></p></div>
+      <div class="overflow-x-auto"><table class="w-full text-xs whitespace-nowrap">
+        <thead><tr class="text-left text-[9px] text-ink-400 uppercase bg-paper border-b border-line">
+          <th class="py-2 px-3 font-bold">Jugador</th>
+          <th class="py-2 px-2 font-bold text-center" title="Partidos jugados (veces que entró al campo)">PJ</th>
+          <th class="py-2 px-2 font-bold text-center" title="Minutos totales">Min</th>
+          <th class="py-2 px-2 font-bold text-center" title="Goles">⚽</th>
+          <th class="py-2 px-2 font-bold text-center" title="Asistencias (pases de gol)">🅰</th>
+          <th class="py-2 px-2 font-bold text-center" title="Minutos totales / (PJ × duración)">%Part</th>
+          <th class="py-2 px-2 font-bold text-center" title="Minutos totales / PJ">Min prom</th>
+          <th class="py-2 px-2 font-bold text-center" title="(Goles / minutos) × duración del partido">G/${DUR}'</th>
+          <th class="py-2 px-2 font-bold text-center" title="(Asistencias / minutos) × duración del partido">A/${DUR}'</th>
+        </tr></thead>
+        <tbody>${filas.map(f=>`<tr class="border-b border-line last:border-0">
+          <td class="py-1.5 px-3 font-semibold">${f.d?`<span class="text-ink-400 font-bold mr-1">${f.d}</span>`:''}${f.n}</td>
+          <td class="py-1.5 px-2 text-center font-bold">${f.s.pj}</td>
+          <td class="py-1.5 px-2 text-center">${f.s.min}</td>
+          <td class="py-1.5 px-2 text-center font-bold">${f.s.g||''}</td>
+          <td class="py-1.5 px-2 text-center">${f.s.as||''}</td>
+          <td class="py-1.5 px-2 text-center">${f.s.pj?f.part+'%':'—'}</td>
+          <td class="py-1.5 px-2 text-center">${f.mprom||'—'}</td>
+          <td class="py-1.5 px-2 text-center">${f.s.min>0?f.g90.toFixed(2):'—'}</td>
+          <td class="py-1.5 px-2 text-center">${f.s.min>0?f.a90.toFixed(2):'—'}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+      <p class="text-[10px] text-ink-400 px-5 py-2 bg-paper">PJ y minutos provienen de la planilla que carga el organizador en cada resultado. %Part = minutos ÷ (PJ × ${DUR}').</p>
+    </div>`;})():''}
     <div id="ct-card" class="mt-4"></div>`;
   renderCT(puedeEditar);
 }

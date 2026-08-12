@@ -1301,6 +1301,15 @@ end $$;
 revoke execute on function competencias.subir_autorizacion_jugador(uuid,uuid,text) from public, anon;
 grant  execute on function competencias.subir_autorizacion_jugador(uuid,uuid,text) to authenticated;
 
+-- ---- ESTADÍSTICAS POR JUGADOR (minutos/asistencias + duración del partido) --
+-- Se capturan en CARGAR RESULTADO; el módulo Club muestra PJ/min/goles/asist/
+-- %participación/min-promedio/por-90 calculados sobre torneo.duracion_partido.
+alter table competencias.torneo
+  add column if not exists duracion_partido int not null default 90;  -- minutos
+alter table competencias.planilla_partido
+  add column if not exists minutos     int not null default 0,
+  add column if not exists asistencias int not null default 0;
+
 -- ---- COMANDO TÉCNICO (por equipo/torneo; misma maestra global) --------------
 -- torneo.ct_max_personas define el máximo por equipo (default 5)
 alter table competencias.torneo add column if not exists ct_max_personas int not null default 5;
