@@ -514,7 +514,7 @@ function modalTorneo(t){
       ${campo('tc-amaf','Fecha límite acum. amarillas',t.fecha_limite_amarillas,'date')}
       ${campo('tc-lbf','Máx. jugadores LBF por equipo',t.lbf_max_jugadores,'number')}
       ${campo('tc-ct','Máx. comando técnico por equipo',t.ct_max_personas??5,'number')}
-      ${campo('tc-dur','Duración del partido (min) — base de %particip. y por-90',t.duracion_partido??90,'number')}
+      ${campo('tc-dur','Duración del partido por defecto (min) — cada categoría puede fijar la suya',t.duracion_partido??90,'number')}
       ${campo('tc-flim','Fecha límite carga equipo',t.fecha_limite_carga_equipo,'date')}
     </div>
     ${toggleC('tc-clbf','Cargar jugadores en LBF',t.cargar_lbf)}
@@ -654,21 +654,41 @@ function modalCategoria(){
         <select id="nc-a" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${anios.map(a=>`<option>${a}</option>`).join('')}</select></label>
       <label><span class="text-ink-400 font-semibold text-xs">Modalidad</span>
         <select id="nc-m" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"><option>F7</option><option>F9</option><option>F11</option></select></label>
+      <label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Duración del partido (min) — vacío = hereda del torneo (${TORNEO?.duracion_partido||90}')</span>
+        <input id="nc-d" type="number" min="1" placeholder="${TORNEO?.duracion_partido||90}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
     </div>
     <button onclick="crearCategoria()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl mt-4 hover:bg-brand-600">CREAR</button>`);
 }
 async function crearCategoria(){
   const a=+$('nc-a').value, m=$('nc-m').value;
-  const {error}=await sb.from('categoria').insert({torneo_id:TORNEO.id,anio_nacimiento:a,modalidad:m,nombre_display:`Categoría ${a} / ${m}`});
+  const d=$('nc-d').value.trim();
+  const {error}=await sb.from('categoria').insert({torneo_id:TORNEO.id,anio_nacimiento:a,modalidad:m,nombre_display:`Categoría ${a} / ${m}`,duracion_partido:d?Math.max(1,+d||0):null});
   if(error){toast(errNegocio(error));return;}
   cerrarModal(); toast(`Categoría ${a}/${m} creada en la BD ✔`); abrirTorneo(TORNEO);
+}
+/* Duración del partido por categoría (base de %participación y por-90) */
+function modalDuracionCat(){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⏱ DURACIÓN DEL PARTIDO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">Minutos por partido de <b>${CAT.nombre_display||''}</b> — base del %participación y las métricas por-90 de las estadísticas. Déjalo vacío para heredar la duración por defecto del torneo (<b>${TORNEO.duracion_partido||90}'</b>).</p>
+    <label class="block text-sm mb-4"><span class="text-ink-400 font-semibold text-xs">Minutos por partido</span>
+      <input id="dc-min" type="number" min="1" value="${CAT.duracion_partido||''}" placeholder="${TORNEO.duracion_partido||90}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+    <button onclick="guardarDuracionCat()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR</button>`);
+}
+async function guardarDuracionCat(){
+  const v=$('dc-min').value.trim();
+  const dur=v===''?null:Math.max(1,+v||0);
+  const {data,error}=await sb.from('categoria').update({duracion_partido:dur}).eq('id',CAT.id).select().single();
+  if(error){toast(errNegocio(error));return;}
+  cerrarModal(); toast(dur?`Duración fijada en ${dur}' para esta categoría ✔`:'La categoría vuelve a heredar la duración del torneo ✔');
+  abrirCategoria(data);
 }
 
 /* ============ CATEGORÍA ============ */
 async function abrirCategoria(c){
   CAT=c;
   $('bc-t').textContent='← '+TORNEO.nombre;
-  $('c-titulo').textContent=(c.nombre_display||('Categoría '+c.anio_nacimiento+' / '+c.modalidad)).toUpperCase();
+  const durEf=c.duracion_partido||TORNEO.duracion_partido||90;
+  $('c-titulo').innerHTML=`${(c.nombre_display||('Categoría '+c.anio_nacimiento+' / '+c.modalidad)).toUpperCase()}${esAdmin()?` <button onclick="modalDuracionCat()" title="Duración del partido de esta categoría (base de %participación y por-90)" class="align-middle text-xs font-sans font-bold bg-white border border-line rounded-full px-3 py-1.5 text-ink-500 hover:bg-paper">⏱ ${durEf}'${c.duracion_partido?'':' · torneo'}</button>`:''}`;
   const [cls,eqs,fs]=await Promise.all([
     sb.from('club').select('*').eq('marca_id',MARCA.id),
     sb.from('equipo').select('*').eq('categoria_id',c.id),

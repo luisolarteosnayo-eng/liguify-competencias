@@ -352,13 +352,15 @@ async function abrirEquipo(id){
 /* ---- PLANTEL (LBF) ---- */
 let N_LBF=0;
 async function renderPlantel(){
-  const [insQ,tq]=await Promise.all([
+  const [insQ,tq,cq]=await Promise.all([
     sb.from('inscripcion_lbf').select('*').eq('equipo_id',EQ.equipo_id).order('dorsal'),
-    sb.from('torneo').select('requiere_autorizacion,duracion_partido').eq('id',EQ.torneo_id).single()
+    sb.from('torneo').select('requiere_autorizacion,duracion_partido').eq('id',EQ.torneo_id).single(),
+    sb.from('categoria').select('duracion_partido').eq('id',EQ.categoria_id).single()
   ]);
   const ins=insQ.data, error=insQ.error;
   REQ_AUT=!!(tq.data&&tq.data.requiere_autorizacion);
-  const DUR=(tq.data&&tq.data.duracion_partido)||90;
+  // duración efectiva: la de la CATEGORÍA; si no tiene, la del torneo
+  const DUR=(cq.data&&cq.data.duracion_partido)||(tq.data&&tq.data.duracion_partido)||90;
   if(error){$('tab-plantel').innerHTML=`<p class="text-brand-600 text-sm font-bold">${errNegocio(error)}</p>`;return;}
   N_LBF=(ins||[]).length;
   let jug={}, stats={};

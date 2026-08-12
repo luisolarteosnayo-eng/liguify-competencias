@@ -1305,7 +1305,9 @@ grant  execute on function competencias.subir_autorizacion_jugador(uuid,uuid,tex
 -- Se capturan en CARGAR RESULTADO; el módulo Club muestra PJ/min/goles/asist/
 -- %participación/min-promedio/por-90 calculados sobre torneo.duracion_partido.
 alter table competencias.torneo
-  add column if not exists duracion_partido int not null default 90;  -- minutos
+  add column if not exists duracion_partido int not null default 90;  -- default del torneo
+alter table competencias.categoria
+  add column if not exists duracion_partido int;   -- null = hereda del torneo (ej. 40' menores / 50' mayores)
 alter table competencias.planilla_partido
   add column if not exists minutos     int not null default 0,
   add column if not exists asistencias int not null default 0;
