@@ -2606,6 +2606,19 @@ async function modalResultado(m){
     <p class="text-[10px] text-ink-400 mt-2 text-center">Al guardar: standings + estadísticas recalculados y publicados en vivo.</p>`, RS_INS.length>0);
 }
 async function guardarResultado(id){
+  // Volver a PROGRAMADO = borrar el resultado completo (marcador, penales,
+  // figura y estadísticas por jugador de ESTE partido) y recalcular la tabla
+  if($('rs-e').value==='programado'){
+    if(!confirm('El partido volverá a PROGRAMADO.\n\nSe borran: marcador, penales, figura y las estadísticas por jugador de este partido (goles, tarjetas, minutos y asistencias). La tabla se recalcula.\n\n¿Continuar?'))return;
+    const {error}=await sb.from('partido').update({goles_local:null,goles_visita:null,estado:'programado',
+      penales:false,penales_local:null,penales_visita:null,figura_inscripcion_id:null}).eq('id',id);
+    if(error){toast(errNegocio(error));return;}
+    const pl=await sb.from('planilla_partido').update({jugo:false,goles:0,amarillas:0,rojas:0,minutos:0,asistencias:0}).eq('partido_id',id);
+    if(pl.error) toast('Partido reprogramado, pero la planilla no se pudo limpiar: '+errNegocio(pl.error));
+    cerrarModal(); toast('Partido devuelto a PROGRAMADO ✔ — resultado y estadísticas borrados, tabla recalculada');
+    await renderFixture(); await renderTabla();
+    return;
+  }
   const gl=$('rs-l').value, gv=$('rs-v').value;
   if(gl===''||gv===''){toast('Ingresa ambos marcadores');return;}
   // estadísticas por jugador: detectar cambios y validar coherencia con el marcador
