@@ -2273,16 +2273,18 @@ async function generarImagenJornada(jid,modo){
     x.fillStyle='#ffffff';
     x.beginPath(); x.roundRect(28,y,W-56,hCard,22); x.fill();
     x.strokeStyle='#e9e6e0'; x.lineWidth=2; x.stroke();
-    // hora
-    x.fillStyle='#171e2e'; x.font='52px "Bebas Neue"'; x.textBaseline='middle';
-    x.fillText(m.hora?m.hora.slice(0,5):'--:--',56,cy+2);
+    // hora (solo en la programación; en resultados el nombre gana ese espacio)
+    if(!resultados){
+      x.fillStyle='#171e2e'; x.font='52px "Bebas Neue"'; x.textBaseline='middle';
+      x.fillText(m.hora?m.hora.slice(0,5):'--:--',56,cy+2);
+    }
     // zonas reservadas (nunca se superponen): hora [56..200] · local [210..W/2-108]
     // · escudos/VS centro · visita [W/2+108 .. limVisita] · lugar [limVisita+16 .. W-56]
     const conLugarFila=!lugarComun&&lugarDe(m);
     const limVisita=conLugarFila?W-56-206:W-72;
     const L=EQUIPOS[m.local_id], V=EQUIPOS[m.visita_id];
     const nL=L?nomEq(L).toUpperCase():'POR DEFINIR', nV=V?nomEq(V).toUpperCase():'POR DEFINIR';
-    x.font=fitText(nL,'700 30px Inter',(W/2-108)-210); x.fillStyle='#171e2e'; x.textAlign='right';
+    x.font=fitText(nL,'700 30px Inter',(W/2-108)-(resultados?70:210)); x.fillStyle='#171e2e'; x.textAlign='right';
     x.fillText(nL,W/2-108,cy+2);
     if(L) dib(escudos[m.local_id].img,W/2-72,cy,26,escudos[m.local_id].color,escudos[m.local_id].ini);
     // centro: marcador (imagen de resultados) o VS (programación)
