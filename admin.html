@@ -1143,6 +1143,8 @@ async function modalCoordinadorClub(clubId){
   const cl=CLUBES[clubId]||{};
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">👤 COORDINADOR · ${(cl.nombre||'').toUpperCase()}</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
     <p class="text-xs text-ink-400 mb-3">El coordinador recibe un email con su enlace de acceso, <b>acepta la invitación</b> al torneo ${TORNEO.nombre} y podrá cargar la LBF de TODAS las categorías del club (y nombrar sub-coordinadores por categoría). Dentro crea su contraseña o entra con Google.</p>
+    <div id="ic-coords" class="mb-3 text-sm"></div>
+    <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1">Invitaciones de este torneo</p>
     <div id="ic-lista" class="mb-3 text-sm">Cargando…</div>
     <div class="border-t border-line pt-3">
       <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-2">Nueva invitación</p>
@@ -1154,6 +1156,28 @@ async function modalCoordinadorClub(clubId){
       <button onclick="enviarInvitacionCoordinador('${clubId}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">📨 INVITAR COORDINADOR</button>
     </div>`);
   refrescarInvitaciones(clubId);
+  refrescarCoordinadores(clubId);
+}
+/* Coordinadores VIGENTES del club (el acceso es por club: pueden venir de una
+   invitación enviada desde otro torneo) */
+async function refrescarCoordinadores(clubId){
+  const el=$('ic-coords'); if(!el) return;
+  const {data,error}=await sb.rpc('coordinadores_de_club',{p_club:clubId});
+  if(error){el.innerHTML=`<p class="text-brand-600 text-xs font-bold">${errNegocio(error)}</p>`;return;}
+  el.innerHTML=`<p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1">Coordinador titular del club</p>`+((data||[]).length?data.map(c=>`
+    <div class="flex items-center gap-2 py-1.5 border-b border-line last:border-0 bg-emerald-50/40 rounded-lg px-2">
+      <span class="flex-1 min-w-0"><span class="font-semibold block truncate">${c.nombre||c.email||'—'}</span>
+        <span class="text-[10px] text-ink-400">${c.email||''} · acceso a TODO el club</span></span>
+      <span class="text-[9px] font-bold uppercase rounded-full px-2 py-0.5 bg-ink-900 text-white">COORD</span>
+      <button onclick="quitarCoordinador('${clubId}','${c.usuario_id}','${(c.nombre||c.email||'').replace(/'/g,'')}')" class="text-ink-400 hover:text-brand-600 font-bold px-1" title="Quitar coordinador (pierde todo el club)">✕</button>
+    </div>`).join(''):'<p class="text-ink-400 text-xs">Este club aún no tiene coordinador vigente.</p>');
+}
+async function quitarCoordinador(clubId,usuarioId,nombre){
+  if(!confirm(`¿QUITAR a ${nombre} como coordinador de este club?\n\nPerderá el acceso a TODO el club (todas sus categorías y torneos). Sus sub-coordinadores se revocan por separado. Para cambiarlo por otra persona, envía luego una nueva invitación.`))return;
+  const r=await sb.rpc('quitar_coordinador',{p_club:clubId,p_usuario:usuarioId});
+  if(r.error){toast(errNegocio(r.error));return;}
+  toast('Coordinador quitado ✔ — ya no puede gestionar este club');
+  refrescarCoordinadores(clubId); refrescarInvitaciones(clubId);
 }
 async function refrescarInvitaciones(clubId){
   const {data,error}=await sb.rpc('invitaciones_de_club',{p_torneo:TORNEO.id,p_club:clubId});
