@@ -841,14 +841,14 @@ async function renderPartidos(){
     const ctx=m.etapa?`🏆 ${m.etapa}`:(m.jornada&&m.jornada.numero?`Fecha ${m.jornada.numero}`:'');
     return `<div onclick="detallePartidoClub('${m.id}')" class="px-4 pt-3 border-b border-line last:border-0 cursor-pointer hover:bg-paper" title="Ver detalle del partido">
       <div class="flex items-center">
-        <div class="flex-1 flex items-center justify-end gap-2 text-sm ${gL?'font-bold':''}">${lado(m.local_id,false)}</div>
+        <div class="flex-1 flex items-center justify-center gap-2 text-sm ${gL?'font-bold':''}">${lado(m.local_id,false)}</div>
         <div class="w-28 text-center">
           ${vivo?`<span class="flex items-center justify-center gap-1 text-[9px] font-bold text-brand-600">● EN VIVO</span>`
             :`<span class="block text-[9px] font-bold uppercase ${fin?'text-emerald-600':'text-ink-400'}">${m.estado}</span>`}
           <span class="font-display text-2xl">${m.goles_local??'–'} : ${m.goles_visita??'–'}</span>
           ${m.penales?`<span class="block text-[11px] text-ink-400 -mt-0.5">penales ${m.penales_local} x ${m.penales_visita}</span>`:''}
         </div>
-        <div class="flex-1 flex items-center gap-2 text-sm ${gV?'font-bold':''}">${lado(m.visita_id,true)}</div>
+        <div class="flex-1 flex items-center justify-center gap-2 text-sm ${gV?'font-bold':''}">${lado(m.visita_id,true)}</div>
       </div>
       <p class="text-[10px] text-ink-400 text-center pb-2">${ctx}${(m.jornada&&m.jornada.horarios_publicados===false)?' · 🕒 horario por confirmar':`${m.fecha?' · '+m.fecha:''}${m.hora?' '+m.hora.slice(0,5):''}${m.sede?' · '+m.sede:''}`}</p>
     </div>`;

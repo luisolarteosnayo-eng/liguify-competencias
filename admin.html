@@ -2006,13 +2006,13 @@ async function renderFixture(){
     return `<div class="flex items-center px-4 py-2.5 border-b border-line last:border-0 gap-2 flex-wrap">
       ${m.etapa?`<span class="text-[9px] font-bold bg-amber-100 text-amber-700 rounded px-1.5 py-0.5 whitespace-nowrap">${m.etapa}</span>`:''}
       ${ph?'<span class="text-[9px] font-bold bg-paper text-ink-400 border border-line rounded px-1.5 py-0.5 whitespace-nowrap" title="Cupos por resolver">🔮</span>':''}
-      <div class="flex-1 flex items-center justify-end gap-2 text-sm font-semibold min-w-28">${lado(L,m.local_origen,false)}</div>
+      <div class="flex-1 flex items-center justify-center gap-2 text-sm font-semibold min-w-28">${lado(L,m.local_origen,false)}</div>
       <div class="w-24 text-center">
         <span class="block text-[9px] font-bold uppercase ${fin?'text-emerald-600':'text-ink-400'}">${ph?'por definir':m.estado}</span>
         <span class="font-display text-2xl">${m.goles_local??'–'} : ${m.goles_visita??'–'}</span>
         <span class="block text-[9px] text-ink-400">${m.fecha||''} ${m.hora?m.hora.slice(0,5):''}</span>
       </div>
-      <div class="flex-1 flex items-center gap-2 text-sm font-semibold min-w-28">${lado(V,m.visita_origen,true)}</div>
+      <div class="flex-1 flex items-center justify-center gap-2 text-sm font-semibold min-w-28">${lado(V,m.visita_origen,true)}</div>
       <div class="flex gap-1">
         ${esAdmin()?`<button onclick='modalEditPartido(${J})' class="text-xs font-bold text-ink-500 border border-line rounded-lg px-2 py-1.5 hover:bg-paper" title="Editar fecha, hora, sede, cancha, árbitro">✏️</button>`:''}
         ${ph?'':`<button onclick='abrirAcred(${J})' class="text-xs font-bold text-ink-500 border border-line rounded-lg px-2 py-1.5 hover:bg-paper" title="Acreditación en cancha">🪪</button>
@@ -2178,7 +2178,8 @@ async function modalJornada(jid){
     </div>
 
     <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1.5">Compartir programación</p>
-    <button onclick="generarImagenJornada('${jid}')" class="w-full bg-ink-900 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-ink-700 mb-4">🖼 DESCARGAR IMAGEN DE LA PROGRAMACIÓN</button>
+    <button onclick="generarImagenJornada('${jid}')" class="w-full bg-ink-900 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-ink-700 mb-2">🖼 DESCARGAR IMAGEN DE LA PROGRAMACIÓN</button>
+    <button onclick="generarImagenJornada('${jid}','resultados')" class="w-full bg-emerald-700 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-emerald-800 mb-4">🏁 DESCARGAR IMAGEN DE RESULTADOS</button>
 
     <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1.5">Horarios en Excel</p>
     <div class="flex gap-2 mb-1">
@@ -2214,11 +2215,13 @@ function cargarImg(url){
     im.src=url;
   });
 }
-async function generarImagenJornada(jid){
+async function generarImagenJornada(jid,modo){
+  const resultados=modo==='resultados';
   const j=JORNADAS.find(x=>x.id===jid); if(!j) return;
   const {data:ms,error}=await sb.from('partido').select('*').eq('jornada_id',jid).order('hora').order('cancha');
   if(error){toast(errNegocio(error));return;}
   if(!ms.length){toast('⚠ Esta fecha no tiene partidos');return;}
+  if(resultados&&!ms.some(m=>['finalizado','walkover'].includes(m.estado))){toast('⚠ Esta fecha aún no tiene resultados cargados');return;}
   toast('🖼 Generando imagen…');
   await Promise.all([document.fonts.load('80px "Bebas Neue"'),document.fonts.load('700 30px Inter'),document.fonts.load('600 26px Inter')]);
   // recursos: logo + escudos (best effort; si falla se dibujan iniciales)
@@ -2257,8 +2260,9 @@ async function generarImagenJornada(jid){
   x.fillText((CAT.nombre_display||('Categoría '+CAT.anio_nacimiento+' / '+CAT.modalidad))+'  ·  '+MARCA.nombre,218,178);
   const dia=await diaDeJornada(jid);
   const diaTxt=dia?new Date(dia+'T00:00:00').toLocaleDateString('es-PE',{weekday:'long',day:'numeric',month:'long'}).toUpperCase():'DÍA POR CONFIRMAR';
-  x.fillStyle='#ffd166'; x.font=fitText('FECHA '+j.numero+'  ·  '+diaTxt,'54px "Bebas Neue"',830);
-  x.fillText('FECHA '+j.numero+'  ·  '+diaTxt,218,242);
+  const linFecha=(resultados?'RESULTADOS · ':'')+'FECHA '+j.numero+'  ·  '+diaTxt;
+  x.fillStyle='#ffd166'; x.font=fitText(linFecha,'54px "Bebas Neue"',830);
+  x.fillText(linFecha,218,242);
   if(lugarComun){
     x.fillStyle='rgba(255,255,255,.85)'; x.font=fitText('📍 '+lugarComun.toUpperCase(),'42px "Bebas Neue"',830);
     x.fillText('📍 '+lugarComun.toUpperCase(),218,306);
@@ -2281,9 +2285,17 @@ async function generarImagenJornada(jid){
     x.font=fitText(nL,'700 30px Inter',(W/2-108)-210); x.fillStyle='#171e2e'; x.textAlign='right';
     x.fillText(nL,W/2-108,cy+2);
     if(L) dib(escudos[m.local_id].img,W/2-72,cy,26,escudos[m.local_id].color,escudos[m.local_id].ini);
-    // vs
-    x.fillStyle='#d9232e'; x.font='34px "Bebas Neue"'; x.textAlign='center'; x.textBaseline='middle';
-    x.fillText('VS',W/2,cy+2);
+    // centro: marcador (imagen de resultados) o VS (programación)
+    const fin=['finalizado','walkover'].includes(m.estado);
+    if(resultados&&fin){
+      x.fillStyle='#171e2e'; x.font='46px "Bebas Neue"'; x.textAlign='center'; x.textBaseline='middle';
+      x.fillText(`${m.goles_local??0} - ${m.goles_visita??0}`,W/2,m.penales?cy-8:cy+2);
+      if(m.penales){ x.fillStyle='#5b6478'; x.font='600 17px Inter';
+        x.fillText(`pen ${m.penales_local??0}-${m.penales_visita??0}`,W/2,cy+26); }
+    } else {
+      x.fillStyle='#d9232e'; x.font='34px "Bebas Neue"'; x.textAlign='center'; x.textBaseline='middle';
+      x.fillText(resultados?'—':'VS',W/2,cy+2);
+    }
     // visita
     if(V) dib(escudos[m.visita_id].img,W/2+72,cy,26,escudos[m.visita_id].color,escudos[m.visita_id].ini);
     x.textAlign='left'; x.textBaseline='middle';
@@ -2296,17 +2308,17 @@ async function generarImagenJornada(jid){
   });
   // pie
   x.fillStyle='#8b93a7'; x.font='600 24px Inter'; x.textAlign='center';
-  x.fillText('Programación oficial  ·  ⚡ Powered by Liguify  ·  liguify.com/'+(MARCA.slug||''),W/2,H-38);
+  x.fillText((resultados?'Resultados oficiales':'Programación oficial')+'  ·  ⚡ Powered by Liguify  ·  liguify.com/'+(MARCA.slug||''),W/2,H-38);
   x.textAlign='left';
   window.__CV=cv;   // referencia para vista previa / QA
   try{
     cv.toBlob(b=>{
       const a=document.createElement('a');
       a.href=URL.createObjectURL(b);
-      a.download=`programacion-fecha-${j.numero}.png`;
+      a.download=`${resultados?'resultados':'programacion'}-fecha-${j.numero}.png`;
       a.click();
       setTimeout(()=>URL.revokeObjectURL(a.href),5000);
-      toast('🖼 Imagen descargada ✔ — lista para WhatsApp e Instagram');
+      toast('🖼 Imagen de '+(resultados?'resultados':'programación')+' descargada ✔ — lista para WhatsApp e Instagram');
     },'image/png');
   }catch(e){toast('⚠ No se pudo exportar la imagen: '+(e.message||e));}
 }
