@@ -2454,12 +2454,10 @@ async function modalResultado(m){
   const jn=Object.fromEntries((js.data||[]).map(j=>[j.id,(j.nombres||'')+' '+(j.apellidos||'')]));
   RS_INS=(ins.data||[]).map(i=>({...i,nombre:jn[i.jugador_id]||'—'})).sort((a,b)=>(a.dorsal??99)-(b.dorsal??99));
   RS_PLANILLA=Object.fromEntries((pl.data||[]).map(p=>[p.inscripcion_id,p]));
-  const filaJ=i=>{const p=RS_PLANILLA[i.id]||{};return `<div class="flex items-center gap-1.5 py-1 border-b border-line last:border-0">
+  const filaJ=i=>{const p=RS_PLANILLA[i.id]||{};return `<div class="flex items-center gap-2 py-1 border-b border-line last:border-0">
     <span class="w-5 text-ink-400 font-bold text-xs text-right shrink-0">${i.dorsal??''}</span>
     <span class="flex-1 min-w-0 text-xs font-semibold truncate">${i.nombre}</span>
-    <input id="st-m-${i.id}" type="number" min="0" value="${p.minutos||0}" title="Minutos jugados" class="w-10 border border-sky-200 bg-sky-50 rounded-lg text-center py-1 text-xs font-bold"/>
     <input id="st-g-${i.id}" type="number" min="0" value="${p.goles||0}" title="Goles" class="w-10 border border-line rounded-lg text-center py-1 text-xs font-bold"/>
-    <input id="st-as-${i.id}" type="number" min="0" value="${p.asistencias||0}" title="Asistencias (pases de gol)" class="w-10 border border-emerald-200 bg-emerald-50 rounded-lg text-center py-1 text-xs font-bold"/>
     <input id="st-a-${i.id}" type="number" min="0" value="${p.amarillas||0}" title="Tarjetas amarillas" class="w-10 border border-yellow-300 bg-yellow-50 rounded-lg text-center py-1 text-xs font-bold"/>
     <input id="st-r-${i.id}" type="number" min="0" value="${p.rojas||0}" title="Tarjetas rojas" class="w-10 border border-brand-100 bg-brand-50 rounded-lg text-center py-1 text-xs font-bold"/>
   </div>`;};
@@ -2497,9 +2495,9 @@ async function modalResultado(m){
         <div class="min-w-0">
           <div class="flex items-center justify-between border-b-2 border-ink-900 pb-1">
             <p class="font-display text-lg tracking-wide truncate">${nom}</p>
-            <span class="flex gap-1.5 text-[10px] font-bold text-ink-400 shrink-0"><span class="w-10 text-center" title="Minutos">⏱</span><span class="w-10 text-center" title="Goles">⚽</span><span class="w-10 text-center" title="Asistencias">🅰</span><span class="w-10 text-center">🟨</span><span class="w-10 text-center">🟥</span></span>
+            <span class="flex gap-2 text-[10px] font-bold text-ink-400 shrink-0"><span class="w-10 text-center" title="Goles">⚽</span><span class="w-10 text-center">🟨</span><span class="w-10 text-center">🟥</span></span>
           </div>
-          <div class="max-h-72 overflow-y-auto">${RS_INS.filter(i=>i.equipo_id===eqId).map(filaJ).join('')||'<p class="text-xs text-ink-400 py-3 text-center">Sin jugadores en LBF.</p>'}</div>
+          <div>${RS_INS.filter(i=>i.equipo_id===eqId).map(filaJ).join('')||'<p class="text-xs text-ink-400 py-3 text-center">Sin jugadores en LBF.</p>'}</div>
         </div>`).join('')}
       </div>
       <label class="block text-sm mt-3"><span class="text-ink-400 font-semibold text-xs">⭐ Figura del partido</span>
@@ -2517,13 +2515,12 @@ async function guardarResultado(id){
   const cambios=[]; let sumL=0, sumV=0;
   RS_INS.forEach(i=>{
     const g=+($('st-g-'+i.id)?.value||0), a=+($('st-a-'+i.id)?.value||0), r=+($('st-r-'+i.id)?.value||0);
-    const mn=+($('st-m-'+i.id)?.value||0), as=+($('st-as-'+i.id)?.value||0);
     if(i.equipo_id===RS_M.local_id) sumL+=g; else sumV+=g;
     const p=RS_PLANILLA[i.id];
-    const antes=p||{goles:0,amarillas:0,rojas:0,minutos:0,asistencias:0};
-    if(g!==(antes.goles||0)||a!==(antes.amarillas||0)||r!==(antes.rojas||0)||mn!==(antes.minutos||0)||as!==(antes.asistencias||0)){
-      // minutos>0 cuenta como haber entrado al campo (PJ)
-      cambios.push({partido_id:id, inscripcion_id:i.id, jugo:(p&&p.jugo)||mn>0||(g+a+r+as>0), goles:g, amarillas:a, rojas:r, minutos:mn, asistencias:as});
+    const antes=p||{goles:0,amarillas:0,rojas:0};
+    if(g!==(antes.goles||0)||a!==(antes.amarillas||0)||r!==(antes.rojas||0)){
+      // sin minutos/asistencias: esos los gestiona el CLUB y aquí no se tocan
+      cambios.push({partido_id:id, inscripcion_id:i.id, jugo:(p&&p.jugo)||(g+a+r>0), goles:g, amarillas:a, rojas:r});
     }
   });
   if((sumL||sumV)&&(sumL!==+gl||sumV!==+gv)){
