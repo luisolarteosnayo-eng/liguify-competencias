@@ -110,7 +110,7 @@ const optsCatalogo=(atributo,sel)=>'<option value="">—</option>'+
 function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));$(id).classList.add('active');window.scrollTo(0,0);}
 function toast(t){const e=$('toast');e.textContent=t;e.classList.remove('hidden');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.add('hidden'),5000);}
 function msg(t,tipo){const e=$('msg');if(!t){e.classList.add('hidden');return;}e.textContent=t;e.className=`text-sm font-semibold rounded-2xl px-4 py-3 mb-4 ${tipo==='err'?'bg-brand-50 text-brand-700 border border-brand-100':'bg-emerald-50 text-emerald-700 border border-emerald-200'}`;}
-function abrirModal(html){$('modal-body').innerHTML=html;const m=$('modal');m.classList.remove('hidden');m.classList.add('flex');}
+function abrirModal(html,ancho){const b=$('modal-body');b.innerHTML=html;b.style.maxWidth=ancho?'880px':'';const m=$('modal');m.classList.remove('hidden');m.classList.add('flex');}
 function cerrarModal(){const m=$('modal');m.classList.add('hidden');m.classList.remove('flex');}
 const iniciales=n=>(n||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
 function errNegocio(e){
@@ -858,20 +858,34 @@ async function detallePartidoClub(id){
   const m=CLUB_PIDX[id]; if(!m) return;
   const nomDe=eid=>(CLUB_EQNOM[eid]||{}).nombre||'Por definir';
   const fin=['finalizado','walkover'].includes(m.estado), vivo=m.estado==='en_vivo';
-  const {data:pl}=await sb.from('vista_planilla_publica').select('*').eq('partido_id',id);
-  const stats=(pl||[]).filter(p=>p.jugo||p.goles||p.amarillas||p.rojas).sort((a,b)=>(a.dorsal??99)-(b.dorsal??99));
-  const filaJ=p=>`<div class="flex items-center gap-2 py-1.5 border-b border-line last:border-0">
-    <span class="w-5 text-ink-400 font-bold text-xs text-right shrink-0">${p.dorsal??''}</span>
-    <span class="flex-1 min-w-0 text-sm font-semibold truncate">${p.nombres} ${p.apellidos}${p.capitan?' <span class="text-[9px] bg-ink-900 text-white rounded px-1 py-0.5 font-bold">C</span>':''}</span>
-    <span class="text-sm shrink-0">${p.goles>3?'⚽×'+p.goles:'⚽'.repeat(p.goles||0)}${'🟨'.repeat(p.amarillas||0)}${'🟥'.repeat(p.rojas||0)}</span>
-  </div>`;
-  const col=eqId=>{const list=stats.filter(p=>p.equipo_id===eqId);
-    return `<div class="min-w-0"><p class="font-display text-lg tracking-wide border-b-2 border-ink-900 pb-1 truncate">${nomDe(eqId)}</p>
-      ${list.length?list.map(filaJ).join(''):'<p class="text-xs text-ink-400 py-3 text-center">Sin detalle registrado.</p>'}</div>`;};
+  const miPartido=(m.local_id===EQ.equipo_id||m.visita_id===EQ.equipo_id);
+  const puedeStats=miPartido&&(fin||vivo)&&EQ.permitir_delegados&&EQ.equipo_estado==='activo'&&EQ.torneo_estado!=='archivado';
+  // Solo información del PROPIO club: plantel + planilla del partido, con
+  // minutos/asistencias editables en línea (goles/tarjetas son del organizador)
+  const [ins,pl]=await Promise.all([
+    sb.from('inscripcion_lbf').select('id,dorsal,capitan,jugador_id').eq('equipo_id',EQ.equipo_id).eq('en_lbf',true).eq('inhabilitado',false),
+    sb.from('planilla_partido').select('inscripcion_id,jugo,goles,amarillas,rojas,minutos,asistencias').eq('partido_id',id)
+  ]);
+  const jids=(ins.data||[]).map(i=>i.jugador_id);
+  const js=jids.length?await sb.from('jugador_maestro').select('id,nombres,apellidos').in('id',jids):{data:[]};
+  const jn=Object.fromEntries((js.data||[]).map(j=>[j.id,(j.nombres||'')+' '+(j.apellidos||'')]));
+  const pmap=Object.fromEntries((pl.data||[]).map(p=>[p.inscripcion_id,p]));
+  SC_STATS=(ins.data||[]).map(i=>({id:i.id,dorsal:i.dorsal,capitan:i.capitan,nombre:jn[i.jugador_id]||'—'})).sort((a,b)=>(a.dorsal??99)-(b.dorsal??99));
+  const filaJ=i=>{const p=pmap[i.id]||{};
+    const marcas=`${p.goles>3?'⚽×'+p.goles:'⚽'.repeat(p.goles||0)}${'🟨'.repeat(p.amarillas||0)}${'🟥'.repeat(p.rojas||0)}`;
+    return `<div class="flex items-center gap-1.5 py-1.5 border-b border-line">
+    <span class="w-5 text-ink-400 font-bold text-xs text-right shrink-0">${i.dorsal??''}</span>
+    <span class="flex-1 min-w-0 text-sm font-semibold truncate">${i.nombre}${i.capitan?' <span class="text-[9px] bg-ink-900 text-white rounded px-1 py-0.5 font-bold">C</span>':''} <span class="text-xs">${marcas}</span></span>
+    ${puedeStats
+      ?`<input id="sm-m-${i.id}" type="number" min="0" value="${p.minutos||0}" title="Minutos jugados" class="w-12 border border-sky-200 bg-sky-50 rounded-lg text-center py-1 text-xs font-bold"/>
+         <input id="sm-a-${i.id}" type="number" min="0" value="${p.asistencias||0}" title="Asistencias" class="w-12 border border-emerald-200 bg-emerald-50 rounded-lg text-center py-1 text-xs font-bold"/>`
+      :`<span class="w-12 text-center text-xs text-ink-500 font-bold shrink-0">${p.minutos||0}'</span>
+         <span class="w-12 text-center text-xs text-ink-500 shrink-0">${p.asistencias?'🅰'+p.asistencias:'—'}</span>`}
+  </div>`;};
   let figHTML='';
   if(m.figura_inscripcion_id){
-    let f=(pl||[]).find(p=>p.inscripcion_id===m.figura_inscripcion_id);
-    if(!f){const q=await sb.from('vista_lbf_publica').select('*').eq('inscripcion_id',m.figura_inscripcion_id).limit(1); f=(q.data||[])[0];}
+    const q=await sb.from('vista_lbf_publica').select('*').eq('inscripcion_id',m.figura_inscripcion_id).limit(1);
+    const f=(q.data||[])[0];
     if(f) figHTML=`<div class="mt-4 bg-ink-900 text-white rounded-2xl p-4 flex items-center gap-4">
       <span class="w-16 h-16 rounded-full grid place-items-center font-bold overflow-hidden relative shrink-0" style="background:#2b3550;${f.consentimiento_imagen?'':'filter:grayscale(1)'}">${f.foto_url?`<img src="${f.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales((f.nombres||'')+' '+(f.apellidos||''))}</span>
       <div class="min-w-0"><p class="text-[10px] font-bold tracking-widest text-amber-400 uppercase">⭐ Figura del partido</p>
@@ -880,8 +894,7 @@ async function detallePartidoClub(id){
     </div>`;
   }
   const ctx=m.etapa?`🏆 ${m.etapa}`:(m.jornada&&m.jornada.numero?`Fecha ${m.jornada.numero}`:'');
-  const miPartido=(m.local_id===EQ.equipo_id||m.visita_id===EQ.equipo_id);
-  const puedeStats=miPartido&&(fin||vivo)&&EQ.permitir_delegados&&EQ.equipo_estado==='activo'&&EQ.torneo_estado!=='archivado';
+  const mitad=Math.ceil(SC_STATS.length/2);
   abrirModal(`<div class="flex items-center justify-between mb-3"><h3 class="font-display text-2xl tracking-wide">DETALLE DEL PARTIDO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
     <div class="text-center mb-1">
       <p class="text-sm font-bold">${nomDe(m.local_id)} <span class="text-ink-400 font-normal">vs</span> ${nomDe(m.visita_id)}</p>
@@ -890,38 +903,20 @@ async function detallePartidoClub(id){
       ${m.penales?`<p class="text-[10px] text-ink-400">penales ${m.penales_local} x ${m.penales_visita}</p>`:''}
       <p class="text-[10px] text-ink-400">${ctx}${m.fecha?' · '+m.fecha:''}${m.hora?' '+m.hora.slice(0,5):''}${m.sede?' · '+m.sede:''}</p>
     </div>
-    <div class="grid sm:grid-cols-2 gap-x-6 gap-y-3 mt-3">${col(m.local_id)+col(m.visita_id)}</div>
-    ${figHTML}
-    ${puedeStats?`<button onclick="modalStatsClub('${m.id}')" class="w-full mt-4 bg-ink-900 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-ink-700">⏱ MINUTOS Y ASISTENCIAS DE MI EQUIPO</button>`:''}`);
+    <div class="flex items-center justify-between border-b-2 border-ink-900 pb-1 mt-3">
+      <p class="font-display text-lg tracking-wide truncate">${nomDe(EQ.equipo_id)} — MI PLANTEL</p>
+      <span class="flex gap-1.5 text-[10px] font-bold text-ink-400 shrink-0"><span class="w-12 text-center" title="Minutos jugados">⏱ MIN</span><span class="w-12 text-center" title="Asistencias (pases de gol)">🅰 AST</span></span>
+    </div>
+    ${SC_STATS.length?`<div class="sm:grid sm:grid-cols-2 sm:gap-x-6">
+      <div class="min-w-0">${SC_STATS.slice(0,mitad).map(filaJ).join('')}</div>
+      <div class="min-w-0 sm:border-l sm:border-line sm:pl-6">${SC_STATS.slice(mitad).map(filaJ).join('')}</div>
+    </div>`:'<p class="text-xs text-ink-400 py-3 text-center">Sin jugadores en LBF.</p>'}
+    ${puedeStats?`<p class="text-[10px] text-ink-400 mt-2">⏱ minutos jugados y 🅰 asistencias los gestiona tu club (minutos &gt; 0 cuenta como PJ). Los ⚽ goles y las tarjetas los registra el organizador.</p>
+    <button onclick="guardarStatsClub('${m.id}')" class="w-full mt-3 bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR ESTADÍSTICAS</button>`:''}
+    ${figHTML}`, true);
 }
-/* ---- El club gestiona minutos y asistencias de SUS jugadores (goles y
-   tarjetas siguen siendo oficiales del organizador) ---- */
+/* ---- El club gestiona minutos y asistencias de SUS jugadores ---- */
 let SC_STATS=[];
-async function modalStatsClub(partidoId){
-  const [ins,pl]=await Promise.all([
-    sb.from('inscripcion_lbf').select('id,dorsal,jugador_id').eq('equipo_id',EQ.equipo_id).eq('en_lbf',true).eq('inhabilitado',false),
-    sb.from('planilla_partido').select('inscripcion_id,goles,minutos,asistencias').eq('partido_id',partidoId)
-  ]);
-  const jids=(ins.data||[]).map(i=>i.jugador_id);
-  const js=jids.length?await sb.from('jugador_maestro').select('id,nombres,apellidos').in('id',jids):{data:[]};
-  const jn=Object.fromEntries((js.data||[]).map(j=>[j.id,(j.nombres||'')+' '+(j.apellidos||'')]));
-  const pmap=Object.fromEntries((pl.data||[]).map(p=>[p.inscripcion_id,p]));
-  SC_STATS=(ins.data||[]).map(i=>({id:i.id,dorsal:i.dorsal,nombre:jn[i.jugador_id]||'—'})).sort((a,b)=>(a.dorsal??99)-(b.dorsal??99));
-  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⏱ MINUTOS Y ASISTENCIAS</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
-    <p class="text-xs text-ink-400 mb-3">Registra los minutos jugados y pases de gol de tus jugadores en este partido. Los minutos &gt; 0 cuentan como partido jugado (PJ). Los goles y tarjetas los registra el organizador.</p>
-    <div class="flex items-center justify-end gap-1.5 text-[10px] font-bold text-ink-400 border-b-2 border-ink-900 pb-1 mb-1">
-      <span class="w-12 text-center" title="Minutos jugados">⏱ MIN</span><span class="w-12 text-center" title="Asistencias (pases de gol)">🅰 AST</span>
-    </div>
-    <div class="max-h-80 overflow-y-auto mb-3">
-      ${SC_STATS.map(i=>{const p=pmap[i.id]||{};return `<div class="flex items-center gap-1.5 py-1 border-b border-line last:border-0">
-        <span class="w-5 text-ink-400 font-bold text-xs text-right shrink-0">${i.dorsal??''}</span>
-        <span class="flex-1 min-w-0 text-xs font-semibold truncate">${i.nombre}${p.goles?` <span class="text-[10px]">${'⚽'.repeat(Math.min(p.goles,3))}${p.goles>3?'×'+p.goles:''}</span>`:''}</span>
-        <input id="sm-m-${i.id}" type="number" min="0" value="${p.minutos||0}" class="w-12 border border-sky-200 bg-sky-50 rounded-lg text-center py-1 text-xs font-bold"/>
-        <input id="sm-a-${i.id}" type="number" min="0" value="${p.asistencias||0}" class="w-12 border border-emerald-200 bg-emerald-50 rounded-lg text-center py-1 text-xs font-bold"/>
-      </div>`;}).join('')||'<p class="text-xs text-ink-400 py-3 text-center">Sin jugadores en LBF.</p>'}
-    </div>
-    <button onclick="guardarStatsClub('${partidoId}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR</button>`);
-}
 async function guardarStatsClub(partidoId){
   const stats=SC_STATS.map(i=>({inscripcion:i.id, minutos:+($('sm-m-'+i.id)?.value||0), asistencias:+($('sm-a-'+i.id)?.value||0)}));
   const r=await sb.rpc('actualizar_stats_club',{p_equipo:EQ.equipo_id,p_partido:partidoId,p_stats:stats});
