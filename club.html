@@ -292,7 +292,7 @@ async function refrescarInvSub(torneoId,clubId){
       <span class="flex-1 min-w-0"><span class="font-semibold block truncate">${i.nombre||i.email}</span>
         <span class="text-[10px] text-ink-400">${i.email}${i.categorias&&i.categorias.length?' · '+i.categorias.join(' · '):''}</span></span>
       <span class="text-[9px] font-bold uppercase rounded-full px-2 py-0.5 ${i.estado==='aceptada'?'bg-emerald-100 text-emerald-700':i.estado==='pendiente'?'bg-amber-100 text-amber-700':'bg-paper text-ink-400'}">${i.estado}</span>
-      ${i.estado==='pendiente'?`<button onclick="revocarInvSub('${i.id}','${torneoId}','${clubId}')" class="text-ink-400 hover:text-brand-600 font-bold px-1" title="Revocar">✕</button>`:''}
+      ${i.estado!=='revocada'?`<button onclick="revocarInvSub('${i.id}','${torneoId}','${clubId}','${i.estado}')" class="text-ink-400 hover:text-brand-600 font-bold px-1" title="${i.estado==='pendiente'?'Revocar':'Quitar acceso'}">✕</button>`:''}
     </div>`).join(''):'<p class="text-ink-400 text-xs">Aún no invitaste sub-coordinadores en este torneo.</p>';
 }
 async function enviarInvitacionSub(torneoId){
@@ -310,11 +310,14 @@ async function enviarInvitacionSub(torneoId){
   $('sc-e').value='';$('sc-n').value='';$('sc-t').value='';
   refrescarInvSub(torneoId,clubId);
 }
-async function revocarInvSub(id,torneoId,clubId){
-  if(!confirm('¿Revocar esta invitación pendiente?'))return;
+async function revocarInvSub(id,torneoId,clubId,estado){
+  const msg=estado==='aceptada'
+    ?'¿Quitar a este sub-coordinador?\n\nPerderá el acceso a las categorías de esta invitación.'
+    :'¿Revocar esta invitación pendiente?';
+  if(!confirm(msg))return;
   const r=await sb.rpc('revocar_invitacion',{p_id:id});
   if(r.error){toast(errNegocio(r.error));return;}
-  toast('Invitación revocada');
+  toast(estado==='aceptada'?'Acceso quitado ✔':'Invitación revocada');
   refrescarInvSub(torneoId,clubId);
 }
 async function canjearCodigo(){

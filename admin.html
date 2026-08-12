@@ -1164,7 +1164,7 @@ async function refrescarInvitaciones(clubId){
         <span class="text-[10px] text-ink-400">${i.email}${i.categorias&&i.categorias.length?' · '+i.categorias.join(', '):''}</span></span>
       <span class="text-[9px] font-bold uppercase rounded-full px-2 py-0.5 ${i.rol==='coordinador'?'bg-ink-900 text-white':'bg-sky-100 text-sky-700'}">${i.rol==='coordinador'?'COORD':'SUB'}</span>
       <span class="text-[9px] font-bold uppercase rounded-full px-2 py-0.5 ${i.estado==='aceptada'?'bg-emerald-100 text-emerald-700':i.estado==='pendiente'?'bg-amber-100 text-amber-700':'bg-paper text-ink-400'}">${i.estado}</span>
-      ${i.estado==='pendiente'?`<button onclick="revocarInv('${i.id}','${clubId}')" class="text-ink-400 hover:text-brand-600 font-bold px-1" title="Revocar invitación">✕</button>`:''}
+      ${i.estado!=='revocada'?`<button onclick="revocarInv('${i.id}','${clubId}','${i.estado}','${i.rol}')" class="text-ink-400 hover:text-brand-600 font-bold px-1" title="${i.estado==='pendiente'?'Revocar invitación':'Quitar acceso'}">✕</button>`:''}
     </div>`).join(''):'<p class="text-ink-400 text-xs">Sin invitaciones para este club en este torneo.</p>';
 }
 async function enviarInvitacionCoordinador(clubId){
@@ -1177,11 +1177,16 @@ async function enviarInvitacionCoordinador(clubId){
   $('ic-e').value=''; $('ic-n').value=''; $('ic-t').value='';
   refrescarInvitaciones(clubId);
 }
-async function revocarInv(id,clubId){
-  if(!confirm('¿Revocar esta invitación pendiente? El enlace del email dejará de servir para este club.'))return;
+async function revocarInv(id,clubId,estado,rol){
+  const msg=estado==='aceptada'
+    ?(rol==='coordinador'
+      ?'¿QUITAR a este coordinador titular?\n\nPerderá el acceso a TODO el club (todas sus categorías y torneos). Sus sub-coordinadores se revocan por separado. Para cambiarlo por otra persona, quítalo y envía una nueva invitación.'
+      :'¿Quitar a este sub-coordinador?\n\nPerderá el acceso a las categorías de esta invitación.')
+    :'¿Revocar esta invitación pendiente? El enlace del email dejará de servir para este club.';
+  if(!confirm(msg))return;
   const r=await sb.rpc('revocar_invitacion',{p_id:id});
   if(r.error){toast(errNegocio(r.error));return;}
-  toast('Invitación revocada');
+  toast(estado==='aceptada'?'Acceso quitado ✔ — la persona ya no puede gestionar este club':'Invitación revocada');
   refrescarInvitaciones(clubId);
 }
 /* ---- Club: escudo (único por marca) + datos ---- */
