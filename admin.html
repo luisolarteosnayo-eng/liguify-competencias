@@ -2028,7 +2028,8 @@ async function renderFixture(){
   const htmlFechas=fechas.map(n=>{
     const jid=porFecha[n][0].jornada_id||'';
     const j=JORNADAS.find(x=>x.id===jid);
-    const btnHor=j?`<button onclick="modalJornada('${jid}')" title="Gestión de la jornada: cambiar día, intercambiar con otra fecha, Excel, eliminar" class="text-[10px] font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 mr-1 hover:bg-paper">⚙ FECHA</button>
+    const btnHor=j?`<button onclick="imprimirPlanillasJornada('${jid}')" title="Imprimir las planillas de juego de todos los partidos de esta fecha (para apuntar en campo)" class="text-[10px] font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 mr-1 hover:bg-paper">🖨 PLANILLAS</button>
+      <button onclick="modalJornada('${jid}')" title="Gestión de la jornada: cambiar día, intercambiar con otra fecha, Excel, eliminar" class="text-[10px] font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 mr-1 hover:bg-paper">⚙ FECHA</button>
       <button onclick="toggleHorarios('${jid}',${j.horarios_publicados===false?'true':'false'})" title="Controla si esta jornada completa se muestra en el módulo público" class="text-[10px] font-bold rounded-lg px-3 py-1.5 mr-1 ${j.horarios_publicados===false?'bg-amber-100 text-amber-700 border border-amber-300':'text-ink-400 border border-line hover:bg-paper'}">${j.horarios_publicados===false?'🚫 OCULTA EN PÚBLICO':'👁 VISIBLE EN PÚBLICO'}</button>`:'';
     return `<div class="bg-white border border-line rounded-2xl mb-4">
       ${header('FECHA '+(n||'?'),`${btnHor}<button onclick="modalNuevoPartido('jornada','${jid}')" class="text-xs font-bold text-brand-600 border border-brand-100 rounded-lg px-3 py-1.5 hover:bg-brand-50">+ PARTIDO</button>`)}
@@ -2055,6 +2056,102 @@ async function toggleHorarios(jid,mostrar){
   const i=JORNADAS.findIndex(x=>x.id===jid); if(i>=0) JORNADAS[i]=data;
   toast(mostrar?'👁 Fecha PUBLICADA ✔ — el público ya ve esta jornada completa (cruces, día y horarios)':'🚫 Fecha OCULTA — esta jornada NO aparece en el público mientras la trabajas (el club sí ve sus cruces con "por confirmar")');
   await renderFixture();
+}
+
+/* ---- Planillas de juego imprimibles por fecha (para apuntar en campo) ---- */
+async function imprimirPlanillasJornada(jid){
+  const j=JORNADAS.find(x=>x.id===jid);
+  const {data:pms,error}=await sb.from('partido').select('*').eq('jornada_id',jid).order('hora');
+  if(error){toast(errNegocio(error));return;}
+  const ms=(pms||[]).filter(m=>m.local_id&&m.visita_id);
+  if(!ms.length){toast('⚠ Esta fecha no tiene partidos con equipos definidos');return;}
+  const eqIds=[...new Set(ms.flatMap(m=>[m.local_id,m.visita_id]))];
+  const ins=await sb.from('inscripcion_lbf').select('id,equipo_id,dorsal,capitan,jugador_id').in('equipo_id',eqIds).eq('en_lbf',true).eq('inhabilitado',false);
+  if(ins.error){toast(errNegocio(ins.error));return;}
+  const jids=[...new Set((ins.data||[]).map(i=>i.jugador_id))];
+  const js=jids.length?await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,foto_url').in('id',jids):{data:[]};
+  const jmap=Object.fromEntries((js.data||[]).map(x=>[x.id,x]));
+  const porEq={}; (ins.data||[]).forEach(i=>{(porEq[i.equipo_id]=porEq[i.equipo_id]||[]).push(i);});
+  Object.values(porEq).forEach(l=>l.sort((a,b)=>(a.dorsal??99)-(b.dorsal??99)));
+  const esc=t=>String(t??'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const nom=id=>esc(nomEq(EQUIPOS[id]||{})||'—');
+  const colEquipo=eqId=>{
+    const e=EQUIPOS[eqId]||{}, cl=CLUBES[e.club_id]||{};
+    const filas=(porEq[eqId]||[]).map(i=>{const p=jmap[i.jugador_id]||{};
+      return `<tr>
+        <td class="c-foto">${p.foto_url?`<img src="${p.foto_url}"/>`:''}</td>
+        <td class="c-dor">${i.dorsal??''}</td>
+        <td class="c-nom">${esc(p.nombres||'')} ${esc(p.apellidos||'')}${i.capitan?' <b>(C)</b>':''}<span class="doc">${esc(p.nro_documento||'')}</span></td>
+        <td class="c-box"></td><td class="c-box"></td><td class="c-box"></td>
+      </tr>`;}).join('');
+    const extra='<tr><td class="c-foto"></td><td class="c-dor"></td><td class="c-nom c-raya"></td><td class="c-box"></td><td class="c-box"></td><td class="c-box"></td></tr>'.repeat(3);
+    return `<div class="equipo">
+      <div class="eq-head">${cl.escudo_url?`<img src="${cl.escudo_url}"/>`:''}<span>${esc(nomEq(e)||'—')}</span></div>
+      <table><thead><tr><th></th><th>#</th><th>JUGADOR</th><th class="th-box">⚽</th><th class="th-box">TA</th><th class="th-box">TR</th></tr></thead>
+      <tbody>${filas||''}${extra}</tbody></table>
+    </div>`;
+  };
+  const pagina=m=>`<div class="pagina">
+    <div class="cab">
+      <div class="cab-marca">PLANILLA DE JUEGO</div>
+      <div class="cab-t">${esc(TORNEO.nombre)} · ${esc(CAT.nombre_display||'')}</div>
+      <div class="cab-f">FECHA ${j?.numero??''} · ${m.fecha||''}${m.hora?' · '+m.hora.slice(0,5):''}${m.sede?' · '+esc(m.sede):''}${m.cancha?' · '+esc(m.cancha):''}</div>
+    </div>
+    <div class="vs"><span class="vs-n vs-der">${nom(m.local_id)}</span><span class="vs-box"></span><span class="vs-sep">:</span><span class="vs-box"></span><span class="vs-n">${nom(m.visita_id)}</span></div>
+    <div class="dos-col">${colEquipo(m.local_id)}${colEquipo(m.visita_id)}</div>
+    <div class="obs">OBSERVACIONES<div class="obs-l"></div><div class="obs-l"></div></div>
+    <div class="firmas">
+      <div><div class="f-l"></div>Árbitro</div>
+      <div><div class="f-l"></div>Delegado ${nom(m.local_id)}</div>
+      <div><div class="f-l"></div>Delegado ${nom(m.visita_id)}</div>
+    </div>
+  </div>`;
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Planillas · FECHA ${j?.numero??''} · ${esc(CAT.nombre_display||'')}</title><style>
+    *{margin:0;padding:0;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    @page{size:A4 portrait;margin:9mm}
+    body{background:#eee}
+    .pagina{background:#fff;width:192mm;min-height:270mm;margin:6mm auto;padding:6mm;page-break-after:always;position:relative}
+    @media print{body{background:#fff}.pagina{margin:0;padding:0;min-height:0}.no-print{display:none}}
+    .cab{text-align:center;border-bottom:2px solid #111;padding-bottom:2mm;margin-bottom:2.5mm}
+    .cab-marca{font-size:8px;font-weight:bold;letter-spacing:3px;color:#666}
+    .cab-t{font-size:14px;font-weight:900;text-transform:uppercase}
+    .cab-f{font-size:10px;color:#444;margin-top:1mm}
+    .vs{display:flex;align-items:center;justify-content:center;gap:3mm;margin-bottom:3mm}
+    .vs-n{font-size:12px;font-weight:900;text-transform:uppercase;flex:1}
+    .vs-der{text-align:right}
+    .vs-box{width:12mm;height:10mm;border:1.5px solid #111;border-radius:2mm}
+    .vs-sep{font-size:16px;font-weight:900}
+    .dos-col{display:flex;gap:4mm}
+    .equipo{flex:1;width:50%;min-width:0}
+    .eq-head{display:flex;align-items:center;gap:2mm;border-bottom:2px solid #111;padding-bottom:1mm;margin-bottom:1mm}
+    .eq-head img{width:6mm;height:6mm;object-fit:contain}
+    .eq-head span{font-size:11px;font-weight:900;text-transform:uppercase}
+    table{width:100%;border-collapse:collapse}
+    th{font-size:7px;color:#555;text-align:left;padding:0.5mm;border-bottom:1px solid #999}
+    .th-box{text-align:center;width:7mm}
+    td{border-bottom:1px solid #ccc;padding:0.6mm 0.5mm;vertical-align:middle}
+    .c-foto{width:7mm}
+    .c-foto img{width:6.2mm;height:6.2mm;object-fit:cover;border-radius:50%;display:block}
+    .c-dor{width:5mm;font-size:9px;font-weight:bold;color:#555;text-align:center}
+    .c-nom{font-size:8.5px;font-weight:bold;line-height:1.1}
+    .c-nom .doc{display:block;font-size:7px;font-weight:normal;color:#666}
+    .c-raya{border-bottom:1px solid #ccc;height:7mm}
+    .c-box{width:7mm;height:7mm;border:1px solid #888}
+    .obs{font-size:8px;font-weight:bold;color:#555;margin-top:4mm}
+    .obs-l{border-bottom:1px solid #999;height:6mm}
+    .firmas{display:flex;gap:8mm;margin-top:9mm}
+    .firmas>div{flex:1;text-align:center;font-size:8px;font-weight:bold;color:#333}
+    .f-l{border-bottom:1.5px solid #111;height:9mm;margin-bottom:1mm}
+    .barra{position:sticky;top:0;background:#111;color:#fff;padding:10px;text-align:center;font-size:13px}
+    .barra button{background:#d9232e;color:#fff;border:0;border-radius:8px;padding:8px 18px;font-weight:bold;font-size:13px;cursor:pointer;margin-right:10px}
+  </style></head><body>
+  <div class="no-print barra"><button onclick="print()">🖨 IMPRIMIR</button>${ms.length} planilla(s) — FECHA ${j?.numero??''} · una hoja vertical por partido</div>
+  ${ms.map(pagina).join('')}
+  <script>window.onload=function(){setTimeout(function(){window.print();},800);};<\/script>
+  </body></html>`;
+  const w=window.open('','_blank');
+  if(!w){toast('⚠ El navegador bloqueó la ventana — permite pop-ups para imprimir las planillas');return;}
+  w.document.write(html); w.document.close();
 }
 
 /* ---- Gestión de la JORNADA: cambiar día · intercambiar · eliminar ---- */
