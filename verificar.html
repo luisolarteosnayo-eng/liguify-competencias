@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="robots" content="noindex"/>
+<title>Verificación de carnet — Liguify</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<script>tailwind.config={theme:{extend:{colors:{brand:{50:'#fdf2f2',100:'#fbe3e4',500:'#d9232e',600:'#c11e28'},ink:{400:'#8b93a7',500:'#5b6478',700:'#2b3550',900:'#171e2e'},paper:'#faf9f7',line:'#e9e6e0'},fontFamily:{display:['"Bebas Neue"','sans-serif'],sans:['Inter','sans-serif']}}}}</script>
+<style>body{font-family:Inter,sans-serif}.font-display{font-family:"Bebas Neue",sans-serif}</style>
+</head>
+<body class="bg-paper min-h-screen">
+<header class="bg-ink-900 text-white">
+  <div class="max-w-lg mx-auto px-4 py-4 flex items-center gap-3">
+    <span class="w-9 h-9 rounded-xl bg-brand-500 grid place-items-center font-display text-xl">L</span>
+    <div><p class="font-display text-2xl tracking-wide leading-none">LIGUIFY</p>
+      <p class="text-[10px] uppercase tracking-widest text-white/50 font-bold">Verificación oficial de carnet</p></div>
+  </div>
+</header>
+<main class="max-w-lg mx-auto px-4 py-6" id="out">
+  <div class="bg-white border border-line rounded-2xl p-8 text-center text-ink-400 text-sm">Verificando contra la base de datos…</div>
+</main>
+<p class="max-w-lg mx-auto px-4 pb-8 text-center text-[11px] text-ink-400">⚡ Powered by Liguify — la validez se comprueba EN VIVO contra la base de datos oficial. Un carnet impreso o copiado no es válido si esta página no lo confirma.</p>
+<script>
+const sb=supabase.createClient('https://bpsczjjomgzhnjxnzmhj.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwc2N6ampvbWd6aG5qeG56bWhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1MDg5MTgsImV4cCI6MjA5ODA4NDkxOH0.3O92Q-3xxdCmF1LStCQrlCtz1s_EfdlayXnL_mEElOw',
+  {db:{schema:'competencias'},auth:{storageKey:'sb-competencias-verif',persistSession:false}});
+const $=id=>document.getElementById(id);
+const iniciales=n=>(n||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+const esc=t=>String(t??'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+function banner(ok,txt){return `<div class="rounded-2xl px-5 py-4 mb-4 text-center font-display text-3xl tracking-wide ${ok?'bg-emerald-600 text-white':'bg-brand-500 text-white'}">${ok?'✔ CARNET VÁLIDO':'✖ '+(txt||'CARNET NO VÁLIDO')}</div>`;}
+function ficha(d,rolHTML,extra){
+  return `<div class="bg-ink-900 text-white rounded-2xl p-5 mb-4">
+    <p class="text-[10px] uppercase tracking-widest text-white/50 font-bold mb-3">${esc(d.marca)} · ${esc(d.torneo)} · ${esc(d.categoria||'')}</p>
+    <div class="flex items-center gap-4">
+      ${d.foto_url?`<img src="${d.foto_url}" class="w-20 h-20 rounded-2xl object-cover" style="${d.tipo==='jugador'&&!d.consentimiento_imagen?'filter:grayscale(1)':''}"/>`
+        :`<span class="w-20 h-20 rounded-2xl bg-ink-700 grid place-items-center text-xl font-bold">${iniciales((d.nombres||'')+' '+(d.apellidos||''))}</span>`}
+      <div class="flex-1 min-w-0">
+        ${rolHTML}
+        <p class="font-bold text-lg leading-tight">${esc((d.nombres||'').toUpperCase())} ${esc((d.apellidos||'').toUpperCase())}</p>
+        <p class="text-xs text-white/60 mt-1">${esc(d.equipo||d.club||'')}${d.documento?' · Doc. '+esc(d.documento):''}</p>
+      </div>
+      ${d.escudo_url?`<img src="${d.escudo_url}" class="w-12 h-12 object-contain bg-white rounded-xl p-1 shrink-0"/>`:''}
+    </div>
+  </div>${extra||''}`;
+}
+const check=(c,l)=>`<div class="flex items-center justify-between py-1.5 border-b border-line last:border-0 text-sm"><span class="text-ink-500">${l}</span><span class="font-bold ${c?'text-emerald-600':'text-brand-600'}">${c?'✔':'✖'}</span></div>`;
+(async()=>{
+  const q=new URLSearchParams(location.search);
+  const ct=q.get('ct'), cj=q.get('c');
+  let html='';
+  try{
+    if(ct){
+      const {data:d,error}=await sb.rpc('verificar_carnet_ct',{p_token:ct});
+      if(error) throw error;
+      if(d.error){ html=banner(false,'CARNET NO ENCONTRADO'); }
+      else html=banner(d.valido)+ficha(d,
+        `<span class="inline-block text-[10px] font-bold uppercase bg-amber-400 text-ink-900 rounded px-2 py-0.5 mb-1">${esc(d.rol)} · COMANDO TÉCNICO</span>`,
+        `<div class="bg-white border border-line rounded-2xl px-4 py-1">
+          ${check(d.estado==='activo','Registro ACTIVO en el torneo')}
+          ${check(!d.inhabilitado,'Sin inhabilitación vigente')}
+        </div>`);
+    } else if(cj){
+      const {data:d,error}=await sb.rpc('verificar_carnet_jugador',{p_token:cj});
+      if(error) throw error;
+      if(d.error){ html=banner(false,'CARNET NO ENCONTRADO'); }
+      else html=banner(d.valido)+ficha(d,
+        `<span class="inline-block text-[10px] font-bold uppercase bg-sky-400 text-ink-900 rounded px-2 py-0.5 mb-1">JUGADOR${d.dorsal!=null?' · #'+d.dorsal:''}</span>`,
+        `<div class="bg-white border border-line rounded-2xl px-4 py-1">
+          ${check(d.verificado,'Identidad verificada (documento)')}
+          ${check(d.en_lbf,'En Lista de Buena Fe')}
+          ${check(d.estado==='activo','Habilitado por el organizador')}
+          ${check(!d.inhabilitado,'Sin sanciones del torneo')}
+          ${check(!d.sancion_global,'Sin sanción global de la plataforma')}
+          ${d.es_excepcion?'<div class="py-1.5 text-sm text-amber-600 font-semibold">⚠ Excepción por edad (según reglas del torneo)</div>':''}
+        </div>`);
+    } else {
+      html='<div class="bg-white border border-line rounded-2xl p-8 text-center text-ink-500 text-sm">Escanea el QR de un carnet Liguify para verificarlo aquí.</div>';
+    }
+  }catch(e){
+    html=`<div class="bg-white border border-line rounded-2xl p-8 text-center text-brand-600 text-sm font-bold">⚠ No se pudo verificar: ${esc(e.message||e)}</div>`;
+  }
+  html+=`<p class="text-center text-[11px] text-ink-400 mt-3">Verificado el ${new Date().toLocaleString('es-PE',{dateStyle:'long',timeStyle:'short'})}</p>`;
+  $('out').innerHTML=html;
+})();
+</script>
+</body>
+</html>

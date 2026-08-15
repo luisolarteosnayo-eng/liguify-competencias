@@ -1010,6 +1010,7 @@ async function renderCT(){
         <span class="doc text-xs text-ink-500">${p.nro_documento||''}</span>
         <span class="flex items-center gap-1.5 ml-auto flex-wrap">
           <span class="text-[10px] font-bold px-2 py-1 rounded-full ${i.inhabilitado?'bg-brand-100 text-brand-600':i.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${i.inhabilitado?'INHABILITADO':i.estado.toUpperCase()}</span>
+          <button onclick='carnetCT(${JSON.stringify({id:i.id,rol:i.rol,nombres:p.nombres||'',apellidos:p.apellidos||'',foto:p.foto_url||null,token:i.qr_token||null}).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper" title="Carnet digital / imprimible con QR de verificación">🪪</button>
           ${i.estado==='pendiente'&&esAdmin()?`<button onclick="activarCT('${i.id}')" class="text-[10px] font-bold text-emerald-700 border border-emerald-300 rounded-lg px-2.5 py-1.5 hover:bg-emerald-50">ACTIVAR</button>`:''}
           ${esAdmin()?`<button onclick='modalEditCT(${JSON.stringify(edit).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper" title="Editar rol, foto, documento, estado">✏️</button>
           <button onclick='quitarCT("${i.id}","${((p.nombres||'')+' '+(p.apellidos||'')).replace(/'/g,'')}")' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-brand-50 hover:text-brand-600" title="Quitar del comando técnico">✕</button>`:''}
@@ -1018,6 +1019,58 @@ async function renderCT(){
       :'<p class="px-5 py-6 text-sm text-ink-400 text-center">Sin comando técnico registrado.</p>'}
     <p class="text-[11px] text-ink-400 px-5 py-3 bg-paper">Entrenador, asistente, preparadores y médico. Mismos datos que un jugador (documento único por país): si la persona ya existe en Liguify, se inscribe sin re-digitar.</p>
   </div>`;
+}
+/* ---- Carnet del comando técnico: tarjeta tamaño NFC (85.6×54mm) con QR de
+   seguridad → liguify.com/verificar?ct=<token> valida EN VIVO contra la BD ---- */
+function carnetCTCard(d){
+  const cl=CLUBES[EQUIPO.club_id]||{};
+  const qr=qrcode(0,'M'); qr.addData(`https://www.liguify.com/verificar?ct=${d.token}`); qr.make();
+  const qrSvg=qr.createSvgTag({cellSize:2,margin:0}).replace(/width="\d+px"/,'width="100%"').replace(/height="\d+px"/,'height="100%"');
+  return `<div style="width:85.6mm;height:54mm;border-radius:3mm;overflow:hidden;position:relative;background:#171e2e;color:#fff;font-family:Inter,Arial,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.25)">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:2.5mm 4mm 0">
+      <span style="font-size:2.2mm;font-weight:800;letter-spacing:.5mm;text-transform:uppercase;color:rgba(255,255,255,.55)">${MARCA.nombre} · ${TORNEO.nombre}</span>
+      ${cl.escudo_url?`<img src="${cl.escudo_url}" style="width:8mm;height:8mm;object-fit:contain;background:#fff;border-radius:1.5mm;padding:.5mm"/>`:''}
+    </div>
+    <div style="display:flex;align-items:center;gap:3.5mm;padding:2mm 4mm 0">
+      ${d.foto?`<img src="${d.foto}" style="width:20mm;height:20mm;border-radius:2.5mm;object-fit:cover"/>`
+        :`<span style="width:20mm;height:20mm;border-radius:2.5mm;background:#2b3550;display:grid;place-items:center;font-size:6mm;font-weight:800">${iniciales(d.nombres+' '+d.apellidos)}</span>`}
+      <div style="flex:1;min-width:0">
+        <span style="display:inline-block;font-size:2.6mm;font-weight:800;text-transform:uppercase;background:#ffd166;color:#171e2e;border-radius:1mm;padding:.6mm 1.8mm;margin-bottom:1.2mm">${d.rol}</span>
+        <div style="font-size:3.6mm;font-weight:800;text-transform:uppercase;line-height:1.15">${d.nombres}<br>${d.apellidos}</div>
+        <div style="font-size:2.4mm;color:rgba(255,255,255,.6);margin-top:1mm">${cl.nombre||''} · ${CAT.nombre_display||''}</div>
+      </div>
+      <div style="width:19mm;height:19mm;background:#fff;border-radius:1.5mm;padding:1mm;flex-shrink:0">${qrSvg}</div>
+    </div>
+    <div style="position:absolute;left:0;right:0;bottom:0;background:#d9232e;padding:1mm 4mm;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:2.2mm;font-weight:700;letter-spacing:.3mm">COMANDO TÉCNICO OFICIAL</span>
+      <span style="font-size:2.2mm;font-family:monospace;letter-spacing:.3mm">COD ${String(d.token).slice(0,8).toUpperCase()}</span>
+    </div>
+  </div>`;
+}
+async function carnetCT(d){
+  if(!d.token){
+    d.token=crypto.randomUUID().replace(/-/g,'');
+    const up=await sb.from('comando_tecnico').update({qr_token:d.token}).eq('id',d.id).select('qr_token').single();
+    if(up.error){toast(errNegocio(up.error));return;}
+  }
+  window.__CT_CARNET=d;
+  abrirModal(`<div class="flex items-center justify-between mb-3"><h3 class="font-display text-2xl tracking-wide">🪪 CARNET · COMANDO TÉCNICO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <div class="flex justify-center mb-3">${carnetCTCard(d)}</div>
+    <p class="text-xs text-ink-400 mb-3">Tamaño real: tarjeta NFC (85.6 × 54 mm). El QR lleva a <b>liguify.com/verificar</b> con un código único: la validez se comprueba EN VIVO contra la base de datos — una copia falsificada no valida.</p>
+    <button onclick="imprimirCarnetCT()" class="w-full bg-ink-900 text-white font-bold py-2.5 rounded-xl hover:bg-ink-700">🖨 IMPRIMIR TAMAÑO TARJETA</button>`);
+}
+function imprimirCarnetCT(){
+  const d=window.__CT_CARNET; if(!d) return;
+  const w=window.open('','_blank');
+  if(!w){toast('⚠ Permite los pop-ups para imprimir el carnet');return;}
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Carnet CT · ${d.nombres} ${d.apellidos}</title>
+    <style>@page{size:A4;margin:10mm} body{font-family:Arial;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .nota{font-size:11px;color:#666;margin:0 0 6mm} @media print{.nota{display:none}}</style></head><body>
+    <p class="nota">Imprime a escala 100% (sin ajustar a página). La tarjeta mide 85.6 × 54 mm — recórtala por el borde o imprímela en tarjeta PVC/NFC.</p>
+    ${carnetCTCard(d)}
+    <script>window.onload=function(){setTimeout(function(){window.print();},600);};<\/script>
+    </body></html>`);
+  w.document.close();
 }
 function modalCT(){
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">+ COMANDO TÉCNICO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
