@@ -2044,7 +2044,8 @@ async function renderFixture(){
       ${porFase[f.id].sort((a,b)=>ordEt(a.etapa)-ordEt(b.etapa)||(a.etapa||'').localeCompare(b.etapa||'')).map(fila).join('')}
     </div>`).join('');
   $('tab-fixture').innerHTML=
-    `<div class="flex justify-end gap-2 mb-3">${esAdmin()?`
+    `<div class="flex justify-end gap-2 mb-3 flex-wrap">
+      <button onclick="exportarExcelFixture()" title="Excel con todas las fechas: día y relación de partidos" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">⬇ EXCEL FIXTURE</button>${esAdmin()?`
       <button onclick="modalLlaves()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">🏆 GENERAR LLAVES</button>
       <button onclick="modalFixture()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">⚙️ GENERAR FIXTURE</button>`:''}</div>`
     + ((htmlFechas+htmlFases) || '<p class="text-ink-400 text-sm">Sin partidos.</p>');
@@ -2056,6 +2057,39 @@ async function toggleHorarios(jid,mostrar){
   const i=JORNADAS.findIndex(x=>x.id===jid); if(i>=0) JORNADAS[i]=data;
   toast(mostrar?'👁 Fecha PUBLICADA ✔ — el público ya ve esta jornada completa (cruces, día y horarios)':'🚫 Fecha OCULTA — esta jornada NO aparece en el público mientras la trabajas (el club sí ve sus cruces con "por confirmar")');
   await renderFixture();
+}
+
+/* ---- Excel del FIXTURE COMPLETO: todas las fechas con día y partidos ---- */
+async function exportarExcelFixture(){
+  if(typeof XLSX==='undefined'){toast('⚠ La librería de Excel no cargó — recarga la página');return;}
+  const {data:pms,error}=await sb.from('partido').select('*').eq('categoria_id',CAT.id).not('jornada_id','is',null);
+  if(error){toast(errNegocio(error));return;}
+  if(!(pms||[]).length){toast('⚠ Esta categoría aún no tiene fechas generadas');return;}
+  const porJ={};
+  (pms||[]).forEach(m=>{(porJ[m.jornada_id]=porJ[m.jornada_id]||[]).push(m);});
+  const js=[...JORNADAS].sort((a,b)=>(a.numero||0)-(b.numero||0)).filter(j=>porJ[j.id]);
+  const nom=id=>id?(nomEq(EQUIPOS[id]||{})||'Por definir'):'Por definir';
+  const diaTxt=f=>f?new Date(f+'T00:00:00').toLocaleDateString('es-PE',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'}):'por confirmar';
+  const data=[[`${TORNEO.nombre} · ${CAT.nombre_display||''} — FIXTURE`],[],
+    ['FECHA','DÍA','HORA','LOCAL','RESULTADO','VISITA','SEDE','CANCHA']];
+  js.forEach(j=>{
+    const lista=porJ[j.id].sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')||(a.hora||'').localeCompare(b.hora||''));
+    const dia=j.fecha||(lista.find(m=>m.fecha)||{}).fecha||null;
+    data.push([`FECHA ${j.numero}`, diaTxt(dia)]);
+    lista.forEach(m=>{
+      const fin=['finalizado','walkover'].includes(m.estado);
+      const res=fin?`${m.goles_local??0} - ${m.goles_visita??0}${m.penales?` (pen ${m.penales_local??0}-${m.penales_visita??0})`:''}`:'';
+      data.push(['', (m.fecha&&m.fecha!==dia)?diaTxt(m.fecha):'', m.hora?m.hora.slice(0,5):'',
+        nom(m.local_id), res, nom(m.visita_id), m.sede||'', m.cancha||'']);
+    });
+    data.push([]);
+  });
+  const ws=XLSX.utils.aoa_to_sheet(data);
+  ws['!cols']=[{wch:10},{wch:28},{wch:7},{wch:30},{wch:16},{wch:30},{wch:18},{wch:12}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Fixture');
+  XLSX.writeFile(wb,`fixture-${(CAT.nombre_display||'categoria').replace(/[^\w]+/g,'-')}.xlsx`);
+  toast(`⬇ Excel del fixture descargado ✔ — ${js.length} fecha(s) de la categoría`);
 }
 
 /* ---- Planillas de juego imprimibles por fecha (para apuntar en campo) ---- */
