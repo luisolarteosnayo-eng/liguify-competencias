@@ -148,7 +148,8 @@ tailwind.config={theme:{extend:{
     <div class="bg-white border border-line rounded-2xl mt-4 overflow-hidden">
       <div class="px-5 py-3 border-b border-line flex items-center justify-between flex-wrap gap-2">
         <p class="font-display text-xl tracking-wide">PLANTEL · LISTA DE BUENA FE</p>
-        <div class="flex gap-2">
+        <div class="flex gap-2 flex-wrap">
+          <button onclick="albumEquipo()" title="Álbum del equipo estilo Panini: cromos con foto y nombre, listo para redes" class="bg-white border border-amber-400 text-amber-700 text-xs font-bold px-4 py-2 rounded-xl hover:bg-amber-50">🖼 ÁLBUM</button>
           <button onclick="modalImportarPlantel()" class="bg-white border border-emerald-600 text-emerald-700 text-xs font-bold px-4 py-2 rounded-xl hover:bg-emerald-50">⬇ IMPORTAR PLANTEL</button>
           <button onclick="modalJugador()" class="bg-ink-900 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-ink-700">+ AGREGAR JUGADOR/A</button>
         </div>
@@ -2201,6 +2202,96 @@ async function toggleHorarios(jid,mostrar){
   const i=JORNADAS.findIndex(x=>x.id===jid); if(i>=0) JORNADAS[i]=data;
   toast(mostrar?'👁 Fecha PUBLICADA ✔ — el público ya ve esta jornada completa (cruces, día y horarios)':'🚫 Fecha OCULTA — esta jornada NO aparece en el público mientras la trabajas (el club sí ve sus cruces con "por confirmar")');
   await renderFixture();
+}
+
+/* ---- ÁLBUM DEL EQUIPO estilo Panini: cromos con foto y primer nombre,
+   logos del torneo y del club — imagen PNG lista para redes.
+   Fotos SOLO con consentimiento (misma regla que el público); sin él,
+   el cromo lleva las iniciales. ---- */
+async function albumEquipo(){
+  const {data:ins,error}=await sb.from('inscripcion_lbf').select('id,dorsal,capitan,jugador_id').eq('equipo_id',EQUIPO.id).eq('en_lbf',true).eq('inhabilitado',false).order('dorsal');
+  if(error){toast(errNegocio(error));return;}
+  if(!(ins||[]).length){toast('⚠ Este equipo aún no tiene jugadores en la LBF');return;}
+  toast('🖼 Generando álbum…');
+  const {data:js}=await sb.from('jugador_maestro').select('id,nombres,apellidos,foto_url,consentimiento_imagen').in('id',ins.map(i=>i.jugador_id));
+  const jm=Object.fromEntries((js||[]).map(j=>[j.id,j]));
+  const cl=CLUBES[EQUIPO.club_id]||{};
+  await Promise.all([document.fonts.load('80px "Bebas Neue"'),document.fonts.load('700 30px Inter'),document.fonts.load('800 26px Inter')]);
+  const [logoT,escudo]=await Promise.all([cargarImg(TORNEO.logo_url||MARCA.logo_url),cargarImg(cl.escudo_url)]);
+  const fotos={};
+  await Promise.all(ins.map(async i=>{const j=jm[i.jugador_id]||{};
+    fotos[i.id]=(j.consentimiento_imagen&&j.foto_url)?await cargarImg(j.foto_url):null;}));
+  const W=1080, COLS=4, GAP=24, MX=40;
+  const CW=(W-MX*2-GAP*(COLS-1))/COLS, FH=CW, NH=56, CH=FH+NH;
+  const rows=Math.ceil(ins.length/COLS);
+  const HEAD=300, FOOT=90;
+  const H=HEAD+rows*(CH+GAP)-GAP+40+FOOT;
+  const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+  const x=cv.getContext('2d');
+  x.fillStyle='#101626'; x.fillRect(0,0,W,H);
+  x.save(); x.globalAlpha=.05; x.strokeStyle='#fff'; x.lineWidth=1;
+  for(let i=-H;i<W;i+=46){x.beginPath();x.moveTo(i,0);x.lineTo(i+H,H);x.stroke();}
+  x.restore();
+  const dib=(img,cx,cy,r,ini)=>{x.save();x.beginPath();x.arc(cx,cy,r,0,7);x.clip();
+    if(img){x.fillStyle='#fff';x.fillRect(cx-r,cy-r,r*2,r*2);x.drawImage(img,cx-r,cy-r,r*2,r*2);}
+    else{x.fillStyle='#2b3550';x.fillRect(cx-r,cy-r,r*2,r*2);x.fillStyle='#fff';x.font=`800 ${Math.round(r*.6)}px Inter`;x.textAlign='center';x.textBaseline='middle';x.fillText(ini||'',cx,cy+2);}
+    x.restore();x.textAlign='left';x.textBaseline='alphabetic';};
+  const fitText=(t,font,max)=>{let s=parseInt(font.match(/(\d+)px/)[1]);
+    for(;s>20;s--){x.font=font.replace(/\d+px/,s+'px');if(x.measureText(t).width<=max)break;}return x.font;};
+  dib(logoT,96,110,52,iniciales(TORNEO.nombre));
+  dib(escudo,W-96,110,52,iniciales(cl.nombre||'?'));
+  x.textAlign='center';
+  x.fillStyle='#ffd166'; x.font='600 22px Inter'; x.fillText('ÁLBUM OFICIAL',W/2,66);
+  x.fillStyle='#ffffff'; x.font=fitText(nomEq(EQUIPO).toUpperCase(),'86px "Bebas Neue"',W-330);
+  x.fillText(nomEq(EQUIPO).toUpperCase(),W/2,148);
+  x.fillStyle='rgba(255,255,255,.55)'; x.font='600 25px Inter';
+  x.fillText(`${TORNEO.nombre.toUpperCase()} · ${(CAT.nombre_display||'').toUpperCase()}`,W/2,192);
+  x.fillStyle='#d4af37'; x.fillRect(MX,230,W-MX*2,4);
+  x.textAlign='left';
+  ins.forEach((i,k)=>{
+    const j=jm[i.jugador_id]||{};
+    const col=k%COLS, row=Math.floor(k/COLS);
+    const cx0=MX+col*(CW+GAP), cy0=HEAD+row*(CH+GAP);
+    x.fillStyle='#fff';
+    x.beginPath(); x.roundRect(cx0,cy0,CW,CH,14); x.fill();
+    x.strokeStyle='#d4af37'; x.lineWidth=5; x.stroke();
+    const pad=10, fw=CW-pad*2, fh=FH-pad*2;
+    x.save(); x.beginPath(); x.roundRect(cx0+pad,cy0+pad,fw,fh,8); x.clip();
+    const img=fotos[i.id];
+    if(img){
+      const s=Math.max(fw/img.width,fh/img.height);
+      x.drawImage(img,cx0+pad+(fw-img.width*s)/2,cy0+pad+(fh-img.height*s)/2,img.width*s,img.height*s);
+    }else{
+      x.fillStyle='#2b3550'; x.fillRect(cx0+pad,cy0+pad,fw,fh);
+      x.fillStyle='#8b93a7'; x.font='800 62px Inter'; x.textAlign='center'; x.textBaseline='middle';
+      x.fillText(iniciales((j.nombres||'')+' '+(j.apellidos||'')),cx0+CW/2,cy0+pad+fh/2);
+      x.textAlign='left'; x.textBaseline='alphabetic';
+    }
+    x.restore();
+    x.fillStyle='#171e2e';
+    x.beginPath(); x.roundRect(cx0+pad,cy0+FH,CW-pad*2,NH-pad,8); x.fill();
+    const primer=((j.nombres||'').trim().split(/\s+/)[0]||'—').toUpperCase()+(i.capitan?' (C)':'');
+    if(i.dorsal!=null){x.fillStyle='#ffd166';x.font='28px "Bebas Neue"';x.textAlign='left';x.textBaseline='middle';
+      x.fillText(String(i.dorsal),cx0+pad+10,cy0+FH+(NH-pad)/2+2);}
+    x.fillStyle='#fff'; x.textAlign='center'; x.textBaseline='middle';
+    x.font=fitText(primer,'30px "Bebas Neue"',CW-pad*2-64);
+    x.fillText(primer,cx0+CW/2+6,cy0+FH+(NH-pad)/2+2);
+    x.textAlign='left'; x.textBaseline='alphabetic';
+  });
+  x.fillStyle='#8b93a7'; x.font='600 24px Inter'; x.textAlign='center';
+  x.fillText('⚡ Powered by Liguify · liguify.com/'+(MARCA.slug||''),W/2,H-36);
+  x.textAlign='left';
+  window.__CV=cv;
+  try{
+    cv.toBlob(b=>{
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(b);
+      a.download=`album-${(nomEq(EQUIPO)||'equipo').replace(/[^\w]+/g,'-').toLowerCase()}.png`;
+      a.click();
+      setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+      toast('🖼 Álbum descargado ✔ — listo para WhatsApp e Instagram');
+    },'image/png');
+  }catch(e){toast('⚠ No se pudo exportar el álbum: '+(e.message||e));}
 }
 
 /* ---- Excel del FIXTURE COMPLETO: todas las fechas con día y partidos ---- */
