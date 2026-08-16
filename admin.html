@@ -234,9 +234,16 @@ async function iniciar(){
   const ids=[...new Set(um.data.map(r=>r.marca_id))];
   const {data:mks}=await sb.from('marca').select('*').in('id',ids).order('nombre');
   MARCAS=mks||[];
+  ordenarMarcas();               // la marca preferida (última usada) va primero
   MARCA=MARCAS[0];
   actualizarHeaderRoles(session.user.email);
   await cargarTorneos();
+}
+// Preferencia de marca por dispositivo: la última marca con la que trabajaste
+// queda como predeterminada y aparece primera en los chips.
+function ordenarMarcas(){
+  const pref=localStorage.getItem('liguify-marca-pref');
+  MARCAS.sort((a,b)=>(a.id===pref?-1:b.id===pref?1:(a.nombre||'').localeCompare(b.nombre||'','es')));
 }
 function actualizarHeaderRoles(email){
   const mios=[...new Set(ROLES.filter(r=>r.marca_id===MARCA.id).map(r=>r.rol))];
@@ -245,6 +252,8 @@ function actualizarHeaderRoles(email){
 const esAdmin=()=>ROLES.some(r=>r.rol==='admin_marca'&&r.marca_id===MARCA.id);
 function cambiarMarca(id){
   MARCA=MARCAS.find(m=>m.id===id);
+  try{localStorage.setItem('liguify-marca-pref',id);}catch(e){}
+  ordenarMarcas();
   actualizarHeaderRoles();
   cargarTorneos();
 }
