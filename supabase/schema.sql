@@ -1080,7 +1080,8 @@ as $$
       'verificado', j.verificado, 'es_excepcion', i.es_excepcion,
       'dorsal', i.dorsal,
       'nombres', j.nombres, 'apellidos', j.apellidos,
-      'foto_url', j.foto_url, 'consentimiento_imagen', j.consentimiento_imagen,
+      'foto_url', case when j.consentimiento_imagen then j.foto_url else null end,
+      'consentimiento_imagen', j.consentimiento_imagen,
       'documento', case when coalesce(j.nro_documento,'')='' then null
                         else left(j.nro_documento,2)||repeat('*', greatest(length(j.nro_documento)-2,4)) end,
       'club', c.nombre, 'escudo_url', c.escudo_url,
