@@ -2298,7 +2298,10 @@ async function albumEquipo(){
     const sy=cy0+pad*2+fh;
     x.fillStyle=esCT?'#d4af37':'#171e2e';
     x.beginPath(); x.roundRect(cx0+pad,sy,CW-pad*2,SH,Math.round(CW*0.035)); x.fill();
-    const primer=((c.j.nombres||'').trim().split(/\s+/)[0]||'—').toUpperCase()+(c.capitan?' (C)':'');
+    // jugadores: solo primer nombre · comando técnico: nombres y apellidos
+    const primer=esCT
+      ? `${(c.j.nombres||'').trim()} ${(c.j.apellidos||'').trim()}`.trim().toUpperCase()||'—'
+      : ((c.j.nombres||'').trim().split(/\s+/)[0]||'—').toUpperCase()+(c.capitan?' (C)':'');
     const sub=(c.sub||'').toUpperCase();
     x.textAlign='center'; x.textBaseline='middle';
     x.fillStyle=esCT?'#171e2e':'#fff';
