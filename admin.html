@@ -671,14 +671,16 @@ async function verificarPersona(){
         return;
       }
       const tok=mJ?mJ[1]:tokenSuelto;
+      VF_METODO='qr';
       const {data:d,error}=await sb.rpc('verificar_carnet_jugador',{p_token:tok});
       if(error)throw error;
       if(!d.error){
-        const {data:insTok}=await sb.from('inscripcion_lbf').select('id,dorsal,categoria:categoria_id(torneo_id)').eq('qr_token',tok).maybeSingle();
+        const {data:insTok}=await sb.from('inscripcion_lbf').select('id,dorsal,equipo_id,categoria:categoria_id(torneo_id)').eq('qr_token',tok).maybeSingle();
         if(insTok&&insTok.categoria&&insTok.categoria.torneo_id!==TORNEO.id){
           out.innerHTML=banner(false,'NO PERTENECE A ESTE TORNEO')+`<p class="text-xs text-ink-500 mb-2 text-center">El carnet es del torneo <b>${d.torneo||'—'}</b>.</p>`+fichaRPC(d,'JUGADOR'+(d.dorsal!=null?' · #'+d.dorsal:''));
           return;
         }
+        const pHoy=insTok?await partidoHoyHTML(insTok.id,insTok.equipo_id,!!d.valido):'';
         out.innerHTML=fichaRPC(d,'JUGADOR'+(d.dorsal!=null?' · #'+d.dorsal:''))+`
         <div class="border border-line rounded-xl px-3 py-1 text-sm mb-2">
           ${[['Identidad verificada',d.verificado],['En Lista de Buena Fe',d.en_lbf],['Habilitado (activo)',d.estado==='activo'],['Sin sanción del torneo',!d.inhabilitado],['Sin sanción global',!d.sancion_global]].map(([l,c])=>`<div class="flex justify-between py-1 border-b border-line last:border-0"><span class="text-ink-500 text-xs">${l}</span><b class="${c?'text-emerald-600':'text-brand-600'}">${c?'✔':'✖'}</b></div>`).join('')}
@@ -687,18 +689,20 @@ async function verificarPersona(){
           <span class="text-xs font-bold text-ink-700 flex-1">N° de camiseta</span>
           <input id="vf-d-${insTok.id}" type="number" min="0" value="${insTok.dorsal??''}" class="w-16 border border-line rounded-lg text-center py-1 text-sm font-bold bg-white"/>
           <button onclick="confirmarDorsal('${insTok.id}')" class="bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-emerald-800">✔ CONFIRMAR</button>
-        </div>`:''}`; return;}
+        </div>`:''}
+        ${pHoy}`; return;}
       // token de CT probado como jugador: intentar CT
       const {data:d2}=await sb.rpc('verificar_carnet_ct',{p_token:tok});
       out.innerHTML=(d2&&!d2.error)?fichaRPC(d2,(d2.rol||'CT')+' · COMANDO TÉCNICO'):banner(false,'CARNET NO ENCONTRADO');
       return;
     }
     // 2) documento (o NFC como respaldo)
+    VF_METODO='dni_scan';
     let {data:j}=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,pais_documento,foto_url,verificado').eq('pais_documento',pais).eq('nro_documento',raw).maybeSingle();
     if(!j){
       // ¿NFC? buscar por nfc_uid en inscripciones
       const {data:insN}=await sb.from('inscripcion_lbf').select('jugador_id').eq('nfc_uid',raw).limit(1);
-      if(insN&&insN.length){const r2=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,pais_documento,foto_url,verificado').eq('id',insN[0].jugador_id).single(); j=r2.data;}
+      if(insN&&insN.length){VF_METODO='nfc';const r2=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,pais_documento,foto_url,verificado').eq('id',insN[0].jugador_id).single(); j=r2.data;}
     }
     if(!j){out.innerHTML=banner(false,'NO ENCONTRADO EN LIGUIFY');return;}
     // sanción global vigente
@@ -707,13 +711,19 @@ async function verificarPersona(){
     const sancion=(sg||[]).some(s=>s.vigencia_desde<=hoy&&(!s.vigencia_hasta||s.vigencia_hasta>=hoy));
     // inscripciones y CT de la persona EN ESTE TORNEO
     const [insQ,ctQ]=await Promise.all([
-      sb.from('inscripcion_lbf').select('id,dorsal,estado,en_lbf,inhabilitado,equipo:equipo_id(nombre,club:club_id(nombre)),categoria:categoria_id(nombre_display,torneo_id)').eq('jugador_id',j.id),
+      sb.from('inscripcion_lbf').select('id,dorsal,estado,en_lbf,inhabilitado,equipo_id,equipo:equipo_id(nombre,club:club_id(nombre)),categoria:categoria_id(nombre_display,torneo_id)').eq('jugador_id',j.id),
       sb.from('comando_tecnico').select('id,rol,estado,inhabilitado,equipo:equipo_id(nombre,club:club_id(nombre)),categoria:categoria_id(nombre_display,torneo_id)').eq('persona_id',j.id)
     ]);
     const deTorneo=r=>r.categoria&&r.categoria.torneo_id===TORNEO.id;
     const ins=(insQ.data||[]).filter(deTorneo), cts=(ctQ.data||[]).filter(deTorneo);
     const okGlobal=!sancion&&(ins.some(i=>i.en_lbf&&i.estado==='activo'&&!i.inhabilitado)||cts.some(c=>c.estado==='activo'&&!c.inhabilitado));
     const nomEq2=r=>(r.equipo&&(r.equipo.nombre||(r.equipo.club||{}).nombre))||'—';
+    // partido de HOY por inscripción (con botón de asistencia si está VÁLIDO)
+    const pHoyIns={};
+    await Promise.all(ins.map(async i=>{
+      const validoIns=!sancion&&i.en_lbf&&i.estado==='activo'&&!i.inhabilitado;
+      pHoyIns[i.id]=await partidoHoyHTML(i.id,i.equipo_id,validoIns);
+    }));
     out.innerHTML=`
       ${banner(okGlobal, okGlobal?'VÁLIDO EN ESTE TORNEO':(ins.length||cts.length?'CON OBSERVACIONES':'NO INSCRITO EN ESTE TORNEO'))}
       <div class="bg-ink-900 text-white rounded-2xl p-4 mb-2">
@@ -735,6 +745,7 @@ async function verificarPersona(){
             <input id="vf-d-${i.id}" type="number" min="0" value="${i.dorsal??''}" class="w-14 border border-line rounded-lg text-center py-1 text-xs font-bold"/>
             <button onclick="confirmarDorsal('${i.id}')" class="bg-emerald-700 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-lg hover:bg-emerald-800">✔</button>
           </span>
+          ${pHoyIns[i.id]||''}
         </div>`).join(''):''}
       ${cts.length?`<p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1 mt-2">Como comando técnico</p>`+cts.map(c=>`
         <div class="flex items-center gap-2 border border-line rounded-xl px-3 py-2 mb-1.5 text-sm">
@@ -744,6 +755,39 @@ async function verificarPersona(){
       ${!ins.length&&!cts.length?'<p class="text-xs text-ink-400">Esta persona existe en la maestra de Liguify pero no está inscrita (ni como jugador ni como comando técnico) en <b>'+TORNEO.nombre+'</b>.</p>':''}`;
   }catch(e){out.innerHTML=`<p class="text-xs font-bold text-brand-600">⚠ ${e.message||e}</p>`;}
   $('vf-in').value=''; $('vf-in').focus();
+}
+
+/* Partido de HOY del equipo del jugador + GRABAR ASISTENCIA (acredita la
+   participación: acreditacion_partido + planilla.jugo=true, la J) */
+let VF_METODO='dni_scan';
+async function partidoHoyHTML(insId,equipoId,valido){
+  if(!equipoId) return '';
+  const hoy=new Date().toISOString().slice(0,10);
+  const {data:pms}=await sb.from('partido').select('*').or(`local_id.eq.${equipoId},visita_id.eq.${equipoId}`).eq('fecha',hoy);
+  if(!pms||!pms.length) return '<p class="w-full text-[11px] text-ink-400 mt-1">Sin partido programado HOY para su equipo.</p>';
+  const {data:acs}=await sb.from('acreditacion_partido').select('partido_id').eq('inscripcion_id',insId).in('partido_id',pms.map(m=>m.id));
+  const ya=new Set((acs||[]).map(a=>a.partido_id));
+  const ids=[...new Set(pms.flatMap(m=>[m.local_id,m.visita_id]).filter(Boolean))];
+  const {data:eqs}=await sb.from('equipo').select('id,nombre,club:club_id(nombre)').in('id',ids);
+  const nm=Object.fromEntries((eqs||[]).map(e=>[e.id,e.nombre||(e.club||{}).nombre||'—']));
+  return pms.map(m=>`<div class="w-full border-2 ${ya.has(m.id)?'border-emerald-300 bg-emerald-50':'border-line'} rounded-xl px-3 py-2 mt-1.5">
+    <p class="text-[10px] font-bold text-ink-400 uppercase">⚽ Partido de hoy${m.hora?' · '+m.hora.slice(0,5):''}${m.cancha?' · '+m.cancha:''}${m.sede?' · '+m.sede:''}</p>
+    <p class="text-sm font-bold">${nm[m.local_id]||'Por definir'} <span class="text-ink-400 font-normal">vs</span> ${nm[m.visita_id]||'Por definir'}</p>
+    ${ya.has(m.id)?'<p class="text-xs font-bold text-emerald-700 mt-1">✔ ASISTENCIA REGISTRADA</p>'
+      :valido?`<button onclick="marcarAsistencia('${m.id}','${insId}')" class="w-full mt-1.5 bg-emerald-700 text-white text-xs font-bold py-2 rounded-lg hover:bg-emerald-800">✔ GRABAR ASISTENCIA</button>`
+      :'<p class="text-[11px] text-brand-600 font-bold mt-1">No se puede registrar asistencia: el jugador no está VÁLIDO.</p>'}
+  </div>`).join('');
+}
+async function marcarAsistencia(partidoId,insId){
+  const {data:{user}}=await sb.auth.getUser();
+  const ac=await sb.from('acreditacion_partido').insert({partido_id:partidoId,inscripcion_id:insId,metodo:VF_METODO||'dni_scan',verificado_por:user?.id||null});
+  if(ac.error){toast(errNegocio(ac.error));return;}
+  const pl=await sb.from('planilla_partido').upsert({partido_id:partidoId,inscripcion_id:insId,jugo:true},{onConflict:'partido_id,inscripcion_id'});
+  if(pl.error){toast(errNegocio(pl.error));return;}
+  toast('✔ Asistencia registrada — participación (J) marcada en la planilla del partido');
+  document.querySelectorAll(`[onclick="marcarAsistencia('${partidoId}','${insId}')"]`).forEach(b=>{
+    b.outerHTML='<p class="text-xs font-bold text-emerald-700 mt-1">✔ ASISTENCIA REGISTRADA</p>';});
+  const inp=$('vf-in'); if(inp) inp.focus();
 }
 
 /* Confirmar/corregir el N° de camiseta desde el verificador (staff) */

@@ -805,6 +805,16 @@ async function guardarEditIns(insId,jugadorId){
   cerrarModal(); toast(autActivado?'Autorización subida ✔ — jugador ACTIVO y foto a color':'Jugador actualizado ✔'); renderPlantel();
 }
 async function quitarIns(insId,nombre){
+  // trazabilidad: si ya participó en algún partido (asistencia o estadísticas),
+  // NO puede eliminarse de la LBF (la BD también lo bloquea con un trigger)
+  const [pl,ac]=await Promise.all([
+    sb.from('planilla_partido').select('partido_id').eq('inscripcion_id',insId).limit(1),
+    sb.from('acreditacion_partido').select('partido_id').eq('inscripcion_id',insId).limit(1)
+  ]);
+  if((pl.data&&pl.data.length)||(ac.data&&ac.data.length)){
+    toast(`⛔ ${nombre} ya participó en partidos del torneo: no puede eliminarse de la LBF (protege la trazabilidad). Pide al organizador inhabilitarlo si no debe seguir jugando.`);
+    return;
+  }
   if(!confirm(`¿Quitar a ${nombre} de la LBF?\n\nSolo es posible mientras está PENDIENTE. Podrás volver a inscribirlo.`))return;
   const {error}=await sb.from('inscripcion_lbf').delete().eq('id',insId).eq('estado','pendiente');
   if(error){toast(errNegocio(error));return;}
