@@ -74,7 +74,10 @@ tailwind.config={theme:{extend:{
     <button onclick="show('s-torneos')" class="text-sm text-ink-500 mb-3 font-semibold">← Torneos</button>
     <div class="flex items-center justify-between flex-wrap gap-2 mb-4">
       <h1 id="t-titulo" class="font-display text-4xl tracking-wide"></h1>
-      <button onclick="modalCategoria()" class="bg-brand-500 text-white font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-brand-600">+ NUEVA CATEGORÍA</button>
+      <div class="flex gap-2 flex-wrap">
+        <button onclick="pdfComandoTecnico()" title="Relación del comando técnico de todo el torneo (foto, DNI, nombres) — para torneos sin carnets" class="bg-white border border-line font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-paper">🖨 COMANDO TÉCNICO</button>
+        <button onclick="modalCategoria()" class="bg-brand-500 text-white font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-brand-600">+ NUEVA CATEGORÍA</button>
+      </div>
     </div>
     <div class="space-y-2" id="lista-categorias"></div>
   </section>
@@ -666,6 +669,92 @@ async function crearCategoria(){
   if(error){toast(errNegocio(error));return;}
   cerrarModal(); toast(`Categoría ${a}/${m} creada en la BD ✔`); abrirTorneo(TORNEO);
 }
+/* ---- Relación del COMANDO TÉCNICO del torneo en PDF (imprimir/guardar):
+   agrupada por CLUB (alfabético) → categoría, con foto, DNI y nombres.
+   Para torneos pequeños que no usan carnets. ---- */
+async function pdfComandoTecnico(){
+  const {data:cats,error:e1}=await sb.from('categoria').select('id,nombre_display,anio_nacimiento,modalidad').eq('torneo_id',TORNEO.id);
+  if(e1){toast(errNegocio(e1));return;}
+  if(!(cats||[]).length){toast('⚠ Este torneo no tiene categorías');return;}
+  const {data:cts,error:e2}=await sb.from('comando_tecnico').select('*').in('categoria_id',cats.map(c=>c.id));
+  if(e2){toast(errNegocio(e2));return;}
+  if(!(cts||[]).length){toast('⚠ Este torneo aún no tiene comando técnico registrado');return;}
+  const eqIds=[...new Set(cts.map(x=>x.equipo_id))];
+  const {data:eqs}=await sb.from('equipo').select('id,nombre,club_id').in('id',eqIds);
+  const {data:cls}=await sb.from('club').select('id,nombre,escudo_url').in('id',[...new Set((eqs||[]).map(e=>e.club_id))]);
+  const {data:ps}=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,pais_documento,foto_url').in('id',[...new Set(cts.map(x=>x.persona_id))]);
+  const EQm=Object.fromEntries((eqs||[]).map(x=>[x.id,x]));
+  const CLm=Object.fromEntries((cls||[]).map(x=>[x.id,x]));
+  const Pm=Object.fromEntries((ps||[]).map(x=>[x.id,x]));
+  const CATm=Object.fromEntries(cats.map(c=>[c.id,c]));
+  const esc=t=>String(t??'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  // club → categoría → miembros
+  const porClub={};
+  cts.forEach(x=>{
+    const eq=EQm[x.equipo_id]; if(!eq) return;
+    const cid=eq.club_id;
+    (porClub[cid]=porClub[cid]||{}); (porClub[cid][x.categoria_id]=porClub[cid][x.categoria_id]||[]).push(x);
+  });
+  const ordRol=r=>{const i=CT_ROLES.indexOf(r);return i<0?9:i;};
+  const clubesOrden=Object.keys(porClub).sort((a,b)=>((CLm[a]||{}).nombre||'').localeCompare((CLm[b]||{}).nombre||'','es'));
+  let n=0;
+  const cuerpo=clubesOrden.map(cid=>{
+    const cl=CLm[cid]||{};
+    const catsOrden=Object.keys(porClub[cid]).sort((a,b)=>((CATm[a]||{}).nombre_display||'').localeCompare((CATm[b]||{}).nombre_display||'','es',{numeric:true}));
+    return `<div class="club">
+      <div class="club-h">${cl.escudo_url?`<img src="${cl.escudo_url}"/>`:''}<span>${esc(cl.nombre||'—')}</span></div>
+      ${catsOrden.map(catId=>{
+        const lista=porClub[cid][catId].sort((a,b)=>ordRol(a.rol)-ordRol(b.rol)||((Pm[a.persona_id]||{}).apellidos||'').localeCompare((Pm[b.persona_id]||{}).apellidos||'','es'));
+        return `<div class="cat-h">${esc((CATm[catId]||{}).nombre_display||'')}</div>
+        ${lista.map(x=>{const p=Pm[x.persona_id]||{}; n++;
+          return `<div class="fila">
+            ${p.foto_url?`<img class="foto" src="${p.foto_url}"/>`:`<span class="foto foto-ini">${esc(iniciales((p.nombres||'')+' '+(p.apellidos||'')))}</span>`}
+            <span class="rol">${esc(x.rol)}</span>
+            <span class="nom">${esc(p.nombres||'')} ${esc(p.apellidos||'')}${x.inhabilitado?' <b class="inh">INHABILITADO</b>':''}</span>
+            <span class="doc">${esc(p.pais_documento||'PE')} ${esc(p.nro_documento||'—')}</span>
+          </div>`;}).join('')}`;
+      }).join('')}
+    </div>`;
+  }).join('');
+  const w=window.open('','_blank');
+  if(!w){toast('⚠ Permite los pop-ups para generar el PDF');return;}
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Comando Técnico · ${esc(TORNEO.nombre)}</title><style>
+    *{margin:0;padding:0;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    @page{size:A4 portrait;margin:12mm}
+    body{padding:6mm;color:#111}
+    .cab{text-align:center;border-bottom:2px solid #111;padding-bottom:3mm;margin-bottom:4mm}
+    .cab .m{font-size:8px;font-weight:bold;letter-spacing:3px;color:#666}
+    .cab h1{font-size:16px;text-transform:uppercase}
+    .cab .s{font-size:10px;color:#444;margin-top:1mm}
+    .club{page-break-inside:avoid;margin-bottom:5mm}
+    .club-h{display:flex;align-items:center;gap:2mm;background:#171e2e;color:#fff;border-radius:2mm;padding:1.5mm 3mm;font-size:11px;font-weight:800;text-transform:uppercase}
+    .club-h img{width:6mm;height:6mm;object-fit:contain;background:#fff;border-radius:1mm;padding:.4mm}
+    .cat-h{font-size:8.5px;font-weight:bold;color:#666;text-transform:uppercase;border-bottom:1px solid #999;margin:2mm 0 1mm;padding-bottom:.5mm}
+    .fila{display:flex;align-items:center;gap:3mm;padding:1mm 0;border-bottom:1px solid #e5e5e5;page-break-inside:avoid}
+    .foto{width:11mm;height:11mm;border-radius:50%;object-fit:cover;flex-shrink:0}
+    .foto-ini{background:#e2e5ec;color:#5b6478;display:grid;place-items:center;font-size:3.2mm;font-weight:800}
+    .rol{width:30mm;font-size:8px;font-weight:bold;text-transform:uppercase;color:#0369a1;flex-shrink:0}
+    .nom{flex:1;font-size:10.5px;font-weight:bold}
+    .inh{color:#d9232e;font-size:8px}
+    .doc{font-family:monospace;font-size:10px;color:#333}
+    .pie{margin-top:5mm;font-size:8px;color:#888;text-align:center}
+    .barra{position:sticky;top:0;background:#111;color:#fff;padding:10px;text-align:center;font-size:13px;margin:-6mm -6mm 6mm}
+    .barra button{background:#d9232e;color:#fff;border:0;border-radius:8px;padding:8px 18px;font-weight:bold;font-size:13px;cursor:pointer;margin-right:10px}
+    @media print{.barra{display:none}}
+  </style></head><body>
+    <div class="barra"><button onclick="print()">🖨 IMPRIMIR / GUARDAR PDF</button>En el diálogo elige "Guardar como PDF"</div>
+    <div class="cab">
+      <div class="m">LIGUIFY · RELACIÓN OFICIAL</div>
+      <h1>Comando Técnico — ${esc(TORNEO.nombre)}</h1>
+      <div class="s">${esc(MARCA.nombre)} · generado el ${new Date().toLocaleDateString('es-PE',{dateStyle:'long'})}</div>
+    </div>
+    ${cuerpo}
+    <p class="pie">${n} miembro(s) de comando técnico · ordenados por club y categoría · ⚡ Powered by Liguify</p>
+    <script>window.onload=function(){setTimeout(function(){window.print();},800);};<\/script>
+  </body></html>`);
+  w.document.close();
+}
+
 /* Duración del partido por categoría (base de %participación y por-90) */
 function modalDuracionCat(){
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⏱ DURACIÓN DEL PARTIDO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
