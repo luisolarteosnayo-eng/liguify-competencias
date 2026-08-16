@@ -459,8 +459,9 @@ function carnetCTCard(d){
   const qr=qrcode(0,'M'); qr.addData(`https://www.liguify.com/verificar?ct=${d.token}`); qr.make();
   const qrSvg=qr.createSvgTag({cellSize:2,margin:0}).replace(/width="\d+px"/,'width="100%"').replace(/height="\d+px"/,'height="100%"');
   return `<div style="width:85.6mm;height:54mm;border-radius:3mm;overflow:hidden;position:relative;background:#171e2e;color:#fff;font-family:Inter,Arial,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.25)">
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:2.5mm 4mm 0">
-      <span style="font-size:2.2mm;font-weight:800;letter-spacing:.5mm;text-transform:uppercase;color:rgba(255,255,255,.55)">${EQ.marca} · ${EQ.torneo}</span>
+    <div style="display:flex;align-items:center;gap:2mm;padding:2.5mm 4mm 0">
+      ${d.logoT?`<img src="${d.logoT}" style="width:8mm;height:8mm;object-fit:contain;background:#fff;border-radius:50%;padding:.4mm"/>`:''}
+      <span style="flex:1;font-size:2.2mm;font-weight:800;letter-spacing:.5mm;text-transform:uppercase;color:rgba(255,255,255,.55)">${EQ.marca} · ${EQ.torneo}</span>
       ${EQ.escudo_url?`<img src="${EQ.escudo_url}" style="width:8mm;height:8mm;object-fit:contain;background:#fff;border-radius:1.5mm;padding:.5mm"/>`:''}
     </div>
     <div style="display:flex;align-items:center;gap:3.5mm;padding:2mm 4mm 0">
@@ -485,6 +486,9 @@ async function carnetCT(d){
     const up=await sb.from('comando_tecnico').update({qr_token:d.token}).eq('id',d.id).select('qr_token').single();
     if(up.error){toast(errNegocio(up.error));return;}
   }
+  // logo del torneo para la cabecera de la tarjeta
+  const tq=await sb.from('torneo').select('logo_url,marca:marca_id(logo_url)').eq('id',EQ.torneo_id).single();
+  d.logoT=(tq.data&&(tq.data.logo_url||(tq.data.marca&&tq.data.marca.logo_url)))||null;
   window.__CT_CARNET=d;
   abrirModal(`<div class="flex items-center justify-between mb-3"><h3 class="font-display text-2xl tracking-wide">🪪 CARNET · COMANDO TÉCNICO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
     <div class="flex justify-center mb-3">${carnetCTCard(d)}</div>

@@ -1024,11 +1024,13 @@ async function renderCT(){
    seguridad → liguify.com/verificar?ct=<token> valida EN VIVO contra la BD ---- */
 function carnetCTCard(d){
   const cl=CLUBES[EQUIPO.club_id]||{};
+  const logoT=TORNEO.logo_url||MARCA.logo_url||null;
   const qr=qrcode(0,'M'); qr.addData(`https://www.liguify.com/verificar?ct=${d.token}`); qr.make();
   const qrSvg=qr.createSvgTag({cellSize:2,margin:0}).replace(/width="\d+px"/,'width="100%"').replace(/height="\d+px"/,'height="100%"');
   return `<div style="width:85.6mm;height:54mm;border-radius:3mm;overflow:hidden;position:relative;background:#171e2e;color:#fff;font-family:Inter,Arial,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.25)">
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:2.5mm 4mm 0">
-      <span style="font-size:2.2mm;font-weight:800;letter-spacing:.5mm;text-transform:uppercase;color:rgba(255,255,255,.55)">${MARCA.nombre} · ${TORNEO.nombre}</span>
+    <div style="display:flex;align-items:center;gap:2mm;padding:2.5mm 4mm 0">
+      ${logoT?`<img src="${logoT}" style="width:8mm;height:8mm;object-fit:contain;background:#fff;border-radius:50%;padding:.4mm"/>`:''}
+      <span style="flex:1;font-size:2.2mm;font-weight:800;letter-spacing:.5mm;text-transform:uppercase;color:rgba(255,255,255,.55)">${MARCA.nombre} · ${TORNEO.nombre}</span>
       ${cl.escudo_url?`<img src="${cl.escudo_url}" style="width:8mm;height:8mm;object-fit:contain;background:#fff;border-radius:1.5mm;padding:.5mm"/>`:''}
     </div>
     <div style="display:flex;align-items:center;gap:3.5mm;padding:2mm 4mm 0">
