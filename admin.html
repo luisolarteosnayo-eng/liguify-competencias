@@ -62,7 +62,6 @@ tailwind.config={theme:{extend:{
     <div class="flex items-center justify-between mb-3 mt-6 flex-wrap gap-2">
       <h2 class="font-display text-2xl tracking-wide">TORNEOS DE LA MARCA</h2>
       <div class="flex gap-2">
-        <button onclick="modalVerificarPersona()" class="bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-sm hover:bg-emerald-800" title="Validar jugador o comando técnico: escanea el QR del carnet, digita/escanea el DNI o lee el NFC">🪪 VERIFICAR</button>
         <button onclick="modalDuplicados()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper" title="Jugadores con el mismo documento en más de un equipo de la marca">🔎 DUPLICADOS</button>
         <button onclick="modalNuevoTorneo()" id="btn-nuevo-torneo" class="hidden bg-brand-500 text-white font-bold px-4 py-2 rounded-xl text-sm hover:bg-brand-600">+ NUEVO TORNEO</button>
       </div>
@@ -76,6 +75,7 @@ tailwind.config={theme:{extend:{
     <div class="flex items-center justify-between flex-wrap gap-2 mb-4">
       <h1 id="t-titulo" class="font-display text-4xl tracking-wide"></h1>
       <div class="flex gap-2 flex-wrap">
+        <button onclick="modalVerificarPersona()" title="Validar si un jugador o CT está inscrito en ESTE torneo: escanea el QR, digita/escanea el DNI o lee el NFC" class="bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-emerald-800">🪪 VERIFICAR</button>
         <button onclick="pdfComandoTecnico()" title="Relación del comando técnico de todo el torneo (foto, DNI, nombres) — para torneos sin carnets" class="bg-white border border-line font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-paper">🖨 COMANDO TÉCNICO</button>
         <button onclick="modalCategoria()" class="bg-brand-500 text-white font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-brand-600">+ NUEVA CATEGORÍA</button>
       </div>
@@ -572,7 +572,11 @@ async function guardarTorneo(id){
    Un solo campo: las pistolas lectoras "tipean" el valor + Enter. ---- */
 function modalVerificarPersona(){
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">🪪 VERIFICAR JUGADOR / CT</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
-    <p class="text-xs text-ink-400 mb-3">Escanea el <b>QR</b> del carnet, digita o escanea el <b>N° de documento</b>, o acerca la tarjeta <b>NFC</b>. La validez se comprueba en vivo contra la base de datos.</p>
+    <div class="bg-ink-900 text-white rounded-2xl px-4 py-3 mb-3 text-center">
+      <p class="text-[10px] uppercase tracking-widest text-white/50 font-bold">Validando inscripción en</p>
+      <p class="font-display text-3xl tracking-wide leading-tight">${TORNEO.nombre.toUpperCase()}</p>
+    </div>
+    <p class="text-xs text-ink-400 mb-3">Escanea el <b>QR</b> del carnet, digita o escanea el <b>N° de documento</b>, o acerca la tarjeta <b>NFC</b>. La validez se comprueba en vivo contra la base de datos, solo para este torneo.</p>
     <div class="flex gap-2 mb-3">
       <select id="vf-pais" class="border border-line rounded-xl px-2 py-2 text-sm font-semibold bg-white"><option>PE</option><option>AR</option><option>BO</option><option>BR</option><option>CL</option><option>CO</option><option>EC</option><option>UY</option><option>VE</option></select>
       <input id="vf-in" placeholder="QR · N° documento · NFC" autocomplete="off" class="flex-1 border-2 border-emerald-600 rounded-xl px-3 py-2 text-sm font-bold" onkeydown="if(event.key==='Enter')verificarPersona()"/>
@@ -602,21 +606,31 @@ async function verificarPersona(){
       </div>
     </div>`;
   try{
-    // 1) ¿es un QR? (URL de /verificar o token)
+    // 1) ¿es un QR? (URL de /verificar o token) — el carnet debe ser de ESTE torneo
     const mCT=raw.match(/[?&]ct=([A-Za-z0-9]+)/), mJ=raw.match(/[?&]c=([A-Za-z0-9]+)/);
     const tokenSuelto=/^[A-Za-z0-9]{24,40}$/.test(raw)?raw:null;
     if(mCT||mJ||tokenSuelto){
       if(mCT){
         const {data:d,error}=await sb.rpc('verificar_carnet_ct',{p_token:mCT[1]});
         if(error)throw error;
-        out.innerHTML=d.error?banner(false,'CARNET NO ENCONTRADO'):fichaRPC(d,(d.rol||'CT')+' · COMANDO TÉCNICO');
+        if(d.error){out.innerHTML=banner(false,'CARNET NO ENCONTRADO');return;}
+        const {data:ctTok}=await sb.from('comando_tecnico').select('id,categoria:categoria_id(torneo_id)').eq('qr_token',mCT[1]).maybeSingle();
+        if(ctTok&&ctTok.categoria&&ctTok.categoria.torneo_id!==TORNEO.id){
+          out.innerHTML=banner(false,'NO PERTENECE A ESTE TORNEO')+`<p class="text-xs text-ink-500 mb-2 text-center">El carnet es del torneo <b>${d.torneo||'—'}</b>.</p>`+fichaRPC(d,(d.rol||'CT')+' · COMANDO TÉCNICO');
+          return;
+        }
+        out.innerHTML=fichaRPC(d,(d.rol||'CT')+' · COMANDO TÉCNICO');
         return;
       }
       const tok=mJ?mJ[1]:tokenSuelto;
       const {data:d,error}=await sb.rpc('verificar_carnet_jugador',{p_token:tok});
       if(error)throw error;
       if(!d.error){
-        const {data:insTok}=await sb.from('inscripcion_lbf').select('id,dorsal').eq('qr_token',tok).maybeSingle();
+        const {data:insTok}=await sb.from('inscripcion_lbf').select('id,dorsal,categoria:categoria_id(torneo_id)').eq('qr_token',tok).maybeSingle();
+        if(insTok&&insTok.categoria&&insTok.categoria.torneo_id!==TORNEO.id){
+          out.innerHTML=banner(false,'NO PERTENECE A ESTE TORNEO')+`<p class="text-xs text-ink-500 mb-2 text-center">El carnet es del torneo <b>${d.torneo||'—'}</b>.</p>`+fichaRPC(d,'JUGADOR'+(d.dorsal!=null?' · #'+d.dorsal:''));
+          return;
+        }
         out.innerHTML=fichaRPC(d,'JUGADOR'+(d.dorsal!=null?' · #'+d.dorsal:''))+`
         <div class="border border-line rounded-xl px-3 py-1 text-sm mb-2">
           ${[['Identidad verificada',d.verificado],['En Lista de Buena Fe',d.en_lbf],['Habilitado (activo)',d.estado==='activo'],['Sin sanción del torneo',!d.inhabilitado],['Sin sanción global',!d.sancion_global]].map(([l,c])=>`<div class="flex justify-between py-1 border-b border-line last:border-0"><span class="text-ink-500 text-xs">${l}</span><b class="${c?'text-emerald-600':'text-brand-600'}">${c?'✔':'✖'}</b></div>`).join('')}
@@ -643,17 +657,17 @@ async function verificarPersona(){
     const hoy=new Date().toISOString().slice(0,10);
     const {data:sg}=await sb.from('sancion_global').select('id,vigencia_desde,vigencia_hasta').eq('jugador_id',j.id);
     const sancion=(sg||[]).some(s=>s.vigencia_desde<=hoy&&(!s.vigencia_hasta||s.vigencia_hasta>=hoy));
-    // inscripciones y CT de la persona EN ESTA MARCA
+    // inscripciones y CT de la persona EN ESTE TORNEO
     const [insQ,ctQ]=await Promise.all([
-      sb.from('inscripcion_lbf').select('id,dorsal,estado,en_lbf,inhabilitado,equipo:equipo_id(nombre,club:club_id(nombre)),categoria:categoria_id(nombre_display,torneo:torneo_id(nombre,marca_id))').eq('jugador_id',j.id),
-      sb.from('comando_tecnico').select('id,rol,estado,inhabilitado,equipo:equipo_id(nombre,club:club_id(nombre)),categoria:categoria_id(nombre_display,torneo:torneo_id(nombre,marca_id))').eq('persona_id',j.id)
+      sb.from('inscripcion_lbf').select('id,dorsal,estado,en_lbf,inhabilitado,equipo:equipo_id(nombre,club:club_id(nombre)),categoria:categoria_id(nombre_display,torneo_id)').eq('jugador_id',j.id),
+      sb.from('comando_tecnico').select('id,rol,estado,inhabilitado,equipo:equipo_id(nombre,club:club_id(nombre)),categoria:categoria_id(nombre_display,torneo_id)').eq('persona_id',j.id)
     ]);
-    const deMarca=r=>r.categoria&&r.categoria.torneo&&r.categoria.torneo.marca_id===MARCA.id;
-    const ins=(insQ.data||[]).filter(deMarca), cts=(ctQ.data||[]).filter(deMarca);
+    const deTorneo=r=>r.categoria&&r.categoria.torneo_id===TORNEO.id;
+    const ins=(insQ.data||[]).filter(deTorneo), cts=(ctQ.data||[]).filter(deTorneo);
     const okGlobal=!sancion&&(ins.some(i=>i.en_lbf&&i.estado==='activo'&&!i.inhabilitado)||cts.some(c=>c.estado==='activo'&&!c.inhabilitado));
     const nomEq2=r=>(r.equipo&&(r.equipo.nombre||(r.equipo.club||{}).nombre))||'—';
     out.innerHTML=`
-      ${banner(okGlobal, okGlobal?'VÁLIDO EN '+MARCA.nombre.toUpperCase():(ins.length||cts.length?'CON OBSERVACIONES':'SIN REGISTROS EN '+MARCA.nombre.toUpperCase()))}
+      ${banner(okGlobal, okGlobal?'VÁLIDO EN ESTE TORNEO':(ins.length||cts.length?'CON OBSERVACIONES':'NO INSCRITO EN ESTE TORNEO'))}
       <div class="bg-ink-900 text-white rounded-2xl p-4 mb-2">
         <div class="flex items-center gap-3">
           ${j.foto_url?`<img src="${j.foto_url}" class="w-16 h-16 rounded-xl object-cover"/>`:`<span class="w-16 h-16 rounded-xl bg-ink-700 grid place-items-center font-bold">${iniciales((j.nombres||'')+' '+(j.apellidos||''))}</span>`}
@@ -666,7 +680,7 @@ async function verificarPersona(){
       </div>
       ${ins.length?`<p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1">Como jugador</p>`+ins.map(i=>`
         <div class="flex items-center gap-2 border border-line rounded-xl px-3 py-2 mb-1.5 text-sm flex-wrap">
-          <span class="flex-1 min-w-0"><b>${nomEq2(i)}</b><span class="block text-[10px] text-ink-400">${(i.categoria||{}).nombre_display||''} · ${((i.categoria||{}).torneo||{}).nombre||''}</span></span>
+          <span class="flex-1 min-w-0"><b>${nomEq2(i)}</b><span class="block text-[10px] text-ink-400">${(i.categoria||{}).nombre_display||''}</span></span>
           ${chip(i.en_lbf,'LBF')} ${chip(i.estado==='activo',i.estado.toUpperCase())} ${i.inhabilitado?chip(false,'INHABILITADO'):''}
           <span class="flex items-center gap-1.5" title="Confirmar o corregir el número de camiseta">
             <span class="text-[10px] font-bold text-ink-400">#</span>
@@ -676,10 +690,10 @@ async function verificarPersona(){
         </div>`).join(''):''}
       ${cts.length?`<p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1 mt-2">Como comando técnico</p>`+cts.map(c=>`
         <div class="flex items-center gap-2 border border-line rounded-xl px-3 py-2 mb-1.5 text-sm">
-          <span class="flex-1 min-w-0"><b>${nomEq2(c)}</b> · ${c.rol}<span class="block text-[10px] text-ink-400">${(c.categoria||{}).nombre_display||''} · ${((c.categoria||{}).torneo||{}).nombre||''}</span></span>
+          <span class="flex-1 min-w-0"><b>${nomEq2(c)}</b> · ${c.rol}<span class="block text-[10px] text-ink-400">${(c.categoria||{}).nombre_display||''}</span></span>
           ${chip(c.estado==='activo',c.estado.toUpperCase())} ${c.inhabilitado?chip(false,'INHABILITADO'):''}
         </div>`).join(''):''}
-      ${!ins.length&&!cts.length?'<p class="text-xs text-ink-400">Esta persona existe en la maestra de Liguify pero no tiene inscripciones ni roles en los torneos de tu marca.</p>':''}`;
+      ${!ins.length&&!cts.length?'<p class="text-xs text-ink-400">Esta persona existe en la maestra de Liguify pero no está inscrita (ni como jugador ni como comando técnico) en <b>'+TORNEO.nombre+'</b>.</p>':''}`;
   }catch(e){out.innerHTML=`<p class="text-xs font-bold text-brand-600">⚠ ${e.message||e}</p>`;}
   $('vf-in').value=''; $('vf-in').focus();
 }
