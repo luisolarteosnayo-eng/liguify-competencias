@@ -2205,10 +2205,10 @@ async function toggleHorarios(jid,mostrar){
 }
 
 /* ---- ÁLBUM DEL EQUIPO estilo Panini en A3 HORIZONTAL (2480×1754 ≈ 150dpi):
-   jugadores + comando técnico en una sola hoja; la cuadrícula se auto-ajusta
-   al tamaño del plantel para que los cromos queden proporcionales.
-   Fotos de jugadores SOLO con consentimiento (regla del público); el CT
-   (adultos del staff) muestra su foto siempre. ---- */
+   jugadores + comando técnico en una sola hoja. Pensado para imprimirse en
+   DOS A4: la calle central queda LIBRE (ningún cromo cruza el corte).
+   Álbum interno: TODAS las fotos (sin filtro de consentimiento), completas
+   (sin recorte) y con el puesto del jugador bajo el nombre. ---- */
 async function albumEquipo(){
   const [insQ,ctQ]=await Promise.all([
     sb.from('inscripcion_lbf').select('id,dorsal,capitan,jugador_id').eq('equipo_id',EQUIPO.id).eq('en_lbf',true).eq('inhabilitado',false).order('dorsal'),
@@ -2219,32 +2219,34 @@ async function albumEquipo(){
   if(!ins.length&&!cts.length){toast('⚠ Este equipo aún no tiene jugadores en la LBF');return;}
   toast('🖼 Generando álbum A3…');
   const pids=[...new Set([...ins.map(i=>i.jugador_id),...cts.map(c=>c.persona_id)])];
-  const {data:js}=await sb.from('jugador_maestro').select('id,nombres,apellidos,foto_url,consentimiento_imagen').in('id',pids);
+  const {data:js}=await sb.from('jugador_maestro').select('id,nombres,apellidos,foto_url,posicion').in('id',pids);
   const jm=Object.fromEntries((js||[]).map(j=>[j.id,j]));
   const cl=CLUBES[EQUIPO.club_id]||{};
   await Promise.all([document.fonts.load('80px "Bebas Neue"'),document.fonts.load('700 30px Inter'),document.fonts.load('800 26px Inter')]);
   const [logoT,escudo]=await Promise.all([cargarImg(TORNEO.logo_url||MARCA.logo_url),cargarImg(cl.escudo_url)]);
-  // tarjetas: jugadores (foto solo con consentimiento) + CT (foto siempre)
   const cards=[
-    ...ins.map(i=>{const j=jm[i.jugador_id]||{};return {tipo:'j',dorsal:i.dorsal,capitan:i.capitan,j,foto:(j.consentimiento_imagen&&j.foto_url)?j.foto_url:null};}),
-    ...cts.map(c=>{const j=jm[c.persona_id]||{};return {tipo:'ct',rol:c.rol,j,foto:j.foto_url||null};})
+    ...ins.map(i=>{const j=jm[i.jugador_id]||{};return {tipo:'j',dorsal:i.dorsal,capitan:i.capitan,j,foto:j.foto_url||null,sub:j.posicion||''};}),
+    ...cts.map(c=>{const j=jm[c.persona_id]||{};return {tipo:'ct',rol:c.rol,j,foto:j.foto_url||null,sub:c.rol};})
   ];
   await Promise.all(cards.map(async c=>{c.img=c.foto?await cargarImg(c.foto):null;}));
-  // ---- lienzo A3 horizontal ----
-  const W=2480,H=1754,M=70,HEAD=290,FOOT=70,GAP=20;
-  const Wc=W-M*2, Hc=H-HEAD-FOOT-30, total=cards.length, R=1.27; // alto de carta = ancho×R
-  let best={cw:0,cols:6};
-  for(let cols=3;cols<=16;cols++){
-    const rows=Math.ceil(total/cols);
-    const cwW=(Wc-(cols-1)*GAP)/cols;
+  // ---- lienzo A3 horizontal con CALLE CENTRAL (corte en dos A4) ----
+  const W=2480,H=1754,M=70,HEAD=290,FOOT=70,GAP=20,GUT=90;
+  const Hc=H-HEAD-FOOT-30, total=cards.length, R=1.5;   // alto de carta = ancho×1.5 (foto vertical completa)
+  const Wh=(W-M*2-GUT)/2;                                // ancho útil de cada media hoja A4
+  let best={cw:0,cph:3};
+  for(let cph=2;cph<=8;cph++){                           // columnas POR MITAD (total = 2×cph)
+    const cols=cph*2, rows=Math.ceil(total/cols);
+    const cwW=(Wh-(cph-1)*GAP)/cph;
     const cwH=((Hc-(rows-1)*GAP)/rows)/R;
     const cw=Math.min(cwW,cwH);
-    if(cw>best.cw) best={cw,cols};
+    if(cw>best.cw) best={cw,cph};
   }
-  const CW=Math.floor(best.cw), COLS=best.cols, CH=Math.floor(CW*R), NH=CH-CW;
+  const CW=Math.floor(best.cw), CPH=best.cph, COLS=CPH*2, CH=Math.floor(CW*R);
   const rows=Math.ceil(total/COLS);
-  const gridW=COLS*CW+(COLS-1)*GAP, gridH=rows*CH+(rows-1)*GAP;
-  const X0=(W-gridW)/2, Y0=HEAD+30+(Hc-gridH)/2;
+  const halfW=CPH*CW+(CPH-1)*GAP;
+  const XIZQ=(W-(halfW*2+GUT))/2, XDER=XIZQ+halfW+GUT;
+  const gridH=rows*CH+(rows-1)*GAP;
+  const Y0=HEAD+30+(Hc-gridH)/2;
   const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
   const x=cv.getContext('2d');
   x.fillStyle='#101626'; x.fillRect(0,0,W,H);
@@ -2268,47 +2270,54 @@ async function albumEquipo(){
   x.fillText(`${TORNEO.nombre.toUpperCase()} · ${(CAT.nombre_display||'').toUpperCase()}`,W/2,256);
   x.fillStyle='#d4af37'; x.fillRect(M,282,W-M*2,5);
   x.textAlign='left';
-  // cromos
+  // cromos: mitad izquierda y mitad derecha (la calle central queda libre)
   const pad=Math.max(8,Math.round(CW*0.045));
+  const SH=Math.round(CW*0.34);                          // franja nombre+puesto (2 líneas)
   cards.forEach((c,k)=>{
     const col=k%COLS, row=Math.floor(k/COLS);
-    const cx0=X0+col*(CW+GAP), cy0=Y0+row*(CH+GAP);
+    const cx0=(col<CPH?XIZQ+col*(CW+GAP):XDER+(col-CPH)*(CW+GAP)), cy0=Y0+row*(CH+GAP);
     const esCT=c.tipo==='ct';
     x.fillStyle='#fff';
     x.beginPath(); x.roundRect(cx0,cy0,CW,CH,Math.round(CW*0.06)); x.fill();
     x.strokeStyle='#d4af37'; x.lineWidth=Math.max(3,CW*0.022); x.stroke();
-    const fw=CW-pad*2, fh=CW-pad*2;
+    // foto COMPLETA (contain, sin recorte) sobre fondo claro
+    const fw=CW-pad*2, fh=CH-pad*3-SH;
     x.save(); x.beginPath(); x.roundRect(cx0+pad,cy0+pad,fw,fh,Math.round(CW*0.035)); x.clip();
     if(c.img){
-      const s=Math.max(fw/c.img.width,fh/c.img.height);
+      x.fillStyle='#eef1f6'; x.fillRect(cx0+pad,cy0+pad,fw,fh);
+      const s=Math.min(fw/c.img.width,fh/c.img.height);
       x.drawImage(c.img,cx0+pad+(fw-c.img.width*s)/2,cy0+pad+(fh-c.img.height*s)/2,c.img.width*s,c.img.height*s);
     }else{
       x.fillStyle='#2b3550'; x.fillRect(cx0+pad,cy0+pad,fw,fh);
-      x.fillStyle='#8b93a7'; x.font=`800 ${Math.round(fw*0.32)}px Inter`; x.textAlign='center'; x.textBaseline='middle';
+      x.fillStyle='#8b93a7'; x.font=`800 ${Math.round(fw*0.3)}px Inter`; x.textAlign='center'; x.textBaseline='middle';
       x.fillText(iniciales((c.j.nombres||'')+' '+(c.j.apellidos||'')),cx0+CW/2,cy0+pad+fh/2);
       x.textAlign='left'; x.textBaseline='alphabetic';
     }
     x.restore();
-    // franja de nombre (CT en dorado; jugadores en oscuro)
-    const sy=cy0+CW, sh=NH-pad;
+    // franja: nombre + puesto/rol (CT en dorado; jugadores en oscuro)
+    const sy=cy0+pad*2+fh;
     x.fillStyle=esCT?'#d4af37':'#171e2e';
-    x.beginPath(); x.roundRect(cx0+pad,sy,CW-pad*2,sh,Math.round(CW*0.035)); x.fill();
+    x.beginPath(); x.roundRect(cx0+pad,sy,CW-pad*2,SH,Math.round(CW*0.035)); x.fill();
     const primer=((c.j.nombres||'').trim().split(/\s+/)[0]||'—').toUpperCase()+(c.capitan?' (C)':'');
-    if(esCT){
-      x.fillStyle='#171e2e'; x.textAlign='center'; x.textBaseline='middle';
-      x.font=fitText(primer,`${Math.round(sh*0.5)}px "Bebas Neue"`,CW-pad*2-16);
-      x.fillText(primer,cx0+CW/2,sy+sh*0.34);
-      x.font=fitText(c.rol.toUpperCase(),`700 ${Math.round(sh*0.24)}px Inter`,CW-pad*2-16);
-      x.fillText(c.rol.toUpperCase(),cx0+CW/2,sy+sh*0.74);
-    }else{
-      if(c.dorsal!=null){x.fillStyle='#ffd166';x.font=`${Math.round(sh*0.52)}px "Bebas Neue"`;x.textAlign='left';x.textBaseline='middle';
-        x.fillText(String(c.dorsal),cx0+pad+Math.round(CW*0.05),sy+sh/2+1);}
-      x.fillStyle='#fff'; x.textAlign='center'; x.textBaseline='middle';
-      x.font=fitText(primer,`${Math.round(sh*0.55)}px "Bebas Neue"`,CW-pad*2-Math.round(CW*0.24));
-      x.fillText(primer,cx0+CW/2+Math.round(CW*0.03),sy+sh/2+1);
+    const sub=(c.sub||'').toUpperCase();
+    x.textAlign='center'; x.textBaseline='middle';
+    x.fillStyle=esCT?'#171e2e':'#fff';
+    x.font=fitText(primer,`${Math.round(SH*0.42)}px "Bebas Neue"`,CW-pad*2-(esCT?16:Math.round(CW*0.24)));
+    x.fillText(primer,cx0+CW/2+(esCT?0:Math.round(CW*0.03)),sy+SH*(sub?0.32:0.5));
+    if(sub){
+      x.fillStyle=esCT?'rgba(23,30,46,.75)':'rgba(255,255,255,.65)';
+      x.font=fitText(sub,`700 ${Math.round(SH*0.2)}px Inter`,CW-pad*2-16);
+      x.fillText(sub,cx0+CW/2,sy+SH*0.74);
+    }
+    if(!esCT&&c.dorsal!=null){
+      x.fillStyle='#ffd166'; x.font=`${Math.round(SH*0.44)}px "Bebas Neue"`; x.textAlign='left';
+      x.fillText(String(c.dorsal),cx0+pad+Math.round(CW*0.05),sy+SH/2+1);
     }
     x.textAlign='left'; x.textBaseline='alphabetic';
   });
+  // guías de corte (marca sutil en la calle central, fuera de los cromos)
+  x.strokeStyle='rgba(255,255,255,.18)'; x.lineWidth=1; x.setLineDash([10,12]);
+  x.beginPath(); x.moveTo(W/2,HEAD+8); x.lineTo(W/2,H-FOOT); x.stroke(); x.setLineDash([]);
   x.fillStyle='#8b93a7'; x.font='600 28px Inter'; x.textAlign='center';
   x.fillText('⚡ Powered by Liguify · liguify.com/'+(MARCA.slug||''),W/2,H-28);
   x.textAlign='left';
