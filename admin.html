@@ -615,10 +615,17 @@ async function verificarPersona(){
       const tok=mJ?mJ[1]:tokenSuelto;
       const {data:d,error}=await sb.rpc('verificar_carnet_jugador',{p_token:tok});
       if(error)throw error;
-      if(!d.error){out.innerHTML=fichaRPC(d,'JUGADOR'+(d.dorsal!=null?' · #'+d.dorsal:''))+`
-        <div class="border border-line rounded-xl px-3 py-1 text-sm">
+      if(!d.error){
+        const {data:insTok}=await sb.from('inscripcion_lbf').select('id,dorsal').eq('qr_token',tok).maybeSingle();
+        out.innerHTML=fichaRPC(d,'JUGADOR'+(d.dorsal!=null?' · #'+d.dorsal:''))+`
+        <div class="border border-line rounded-xl px-3 py-1 text-sm mb-2">
           ${[['Identidad verificada',d.verificado],['En Lista de Buena Fe',d.en_lbf],['Habilitado (activo)',d.estado==='activo'],['Sin sanción del torneo',!d.inhabilitado],['Sin sanción global',!d.sancion_global]].map(([l,c])=>`<div class="flex justify-between py-1 border-b border-line last:border-0"><span class="text-ink-500 text-xs">${l}</span><b class="${c?'text-emerald-600':'text-brand-600'}">${c?'✔':'✖'}</b></div>`).join('')}
-        </div>`; return;}
+        </div>
+        ${insTok?`<div class="flex items-center gap-2 border-2 border-emerald-200 bg-emerald-50 rounded-xl px-3 py-2">
+          <span class="text-xs font-bold text-ink-700 flex-1">N° de camiseta</span>
+          <input id="vf-d-${insTok.id}" type="number" min="0" value="${insTok.dorsal??''}" class="w-16 border border-line rounded-lg text-center py-1 text-sm font-bold bg-white"/>
+          <button onclick="confirmarDorsal('${insTok.id}')" class="bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-emerald-800">✔ CONFIRMAR</button>
+        </div>`:''}`; return;}
       // token de CT probado como jugador: intentar CT
       const {data:d2}=await sb.rpc('verificar_carnet_ct',{p_token:tok});
       out.innerHTML=(d2&&!d2.error)?fichaRPC(d2,(d2.rol||'CT')+' · COMANDO TÉCNICO'):banner(false,'CARNET NO ENCONTRADO');
@@ -658,9 +665,14 @@ async function verificarPersona(){
         </div>
       </div>
       ${ins.length?`<p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1">Como jugador</p>`+ins.map(i=>`
-        <div class="flex items-center gap-2 border border-line rounded-xl px-3 py-2 mb-1.5 text-sm">
-          <span class="flex-1 min-w-0"><b>${nomEq2(i)}</b>${i.dorsal!=null?' · #'+i.dorsal:''}<span class="block text-[10px] text-ink-400">${(i.categoria||{}).nombre_display||''} · ${((i.categoria||{}).torneo||{}).nombre||''}</span></span>
+        <div class="flex items-center gap-2 border border-line rounded-xl px-3 py-2 mb-1.5 text-sm flex-wrap">
+          <span class="flex-1 min-w-0"><b>${nomEq2(i)}</b><span class="block text-[10px] text-ink-400">${(i.categoria||{}).nombre_display||''} · ${((i.categoria||{}).torneo||{}).nombre||''}</span></span>
           ${chip(i.en_lbf,'LBF')} ${chip(i.estado==='activo',i.estado.toUpperCase())} ${i.inhabilitado?chip(false,'INHABILITADO'):''}
+          <span class="flex items-center gap-1.5" title="Confirmar o corregir el número de camiseta">
+            <span class="text-[10px] font-bold text-ink-400">#</span>
+            <input id="vf-d-${i.id}" type="number" min="0" value="${i.dorsal??''}" class="w-14 border border-line rounded-lg text-center py-1 text-xs font-bold"/>
+            <button onclick="confirmarDorsal('${i.id}')" class="bg-emerald-700 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-lg hover:bg-emerald-800">✔</button>
+          </span>
         </div>`).join(''):''}
       ${cts.length?`<p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1 mt-2">Como comando técnico</p>`+cts.map(c=>`
         <div class="flex items-center gap-2 border border-line rounded-xl px-3 py-2 mb-1.5 text-sm">
@@ -670,6 +682,17 @@ async function verificarPersona(){
       ${!ins.length&&!cts.length?'<p class="text-xs text-ink-400">Esta persona existe en la maestra de Liguify pero no tiene inscripciones ni roles en los torneos de tu marca.</p>':''}`;
   }catch(e){out.innerHTML=`<p class="text-xs font-bold text-brand-600">⚠ ${e.message||e}</p>`;}
   $('vf-in').value=''; $('vf-in').focus();
+}
+
+/* Confirmar/corregir el N° de camiseta desde el verificador (staff) */
+async function confirmarDorsal(insId){
+  const el2=$('vf-d-'+insId); if(!el2) return;
+  const v=el2.value.trim();
+  const dorsal=v===''?null:Math.max(0,+v||0);
+  const {error}=await sb.from('inscripcion_lbf').update({dorsal}).eq('id',insId);
+  if(error){toast(errNegocio(error));return;}
+  toast(dorsal!=null?`✔ Camiseta #${dorsal} confirmada`:'Dorsal quitado');
+  const inp=$('vf-in'); if(inp) inp.focus();
 }
 
 /* ---- Reporte de jugadores duplicados (misma persona en varios equipos) ---- */
