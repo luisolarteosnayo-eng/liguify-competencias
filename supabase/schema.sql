@@ -1068,10 +1068,16 @@ as $$
   select coalesce((
     select jsonb_build_object(
       'tipo','jugador',
-      'valido', (i.en_lbf and i.estado = 'activo' and not i.inhabilitado and not exists (
+      -- habilitación por config del torneo: sin requisito de autorización,
+      -- el estado PENDIENTE no bloquea
+      'valido', (i.en_lbf and not i.inhabilitado
+                 and (i.estado = 'activo' or not t.requiere_autorizacion)
+                 and not exists (
         select 1 from competencias.sancion_global s
         where s.jugador_id = j.id and s.vigencia_desde <= current_date
           and (s.vigencia_hasta is null or s.vigencia_hasta >= current_date))),
+      'habilitado', (i.estado = 'activo' or not t.requiere_autorizacion),
+      'requiere_autorizacion', t.requiere_autorizacion,
       'en_lbf', i.en_lbf, 'estado', i.estado, 'inhabilitado', i.inhabilitado,
       'sancion_global', exists (
         select 1 from competencias.sancion_global s

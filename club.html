@@ -401,13 +401,15 @@ async function renderPlantel(){
           <span class="doc text-xs text-ink-500">${j.nro_documento||''}</span>
           <span class="flex items-center gap-1.5 ml-auto">
             ${REQ_AUT&&!j.autorizacion_url?'<span class="text-[9px] font-bold bg-amber-100 text-amber-700 rounded-full px-2 py-0.5" title="Falta la autorización de Padre/Tutor">📄 AUT. PENDIENTE</span>':''}
-            <span class="text-[10px] font-bold px-2 py-1 rounded-full ${i.inhabilitado?'bg-brand-100 text-brand-600':i.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${i.inhabilitado?'INHABILITADO':i.estado.toUpperCase()}</span>
+            <span class="text-[10px] font-bold px-2 py-1 rounded-full ${i.inhabilitado?'bg-brand-100 text-brand-600':(i.estado==='activo'||!REQ_AUT)?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${i.inhabilitado?'INHABILITADO':i.estado==='activo'?'ACTIVO':(!REQ_AUT?'HABILITADO':'PENDIENTE')}</span>
             ${puedeEditar?`<button onclick='modalEditIns(${JSON.stringify(edit).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper" title="Editar foto, dorsal y capitán">✏️</button>
             ${i.estado==='pendiente'?`<button onclick='quitarIns("${i.id}","${((j.nombres||'')+' '+(j.apellidos||'')).replace(/'/g,'')}")' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-brand-50 hover:text-brand-600" title="Quitar de la LBF (solo pendientes)">✕</button>`:''}`:''}
           </span>
         </div>`;}).join('')
         :'<p class="px-5 py-8 text-sm text-ink-400 text-center">Plantel vacío'+(puedeEditar?' — agrega a tu primer jugador.':'.')+'</p>'}
-      <p class="text-[11px] text-ink-400 px-5 py-3 bg-paper">Los jugadores que agregues quedan <b>PENDIENTES</b> hasta que el organizador valide documento y apto médico. Un jugador solo puede estar en un equipo por categoría (anti-suplantación).</p>
+      <p class="text-[11px] text-ink-400 px-5 py-3 bg-paper">${REQ_AUT
+        ?'Los jugadores que agregues quedan <b>PENDIENTES</b> hasta subir su <b>autorización de Padre/Tutor</b> (o hasta que el organizador los active).'
+        :'Este torneo no exige autorización de Padre/Tutor: tus jugadores quedan <b>habilitados</b> sin validación adicional.'} Un jugador solo puede estar en un equipo por categoría (anti-suplantación).</p>
     </div>
     ${ins.length?(()=>{
       const filas=ins.map(i=>{

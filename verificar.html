@@ -72,7 +72,7 @@ const check=(c,l)=>`<div class="flex items-center justify-between py-1.5 border-
         `<div class="bg-white border border-line rounded-2xl px-4 py-1">
           ${check(d.verificado,'Identidad verificada (documento)')}
           ${check(d.en_lbf,'En Lista de Buena Fe')}
-          ${check(d.estado==='activo','Habilitado por el organizador')}
+          ${check(d.habilitado??(d.estado==='activo'),d.requiere_autorizacion?'Habilitado (autorización de Padre/Tutor)':'Habilitado (el torneo no exige autorización)')}
           ${check(!d.inhabilitado,'Sin sanciones del torneo')}
           ${check(!d.sancion_global,'Sin sanción global de la plataforma')}
           ${d.es_excepcion?'<div class="py-1.5 text-sm text-amber-600 font-semibold">⚠ Excepción por edad (según reglas del torneo)</div>':''}
