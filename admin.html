@@ -2204,92 +2204,123 @@ async function toggleHorarios(jid,mostrar){
   await renderFixture();
 }
 
-/* ---- ÁLBUM DEL EQUIPO estilo Panini: cromos con foto y primer nombre,
-   logos del torneo y del club — imagen PNG lista para redes.
-   Fotos SOLO con consentimiento (misma regla que el público); sin él,
-   el cromo lleva las iniciales. ---- */
+/* ---- ÁLBUM DEL EQUIPO estilo Panini en A3 HORIZONTAL (2480×1754 ≈ 150dpi):
+   jugadores + comando técnico en una sola hoja; la cuadrícula se auto-ajusta
+   al tamaño del plantel para que los cromos queden proporcionales.
+   Fotos de jugadores SOLO con consentimiento (regla del público); el CT
+   (adultos del staff) muestra su foto siempre. ---- */
 async function albumEquipo(){
-  const {data:ins,error}=await sb.from('inscripcion_lbf').select('id,dorsal,capitan,jugador_id').eq('equipo_id',EQUIPO.id).eq('en_lbf',true).eq('inhabilitado',false).order('dorsal');
-  if(error){toast(errNegocio(error));return;}
-  if(!(ins||[]).length){toast('⚠ Este equipo aún no tiene jugadores en la LBF');return;}
-  toast('🖼 Generando álbum…');
-  const {data:js}=await sb.from('jugador_maestro').select('id,nombres,apellidos,foto_url,consentimiento_imagen').in('id',ins.map(i=>i.jugador_id));
+  const [insQ,ctQ]=await Promise.all([
+    sb.from('inscripcion_lbf').select('id,dorsal,capitan,jugador_id').eq('equipo_id',EQUIPO.id).eq('en_lbf',true).eq('inhabilitado',false).order('dorsal'),
+    sb.from('comando_tecnico').select('id,rol,persona_id').eq('equipo_id',EQUIPO.id).eq('inhabilitado',false).order('created_at')
+  ]);
+  if(insQ.error){toast(errNegocio(insQ.error));return;}
+  const ins=insQ.data||[], cts=ctQ.data||[];
+  if(!ins.length&&!cts.length){toast('⚠ Este equipo aún no tiene jugadores en la LBF');return;}
+  toast('🖼 Generando álbum A3…');
+  const pids=[...new Set([...ins.map(i=>i.jugador_id),...cts.map(c=>c.persona_id)])];
+  const {data:js}=await sb.from('jugador_maestro').select('id,nombres,apellidos,foto_url,consentimiento_imagen').in('id',pids);
   const jm=Object.fromEntries((js||[]).map(j=>[j.id,j]));
   const cl=CLUBES[EQUIPO.club_id]||{};
   await Promise.all([document.fonts.load('80px "Bebas Neue"'),document.fonts.load('700 30px Inter'),document.fonts.load('800 26px Inter')]);
   const [logoT,escudo]=await Promise.all([cargarImg(TORNEO.logo_url||MARCA.logo_url),cargarImg(cl.escudo_url)]);
-  const fotos={};
-  await Promise.all(ins.map(async i=>{const j=jm[i.jugador_id]||{};
-    fotos[i.id]=(j.consentimiento_imagen&&j.foto_url)?await cargarImg(j.foto_url):null;}));
-  const W=1080, COLS=4, GAP=24, MX=40;
-  const CW=(W-MX*2-GAP*(COLS-1))/COLS, FH=CW, NH=56, CH=FH+NH;
-  const rows=Math.ceil(ins.length/COLS);
-  const HEAD=300, FOOT=90;
-  const H=HEAD+rows*(CH+GAP)-GAP+40+FOOT;
+  // tarjetas: jugadores (foto solo con consentimiento) + CT (foto siempre)
+  const cards=[
+    ...ins.map(i=>{const j=jm[i.jugador_id]||{};return {tipo:'j',dorsal:i.dorsal,capitan:i.capitan,j,foto:(j.consentimiento_imagen&&j.foto_url)?j.foto_url:null};}),
+    ...cts.map(c=>{const j=jm[c.persona_id]||{};return {tipo:'ct',rol:c.rol,j,foto:j.foto_url||null};})
+  ];
+  await Promise.all(cards.map(async c=>{c.img=c.foto?await cargarImg(c.foto):null;}));
+  // ---- lienzo A3 horizontal ----
+  const W=2480,H=1754,M=70,HEAD=290,FOOT=70,GAP=20;
+  const Wc=W-M*2, Hc=H-HEAD-FOOT-30, total=cards.length, R=1.27; // alto de carta = ancho×R
+  let best={cw:0,cols:6};
+  for(let cols=3;cols<=16;cols++){
+    const rows=Math.ceil(total/cols);
+    const cwW=(Wc-(cols-1)*GAP)/cols;
+    const cwH=((Hc-(rows-1)*GAP)/rows)/R;
+    const cw=Math.min(cwW,cwH);
+    if(cw>best.cw) best={cw,cols};
+  }
+  const CW=Math.floor(best.cw), COLS=best.cols, CH=Math.floor(CW*R), NH=CH-CW;
+  const rows=Math.ceil(total/COLS);
+  const gridW=COLS*CW+(COLS-1)*GAP, gridH=rows*CH+(rows-1)*GAP;
+  const X0=(W-gridW)/2, Y0=HEAD+30+(Hc-gridH)/2;
   const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
   const x=cv.getContext('2d');
   x.fillStyle='#101626'; x.fillRect(0,0,W,H);
   x.save(); x.globalAlpha=.05; x.strokeStyle='#fff'; x.lineWidth=1;
-  for(let i=-H;i<W;i+=46){x.beginPath();x.moveTo(i,0);x.lineTo(i+H,H);x.stroke();}
+  for(let i=-H;i<W;i+=52){x.beginPath();x.moveTo(i,0);x.lineTo(i+H,H);x.stroke();}
   x.restore();
   const dib=(img,cx,cy,r,ini)=>{x.save();x.beginPath();x.arc(cx,cy,r,0,7);x.clip();
     if(img){x.fillStyle='#fff';x.fillRect(cx-r,cy-r,r*2,r*2);x.drawImage(img,cx-r,cy-r,r*2,r*2);}
     else{x.fillStyle='#2b3550';x.fillRect(cx-r,cy-r,r*2,r*2);x.fillStyle='#fff';x.font=`800 ${Math.round(r*.6)}px Inter`;x.textAlign='center';x.textBaseline='middle';x.fillText(ini||'',cx,cy+2);}
     x.restore();x.textAlign='left';x.textBaseline='alphabetic';};
   const fitText=(t,font,max)=>{let s=parseInt(font.match(/(\d+)px/)[1]);
-    for(;s>20;s--){x.font=font.replace(/\d+px/,s+'px');if(x.measureText(t).width<=max)break;}return x.font;};
-  dib(logoT,96,110,52,iniciales(TORNEO.nombre));
-  dib(escudo,W-96,110,52,iniciales(cl.nombre||'?'));
+    for(;s>12;s--){x.font=font.replace(/\d+px/,s+'px');if(x.measureText(t).width<=max)break;}return x.font;};
+  // cabecera
+  dib(logoT,150,145,78,iniciales(TORNEO.nombre));
+  dib(escudo,W-150,145,78,iniciales(cl.nombre||'?'));
   x.textAlign='center';
-  x.fillStyle='#ffd166'; x.font='600 22px Inter'; x.fillText('ÁLBUM OFICIAL',W/2,66);
-  x.fillStyle='#ffffff'; x.font=fitText(nomEq(EQUIPO).toUpperCase(),'86px "Bebas Neue"',W-330);
-  x.fillText(nomEq(EQUIPO).toUpperCase(),W/2,148);
-  x.fillStyle='rgba(255,255,255,.55)'; x.font='600 25px Inter';
-  x.fillText(`${TORNEO.nombre.toUpperCase()} · ${(CAT.nombre_display||'').toUpperCase()}`,W/2,192);
-  x.fillStyle='#d4af37'; x.fillRect(MX,230,W-MX*2,4);
+  x.fillStyle='#ffd166'; x.font='600 34px Inter'; x.fillText('ÁLBUM OFICIAL',W/2,88);
+  x.fillStyle='#ffffff'; x.font=fitText(nomEq(EQUIPO).toUpperCase(),'128px "Bebas Neue"',W-560);
+  x.fillText(nomEq(EQUIPO).toUpperCase(),W/2,196);
+  x.fillStyle='rgba(255,255,255,.55)'; x.font='600 36px Inter';
+  x.fillText(`${TORNEO.nombre.toUpperCase()} · ${(CAT.nombre_display||'').toUpperCase()}`,W/2,256);
+  x.fillStyle='#d4af37'; x.fillRect(M,282,W-M*2,5);
   x.textAlign='left';
-  ins.forEach((i,k)=>{
-    const j=jm[i.jugador_id]||{};
+  // cromos
+  const pad=Math.max(8,Math.round(CW*0.045));
+  cards.forEach((c,k)=>{
     const col=k%COLS, row=Math.floor(k/COLS);
-    const cx0=MX+col*(CW+GAP), cy0=HEAD+row*(CH+GAP);
+    const cx0=X0+col*(CW+GAP), cy0=Y0+row*(CH+GAP);
+    const esCT=c.tipo==='ct';
     x.fillStyle='#fff';
-    x.beginPath(); x.roundRect(cx0,cy0,CW,CH,14); x.fill();
-    x.strokeStyle='#d4af37'; x.lineWidth=5; x.stroke();
-    const pad=10, fw=CW-pad*2, fh=FH-pad*2;
-    x.save(); x.beginPath(); x.roundRect(cx0+pad,cy0+pad,fw,fh,8); x.clip();
-    const img=fotos[i.id];
-    if(img){
-      const s=Math.max(fw/img.width,fh/img.height);
-      x.drawImage(img,cx0+pad+(fw-img.width*s)/2,cy0+pad+(fh-img.height*s)/2,img.width*s,img.height*s);
+    x.beginPath(); x.roundRect(cx0,cy0,CW,CH,Math.round(CW*0.06)); x.fill();
+    x.strokeStyle='#d4af37'; x.lineWidth=Math.max(3,CW*0.022); x.stroke();
+    const fw=CW-pad*2, fh=CW-pad*2;
+    x.save(); x.beginPath(); x.roundRect(cx0+pad,cy0+pad,fw,fh,Math.round(CW*0.035)); x.clip();
+    if(c.img){
+      const s=Math.max(fw/c.img.width,fh/c.img.height);
+      x.drawImage(c.img,cx0+pad+(fw-c.img.width*s)/2,cy0+pad+(fh-c.img.height*s)/2,c.img.width*s,c.img.height*s);
     }else{
       x.fillStyle='#2b3550'; x.fillRect(cx0+pad,cy0+pad,fw,fh);
-      x.fillStyle='#8b93a7'; x.font='800 62px Inter'; x.textAlign='center'; x.textBaseline='middle';
-      x.fillText(iniciales((j.nombres||'')+' '+(j.apellidos||'')),cx0+CW/2,cy0+pad+fh/2);
+      x.fillStyle='#8b93a7'; x.font=`800 ${Math.round(fw*0.32)}px Inter`; x.textAlign='center'; x.textBaseline='middle';
+      x.fillText(iniciales((c.j.nombres||'')+' '+(c.j.apellidos||'')),cx0+CW/2,cy0+pad+fh/2);
       x.textAlign='left'; x.textBaseline='alphabetic';
     }
     x.restore();
-    x.fillStyle='#171e2e';
-    x.beginPath(); x.roundRect(cx0+pad,cy0+FH,CW-pad*2,NH-pad,8); x.fill();
-    const primer=((j.nombres||'').trim().split(/\s+/)[0]||'—').toUpperCase()+(i.capitan?' (C)':'');
-    if(i.dorsal!=null){x.fillStyle='#ffd166';x.font='28px "Bebas Neue"';x.textAlign='left';x.textBaseline='middle';
-      x.fillText(String(i.dorsal),cx0+pad+10,cy0+FH+(NH-pad)/2+2);}
-    x.fillStyle='#fff'; x.textAlign='center'; x.textBaseline='middle';
-    x.font=fitText(primer,'30px "Bebas Neue"',CW-pad*2-64);
-    x.fillText(primer,cx0+CW/2+6,cy0+FH+(NH-pad)/2+2);
+    // franja de nombre (CT en dorado; jugadores en oscuro)
+    const sy=cy0+CW, sh=NH-pad;
+    x.fillStyle=esCT?'#d4af37':'#171e2e';
+    x.beginPath(); x.roundRect(cx0+pad,sy,CW-pad*2,sh,Math.round(CW*0.035)); x.fill();
+    const primer=((c.j.nombres||'').trim().split(/\s+/)[0]||'—').toUpperCase()+(c.capitan?' (C)':'');
+    if(esCT){
+      x.fillStyle='#171e2e'; x.textAlign='center'; x.textBaseline='middle';
+      x.font=fitText(primer,`${Math.round(sh*0.5)}px "Bebas Neue"`,CW-pad*2-16);
+      x.fillText(primer,cx0+CW/2,sy+sh*0.34);
+      x.font=fitText(c.rol.toUpperCase(),`700 ${Math.round(sh*0.24)}px Inter`,CW-pad*2-16);
+      x.fillText(c.rol.toUpperCase(),cx0+CW/2,sy+sh*0.74);
+    }else{
+      if(c.dorsal!=null){x.fillStyle='#ffd166';x.font=`${Math.round(sh*0.52)}px "Bebas Neue"`;x.textAlign='left';x.textBaseline='middle';
+        x.fillText(String(c.dorsal),cx0+pad+Math.round(CW*0.05),sy+sh/2+1);}
+      x.fillStyle='#fff'; x.textAlign='center'; x.textBaseline='middle';
+      x.font=fitText(primer,`${Math.round(sh*0.55)}px "Bebas Neue"`,CW-pad*2-Math.round(CW*0.24));
+      x.fillText(primer,cx0+CW/2+Math.round(CW*0.03),sy+sh/2+1);
+    }
     x.textAlign='left'; x.textBaseline='alphabetic';
   });
-  x.fillStyle='#8b93a7'; x.font='600 24px Inter'; x.textAlign='center';
-  x.fillText('⚡ Powered by Liguify · liguify.com/'+(MARCA.slug||''),W/2,H-36);
+  x.fillStyle='#8b93a7'; x.font='600 28px Inter'; x.textAlign='center';
+  x.fillText('⚡ Powered by Liguify · liguify.com/'+(MARCA.slug||''),W/2,H-28);
   x.textAlign='left';
   window.__CV=cv;
   try{
     cv.toBlob(b=>{
       const a=document.createElement('a');
       a.href=URL.createObjectURL(b);
-      a.download=`album-${(nomEq(EQUIPO)||'equipo').replace(/[^\w]+/g,'-').toLowerCase()}.png`;
+      a.download=`album-a3-${(nomEq(EQUIPO)||'equipo').replace(/[^\w]+/g,'-').toLowerCase()}.png`;
       a.click();
       setTimeout(()=>URL.revokeObjectURL(a.href),5000);
-      toast('🖼 Álbum descargado ✔ — listo para WhatsApp e Instagram');
+      toast('🖼 Álbum A3 horizontal descargado ✔ — imprímelo a tamaño A3 o compártelo en redes');
     },'image/png');
   }catch(e){toast('⚠ No se pudo exportar el álbum: '+(e.message||e));}
 }
