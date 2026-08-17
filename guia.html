@@ -66,7 +66,7 @@ const SLIDES=[
   <div class="text-center py-8">
     <p class="text-6xl mb-4">🛡️</p>
     <h2 class="font-display text-5xl tracking-wide mb-3">BIENVENIDO AL MODO CLUB</h2>
-    <p class="text-ink-500 text-sm max-w-md mx-auto">En 5 capítulos aprenderás a entrar al sistema, nombrar sub-coordinadores por categoría, manejar tu contraseña, registrar a tus jugadores y subir sus autorizaciones. Puedes dejar que avance solo (como un video) o navegar con los botones.</p>
+    <p class="text-ink-500 text-sm max-w-md mx-auto">En 6 capítulos aprenderás a entrar al sistema, nombrar sub-coordinadores, manejar tu contraseña, registrar jugadores, subir autorizaciones, y cargar y ver los resultados y estadísticas de tus partidos. Puedes dejar que avance solo (como un video) o navegar con los botones.</p>
   </div>`},
 {cap:'Capítulo 1 · Entrar al modo Club', html:`
   <h3 class="font-display text-3xl tracking-wide mb-3">1. ENTRA DESDE LIGUIFY.COM</h3>
@@ -209,11 +209,48 @@ const SLIDES=[
     ${chip('✔ AUTORIZACIÓN','bg-emerald-100 text-emerald-700')}${chip('ACTIVO','bg-emerald-100 text-emerald-700')}
   </div>`)}
   <p class="text-sm text-ink-500 mt-4">Al subir la autorización, el jugador pasa a <b>ACTIVO</b> al instante y su foto sale <b>a color</b> en la página pública del torneo (la autorización incluye el consentimiento de imagen). Sin pasos extra.</p>`},
+
+// ── CAP 6 · RESULTADOS Y ESTADÍSTICAS ───────────────────────
+{cap:'Capítulo 6 · Resultados y estadísticas', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">16. VE TUS PARTIDOS Y RESULTADOS</h3>
+  ${card(`<div class="flex gap-2 mb-3">${btn('Plantel (LBF)','bg-white border border-line text-ink-500')}${btn('Partidos','bg-ink-900 text-white',true)}${btn('Tabla','bg-white border border-line text-ink-500')}</div>
+  <div class="hl border border-line rounded-xl px-4 py-3">
+    <div class="flex items-center text-sm">
+      <span class="flex-1 text-right font-bold">TU EQUIPO 🛡️</span>
+      <span class="w-24 text-center"><span class="block text-[9px] font-bold text-emerald-600 uppercase">finalizado</span><span class="font-display text-2xl">3 : 1</span></span>
+      <span class="flex-1 font-bold">🛡️ RIVAL FC</span>
+    </div>
+    <p class="text-[10px] text-ink-400 text-center mt-1">Fecha 2 · 2026-08-16 10:00 · Cancha 1</p>
+  </div>`)}
+  <p class="text-sm text-ink-500 mt-4">En la pestaña <b>Partidos</b> de tu equipo ves los próximos cruces y los resultados. <b>Toca cualquier partido</b> para abrir su detalle: marcador, tu plantel con goles ⚽ y tarjetas 🟨🟥, y la ⭐ figura del partido.</p>`},
+{cap:'Capítulo 6 · Resultados y estadísticas', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">17. CARGA LOS MINUTOS Y ASISTENCIAS</h3>
+  ${card(`<div class="flex items-center justify-between border-b-2 border-ink-900 pb-1 mb-2">
+    <p class="font-display text-lg tracking-wide">TU EQUIPO — MI PLANTEL</p>
+    <span class="flex gap-1.5 text-[10px] font-bold text-ink-400"><span class="w-12 text-center">⏱ MIN</span><span class="w-12 text-center">🅰 AST</span></span>
+  </div>
+  <div class="flex items-center gap-1.5 py-1.5 border-b border-line text-sm">
+    <span class="w-5 text-ink-400 font-bold text-xs text-right">9</span>
+    <span class="flex-1 font-semibold">Juan Pérez <span class="text-xs">⚽⚽</span></span>
+    <span class="hl w-12 border border-sky-200 bg-sky-50 rounded-lg text-center py-1 text-xs font-bold">40</span>
+    <span class="w-12 border border-emerald-200 bg-emerald-50 rounded-lg text-center py-1 text-xs font-bold">1</span>
+  </div>
+  <div class="mt-2">${btn('GUARDAR ESTADÍSTICAS','bg-brand-500 text-white',true)}</div>`)}
+  <p class="text-sm text-ink-500 mt-4">Dentro del detalle de un partido jugado, <b>tu club registra los minutos y las asistencias</b> de cada jugador directamente en las casillas y pulsa <b>GUARDAR</b>. Los ⚽ goles y las 🟨🟥 tarjetas son oficiales: los carga el organizador. Los minutos &gt; 0 cuentan como partido jugado (PJ).</p>`},
+{cap:'Capítulo 6 · Resultados y estadísticas', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">18. LAS ESTADÍSTICAS DE TUS JUGADORES</h3>
+  ${card(`<p class="font-display text-lg tracking-wide mb-2">📊 ESTADÍSTICAS DEL TORNEO <span class="text-xs font-sans text-ink-400 font-semibold">partido de 50'</span></p>
+  <div class="hl overflow-x-auto"><table class="w-full text-xs whitespace-nowrap">
+    <tr class="text-left text-[9px] text-ink-400 uppercase border-b border-line"><th class="py-1 pr-2">Jugador</th><th class="px-1 text-center">PJ</th><th class="px-1 text-center">Min</th><th class="px-1 text-center">⚽</th><th class="px-1 text-center">🅰</th><th class="px-1 text-center">%Part</th><th class="px-1 text-center">G/50'</th></tr>
+    <tr class="border-b border-line"><td class="py-1 pr-2 font-bold">9 Juan Pérez</td><td class="text-center font-bold">4</td><td class="text-center">180</td><td class="text-center font-bold">6</td><td class="text-center">2</td><td class="text-center">90%</td><td class="text-center">1.67</td></tr>
+    <tr><td class="py-1 pr-2 font-bold">10 Mario Ruiz</td><td class="text-center font-bold">4</td><td class="text-center">150</td><td class="text-center font-bold">3</td><td class="text-center">4</td><td class="text-center">75%</td><td class="text-center">1.00</td></tr>
+  </table></div>`)}
+  <p class="text-sm text-ink-500 mt-4">En la pestaña <b>Plantel</b>, la tarjeta <b>📊 ESTADÍSTICAS DEL TORNEO</b> acumula todo por jugador: partidos jugados, minutos, goles, asistencias, % de participación y promedios por partido. Y en la pestaña <b>Tabla</b> ves las posiciones con <b>TU EQUIPO</b> resaltado y los ⚽ goleadores del torneo.</p>`},
 {cap:'¡Eso es todo!', html:`
   <div class="text-center py-8">
     <p class="text-6xl mb-4">🎉</p>
     <h2 class="font-display text-5xl tracking-wide mb-3">¡LISTO PARA COMPETIR!</h2>
-    <p class="text-ink-500 text-sm max-w-md mx-auto mb-6">Ya sabes entrar, manejar tu contraseña, registrar jugadores y subir autorizaciones. Cualquier duda adicional, contacta a tu organizador.</p>
+    <p class="text-ink-500 text-sm max-w-md mx-auto mb-6">Ya sabes entrar, nombrar sub-coordinadores, manejar tu contraseña, registrar jugadores, subir autorizaciones y llevar los resultados y estadísticas de tu equipo. Cualquier duda adicional, contacta a tu organizador.</p>
     <a href="club.html" class="inline-block bg-brand-500 text-white font-bold px-8 py-3 rounded-xl hover:bg-brand-600">🛡️ IR A MI CLUB</a>
   </div>`},
 ];
