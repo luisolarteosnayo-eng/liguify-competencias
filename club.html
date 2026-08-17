@@ -115,6 +115,10 @@ function msg(t,tipo){const e=$('msg');if(!t){e.classList.add('hidden');return;}e
 function abrirModal(html,ancho){const b=$('modal-body');b.innerHTML=html;b.style.maxWidth=ancho?'880px':'';const m=$('modal');m.classList.remove('hidden');m.classList.add('flex');}
 function cerrarModal(){const m=$('modal');m.classList.add('hidden');m.classList.remove('flex');}
 const iniciales=n=>(n||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+/* Pastilla "VER VIDEO" clicable desde la lista (no abre el detalle del partido) */
+const videoPill=u=>`<div class="flex justify-center mt-1.5"><a href="${u}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Ver el video del partido"
+  class="inline-flex items-center gap-1.5 text-[10px] font-bold text-white rounded-full pl-1.5 pr-3 py-1 shadow-md hover:shadow-lg hover:scale-105 transition" style="background:linear-gradient(135deg,#ef4444,#b91c1c)">
+  <span class="grid place-items-center w-4 h-4 bg-white rounded-full shrink-0"><span style="width:0;height:0;border-top:3.5px solid transparent;border-bottom:3.5px solid transparent;border-left:6px solid #b91c1c;margin-left:1.5px"></span></span>VER VIDEO</a></div>`;
 function errNegocio(e){
   const m=e.message||String(e);
   if(e.code==='23505'&&m.includes('inscripcion_lbf')) return '⚠ Ese jugador YA está inscrito en otro equipo de esta categoría (anti-suplantación). Coordina con el organizador.';
@@ -976,7 +980,8 @@ async function renderPartidos(){
         </div>
         <div class="flex-1 min-w-0 flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm ${gV?'font-bold':''}">${lado(m.visita_id,true)}</div>
       </div>
-      <p class="text-[10px] text-ink-400 text-center pb-2">${ctx}${(m.jornada&&m.jornada.horarios_publicados===false)?' · 🕒 horario por confirmar':`${m.fecha?' · '+m.fecha:''}${m.hora?' '+m.hora.slice(0,5):''}${m.sede?' · '+m.sede:''}`}${m.video_url?' · 📺 video':''}</p>
+      <p class="text-[10px] text-ink-400 text-center ${m.video_url?'':'pb-2'}">${ctx}${(m.jornada&&m.jornada.horarios_publicados===false)?' · 🕒 horario por confirmar':`${m.fecha?' · '+m.fecha:''}${m.hora?' '+m.hora.slice(0,5):''}${m.sede?' · '+m.sede:''}`}</p>
+      ${m.video_url?`<div class="pb-2">${videoPill(m.video_url)}</div>`:''}
     </div>`;
   };
   const jugados=(pms||[]).filter(m=>['finalizado','walkover'].includes(m.estado));
