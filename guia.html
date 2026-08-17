@@ -66,7 +66,7 @@ const SLIDES=[
   <div class="text-center py-8">
     <p class="text-6xl mb-4">🛡️</p>
     <h2 class="font-display text-5xl tracking-wide mb-3">BIENVENIDO AL MODO CLUB</h2>
-    <p class="text-ink-500 text-sm max-w-md mx-auto">En 4 capítulos aprenderás a entrar al sistema, manejar tu contraseña, registrar a tus jugadores y subir sus autorizaciones. Puedes dejar que avance solo (como un video) o navegar con los botones.</p>
+    <p class="text-ink-500 text-sm max-w-md mx-auto">En 5 capítulos aprenderás a entrar al sistema, nombrar sub-coordinadores por categoría, manejar tu contraseña, registrar a tus jugadores y subir sus autorizaciones. Puedes dejar que avance solo (como un video) o navegar con los botones.</p>
   </div>`},
 {cap:'Capítulo 1 · Entrar al modo Club', html:`
   <h3 class="font-display text-3xl tracking-wide mb-3">1. ENTRA DESDE LIGUIFY.COM</h3>
@@ -104,9 +104,32 @@ const SLIDES=[
     </div>`)}
   <p class="text-sm text-ink-500 mt-4">Primero crea tu cuenta (o entra con Google), escribe el código en el recuadro del inicio y pulsa <b>CANJEAR</b>. El código es de <b>un solo uso</b>: al canjearlo queda anulado y tu equipo vinculado a tu cuenta.</p>`},
 
-// ── CAP 2 · TU CONTRASEÑA ───────────────────────────────────
-{cap:'Capítulo 2 · Tu contraseña', html:`
-  <h3 class="font-display text-3xl tracking-wide mb-3">5. CREA O CAMBIA TU CONTRASEÑA</h3>
+// ── CAP 2 · SUB-COORDINADORES POR CATEGORÍA ─────────────────
+{cap:'Capítulo 2 · Sub-coordinadores por categoría', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">5. NOMBRA SUB-COORDINADORES (SI ERES COORDINADOR)</h3>
+  ${card(`<div class="bg-ink-900 rounded-2xl px-4 py-3 flex items-center gap-3 flex-wrap">
+    <span class="font-display text-xl tracking-wide text-white">TU TORNEO</span>
+    <span class="text-xs text-white/50">TU MARCA</span>
+    ${btn('➕ SUB-COORDINADOR','bg-white/10 border border-white/30 text-white',true)}
+  </div>`)}
+  <p class="text-sm text-ink-500 mt-4">Como <b>coordinador</b> ves TODO tu club, pero puedes delegar: en <b>Mis equipos</b>, en la cabecera de cada torneo está el botón <b>➕ SUB-COORDINADOR</b>. El sub-coordinador es un encargado que solo gestiona <b>las categorías que tú le asignes</b> (por ejemplo, el profe de la 2015).</p>`},
+{cap:'Capítulo 2 · Sub-coordinadores por categoría', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">6. ELIGE SUS CATEGORÍAS E INVÍTALO</h3>
+  ${card(`<div class="grid sm:grid-cols-2 gap-3 mb-3">
+    <div><p class="text-[10px] font-bold text-ink-400 uppercase mb-1">Nombre / Teléfono / Email</p>
+      <p class="border-b border-line pb-1 text-sm font-bold">Profe Carlos · 999 111 222</p>
+      <p class="border-b border-line pb-1 text-sm font-bold mt-1.5">profe.carlos@gmail.com</p></div>
+    <div><p class="text-[10px] font-bold text-ink-400 uppercase mb-1">Categorías a su cargo</p>
+      <p class="text-sm font-bold">☑ Categoría 2015 / F9</p>
+      <p class="text-sm font-bold">☑ Categoría 2016 / F9</p>
+      <p class="text-sm text-ink-400">☐ Categoría 2019 / F7</p></div>
+  </div>
+  ${btn('📨 INVITAR SUB-COORDINADOR','bg-brand-500 text-white',true)}`)}
+  <p class="text-sm text-ink-500 mt-4">Registra su <b>nombre, teléfono y email</b>, marca <b>sus categorías</b> y pulsa INVITAR. Le llegará un correo con su acceso (mismo proceso que el tuyo: acepta la invitación y crea su contraseña). 💡 Si coordinas <b>más de un club</b> en el torneo, primero eliges el club. Podrá cargar y editar la LBF solo de sus categorías; puedes revocarlo cuando quieras con la ✕.</p>`},
+
+// ── CAP 3 · TU CONTRASEÑA ───────────────────────────────────
+{cap:'Capítulo 3 · Tu contraseña', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">7. CREA O CAMBIA TU CONTRASEÑA</h3>
   ${card(`<div class="bg-ink-900 rounded-xl p-3 flex items-center gap-3">
     <span class="font-display text-white text-lg tracking-wide flex-1">LIGUIFY <span class="text-white/40">CLUB</span></span>
     <span class="text-white/70 text-xs">tucorreo@gmail.com</span>
@@ -114,8 +137,8 @@ const SLIDES=[
     ${btn('SALIR','bg-white border border-line text-ink-900')}
   </div>`)}
   <p class="text-sm text-ink-500 mt-4">Si entraste por el enlace del correo, aún no tienes contraseña: pulsa el botón <b>🔑</b> (arriba a la derecha) para crearla. Con ella podrás entrar directo la próxima vez, sin esperar correos.</p>`},
-{cap:'Capítulo 2 · Tu contraseña', html:`
-  <h3 class="font-display text-3xl tracking-wide mb-3">6. ¿LA OLVIDASTE? RECUPÉRALA</h3>
+{cap:'Capítulo 3 · Tu contraseña', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">8. ¿LA OLVIDASTE? RECUPÉRALA</h3>
   ${card(`<p class="font-display text-2xl tracking-wide mb-2">MI CLUB</p>
     <p class="text-xs text-ink-400 mb-1">Email</p>
     <p class="border-b border-line pb-1 text-sm font-bold mb-3">tucorreo@gmail.com</p>
@@ -124,31 +147,31 @@ const SLIDES=[
   <p class="text-sm text-ink-500 mt-4">En la pantalla de entrada: <b>escribe tu email</b> y pulsa <b>"¿Olvidaste tu contraseña?"</b> — te llegará un correo con el enlace para crear una nueva. 💡 Si tu correo es Gmail, también puedes pulsar <b>Entrar con Google</b> y listo, sin contraseña.</p>`},
 
 // ── CAP 3 · REGISTRAR JUGADORES ─────────────────────────────
-{cap:'Capítulo 3 · Registrar jugadores', html:`
-  <h3 class="font-display text-3xl tracking-wide mb-3">7. ENTRA A TU EQUIPO → PLANTEL</h3>
+{cap:'Capítulo 4 · Registrar jugadores', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">9. ENTRA A TU EQUIPO → PLANTEL</h3>
   ${card(`<div class="flex items-center justify-between flex-wrap gap-2">
     <p class="font-display text-xl tracking-wide">PLANTEL · LISTA DE BUENA FE <span class="text-xs font-sans text-ink-400 font-semibold">12/30</span></p>
     ${btn('+ AGREGAR JUGADOR/A','bg-ink-900 text-white',true)}
   </div>`)}
   <p class="text-sm text-ink-500 mt-4">En <b>Mis equipos</b> toca tu equipo y entra a la pestaña <b>Plantel (LBF)</b>. Pulsa <b>+ AGREGAR JUGADOR/A</b>. El contador muestra cuántos cupos tienes según las reglas del torneo.</p>`},
-{cap:'Capítulo 3 · Registrar jugadores', html:`
-  <h3 class="font-display text-3xl tracking-wide mb-3">8. BUSCA POR DOCUMENTO</h3>
+{cap:'Capítulo 4 · Registrar jugadores', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">10. BUSCA POR DOCUMENTO</h3>
   ${card(`<div class="flex gap-2">
     <span class="border border-line rounded-xl px-3 py-2 text-sm font-bold">PE</span>
     <span class="hl flex-1 border-2 border-line rounded-xl px-3 py-2 text-sm font-bold text-ink-400">N° de documento</span>
     ${btn('BUSCAR','bg-ink-900 text-white')}
   </div>`)}
   <p class="text-sm text-ink-500 mt-4">Escribe el <b>DNI del jugador</b>. Si ya existe en Liguify (jugó otro torneo), se inscribe <b>sin re-digitar sus datos</b>. Si es nuevo, completas nombres, apellidos y fecha de nacimiento. 🔒 Un jugador solo puede estar en un equipo por categoría (anti-suplantación).</p>`},
-{cap:'Capítulo 3 · Registrar jugadores', html:`
-  <h3 class="font-display text-3xl tracking-wide mb-3">9. SUBE SU FOTO Y COMPLETA LA FICHA</h3>
+{cap:'Capítulo 4 · Registrar jugadores', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">11. SUBE SU FOTO Y COMPLETA LA FICHA</h3>
   ${card(`<div class="flex items-center gap-3">
     <span class="w-14 h-14 rounded-2xl bg-ink-700 grid place-items-center text-white font-bold">FT</span>
     <div class="flex gap-2">${btn('📷 Cámara','bg-ink-900 text-white',true)}${btn('🖼 Galería','bg-white border border-line text-ink-500')}</div>
   </div>
   <p class="text-[11px] text-ink-400 mt-3">También: fotos del DNI (frontal y reverso — van a almacenamiento privado), dorsal, posición y pie hábil.</p>`)}
   <p class="text-sm text-ink-500 mt-4">Desde el celular puedes <b>tomar la foto con la cámara</b> o elegirla de la galería. Las fotos se optimizan solas. La del jugador aparece en el módulo público; las del DNI son privadas (solo staff y tu club).</p>`},
-{cap:'Capítulo 3 · Registrar jugadores', html:`
-  <h3 class="font-display text-3xl tracking-wide mb-3">10. EL ESTADO DE TUS JUGADORES</h3>
+{cap:'Capítulo 4 · Registrar jugadores', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">12. EL ESTADO DE TUS JUGADORES</h3>
   ${card(`<div class="flex items-center gap-3 border-b border-line pb-2 mb-2">
     <span class="w-8 h-8 rounded-full bg-ink-700 grid place-items-center text-[10px] font-bold text-white">JP</span>
     <span class="flex-1 text-sm font-bold">Juan Pérez</span>${chip('PENDIENTE','bg-amber-100 text-amber-700')}
@@ -160,8 +183,8 @@ const SLIDES=[
   <p class="text-sm text-ink-500 mt-4">Si tu torneo <b>exige autorización de padre/tutor</b>, el jugador queda <b>PENDIENTE</b> hasta subirla (siguiente capítulo). Si el torneo no la exige, queda <b>habilitado automáticamente</b>.</p>`},
 
 // ── CAP 4 · AUTORIZACIÓN PDF ───────────────────────────────
-{cap:'Capítulo 4 · Autorización de Padre/Tutor', html:`
-  <h3 class="font-display text-3xl tracking-wide mb-3">11. ABRE LA FICHA DEL JUGADOR (✏️)</h3>
+{cap:'Capítulo 5 · Autorización de Padre/Tutor', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">13. ABRE LA FICHA DEL JUGADOR (✏️)</h3>
   ${card(`<div class="flex items-center gap-3">
     <span class="w-8 h-8 rounded-full bg-ink-700 grid place-items-center text-[10px] font-bold text-white">JP</span>
     <span class="flex-1 text-sm font-bold">Juan Pérez</span>
@@ -169,8 +192,8 @@ const SLIDES=[
     ${btn('✏️','bg-white border border-line text-ink-500',true)}
   </div>`)}
   <p class="text-sm text-ink-500 mt-4">Los jugadores a los que les falta la autorización llevan el aviso <b>📄 AUT. PENDIENTE</b>. Pulsa el lápiz <b>✏️</b> para abrir su ficha.</p>`},
-{cap:'Capítulo 4 · Autorización de Padre/Tutor', html:`
-  <h3 class="font-display text-3xl tracking-wide mb-3">12. SUBE EL PDF (O UNA FOTO)</h3>
+{cap:'Capítulo 5 · Autorización de Padre/Tutor', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">14. SUBE EL PDF (O UNA FOTO)</h3>
   ${card(`<p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-2">Autorización de Padre/Tutor (única por jugador — vale para todos los torneos)</p>
     <div class="flex items-center gap-2 flex-wrap">
       ${btn('📁 SUBIR PDF','bg-white border border-line text-ink-500',true)}
@@ -178,8 +201,8 @@ const SLIDES=[
       <span class="text-[10px] font-bold text-amber-600">— pendiente de subir</span>
     </div>`)}
   <p class="text-sm text-ink-500 mt-4">En la ficha verás la sección <b>Autorización de Padre/Tutor</b>: sube el <b>PDF firmado</b> (o una foto del documento con la cámara). Se guarda en almacenamiento <b>privado</b> y es <b>único por jugador</b>: vale para todos sus torneos.</p>`},
-{cap:'Capítulo 4 · Autorización de Padre/Tutor', html:`
-  <h3 class="font-display text-3xl tracking-wide mb-3">13. ¡Y LISTO! ACTIVO AUTOMÁTICAMENTE</h3>
+{cap:'Capítulo 5 · Autorización de Padre/Tutor', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">15. ¡Y LISTO! ACTIVO AUTOMÁTICAMENTE</h3>
   ${card(`<div class="flex items-center gap-3">
     <span class="w-8 h-8 rounded-full bg-emerald-600 grid place-items-center text-[10px] font-bold text-white">JP</span>
     <span class="flex-1 text-sm font-bold">Juan Pérez</span>
