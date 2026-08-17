@@ -1043,7 +1043,7 @@ as $$
       'estado', ct.estado, 'inhabilitado', ct.inhabilitado,
       'rol', ct.rol,
       'nombres', j.nombres, 'apellidos', j.apellidos,
-      'foto_url', j.foto_url,
+      'foto_url', competencias.foto_torneo(j.id, t.id),
       'documento', case when coalesce(j.nro_documento,'')='' then null
                         else left(j.nro_documento,2)||repeat('*', greatest(length(j.nro_documento)-2,4)) end,
       'club', c.nombre, 'escudo_url', c.escudo_url,
@@ -1086,7 +1086,8 @@ as $$
       'verificado', j.verificado, 'es_excepcion', i.es_excepcion,
       'dorsal', i.dorsal,
       'nombres', j.nombres, 'apellidos', j.apellidos,
-      'foto_url', case when j.consentimiento_imagen then j.foto_url else null end,
+      'foto_url', case when j.consentimiento_imagen
+                       then competencias.foto_torneo(j.id, t.id) else null end,
       'consentimiento_imagen', j.consentimiento_imagen,
       'documento', case when coalesce(j.nro_documento,'')='' then null
                         else left(j.nro_documento,2)||repeat('*', greatest(length(j.nro_documento)-2,4)) end,
@@ -1211,14 +1212,19 @@ select j.id, j.nombres, j.apellidos,
        extract(month from j.fecha_nacimiento)::int as mes_nacimiento  -- decisión 2026-08-07: público ve mes/año
 from competencias.jugador_maestro j;
 
--- LBF pública (alineaciones): dorsal + nombre, sin datos médicos/documentales
+-- LBF pública (alineaciones): dorsal + nombre, sin datos médicos/documentales.
+-- La foto se resuelve POR TORNEO (patch_fotos_historial.sql): la subida para
+-- ese torneo, o si no hay, la última global — siempre con consentimiento.
 create or replace view competencias.vista_lbf_publica as
 select i.id as inscripcion_id, i.equipo_id, i.categoria_id, i.dorsal, i.capitan,
        i.es_excepcion, jp.nombres, jp.apellidos, jp.anio_nacimiento,
-       jp.foto_url, jp.consentimiento_imagen,
+       case when jp.consentimiento_imagen
+            then competencias.foto_torneo(i.jugador_id, cat.torneo_id) else null end as foto_url,
+       jp.consentimiento_imagen,
        jp.pie_habil, jp.posicion, jp.mes_nacimiento
 from competencias.inscripcion_lbf i
 join competencias.vista_jugador_publico jp on jp.id = i.jugador_id
+join competencias.categoria cat on cat.id = i.categoria_id
 where i.en_lbf and not i.inhabilitado;
 
 -- ============================================================================
@@ -1547,9 +1553,97 @@ for each row execute function competencias.proteger_ct_estado();
 -- Fotos y documentos de la persona (jugador o CT): permiso = gestiona algún
 -- equipo donde está inscrita. Foto → bucket publico/jugadores; DNI → bucket
 -- PRIVADO documentos/jugadores (ver patch_docs_jugador.sql para el bucket)
-create or replace function competencias.actualizar_foto_jugador(p_jugador uuid, p_url text)
+
+-- HISTORIAL DE FOTOS (patch_fotos_historial.sql): cada subida queda registrada
+-- (append-only, evidencia para verificación de identidad). torneo_id permite
+-- foto específica por torneo (uniforme); null = foto general. En un torneo se
+-- muestra su foto específica más reciente, o si no hay, la última global
+-- (jugador_maestro.foto_url). Los archivos en Storage llevan nombre único
+-- jugadores/{id}-{timestamp}.jpg — nunca se pisan.
+create table if not exists competencias.jugador_foto (
+  id          uuid primary key default gen_random_uuid(),
+  jugador_id  uuid not null references competencias.jugador_maestro(id) on delete cascade,
+  torneo_id   uuid references competencias.torneo(id) on delete set null,
+  url         text not null,
+  created_by  uuid default auth.uid(),
+  created_at  timestamptz not null default now()
+);
+create index if not exists jugador_foto_idx
+  on competencias.jugador_foto (jugador_id, torneo_id, created_at desc);
+
+create or replace function competencias.proteger_jugador_foto()
+returns trigger language plpgsql as $$
+begin
+  if not competencias.es_super() then
+    raise exception 'El historial de fotos es inmutable';
+  end if;
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
+end $$;
+drop trigger if exists t_proteger_jugador_foto on competencias.jugador_foto;
+create trigger t_proteger_jugador_foto
+before update or delete on competencias.jugador_foto
+for each row execute function competencias.proteger_jugador_foto();
+
+alter table competencias.jugador_foto enable row level security;
+drop policy if exists jf_read on competencias.jugador_foto;
+create policy jf_read on competencias.jugador_foto for select
+  using ( exists (select 1 from competencias.inscripcion_lbf i
+                  where i.jugador_id = jugador_foto.jugador_id
+                    and competencias.gestiona_equipo(i.equipo_id, i.categoria_id))
+       or exists (select 1 from competencias.comando_tecnico ct
+                  where ct.persona_id = jugador_foto.jugador_id
+                    and competencias.gestiona_equipo(ct.equipo_id, ct.categoria_id)) );
+grant select on competencias.jugador_foto to authenticated;
+
+-- Foto a mostrar en un torneo: la última del torneo, o la última global
+create or replace function competencias.foto_torneo(p_jugador uuid, p_torneo uuid)
+returns text
+language sql stable
+set search_path = competencias, public
+as $$
+  select coalesce(
+    (select f.url from competencias.jugador_foto f
+      where f.jugador_id = p_jugador and f.torneo_id = p_torneo
+      order by f.created_at desc limit 1),
+    (select j.foto_url from competencias.jugador_maestro j where j.id = p_jugador))
+$$;
+
+create or replace function competencias.actualizar_foto_jugador(p_jugador uuid, p_url text, p_torneo uuid default null)
 returns void
 language plpgsql security definer
+set search_path = competencias, public
+as $$
+begin
+  if coalesce(trim(p_url),'') = '' then
+    raise exception 'URL de foto inválida';
+  end if;
+  if not ( exists (select 1 from competencias.inscripcion_lbf i
+                   where i.jugador_id = p_jugador
+                     and competencias.gestiona_equipo(i.equipo_id, i.categoria_id))
+        or exists (select 1 from competencias.comando_tecnico ct
+                   where ct.persona_id = p_jugador
+                     and competencias.gestiona_equipo(ct.equipo_id, ct.categoria_id)) ) then
+    raise exception 'Sin permiso para actualizar la foto de esta persona';
+  end if;
+  if p_torneo is not null and not (
+       exists (select 1 from competencias.inscripcion_lbf i
+               join competencias.categoria c on c.id = i.categoria_id
+               where i.jugador_id = p_jugador and c.torneo_id = p_torneo)
+    or exists (select 1 from competencias.comando_tecnico ct
+               join competencias.categoria c on c.id = ct.categoria_id
+               where ct.persona_id = p_jugador and c.torneo_id = p_torneo) ) then
+    raise exception 'La persona no está inscrita en ese torneo';
+  end if;
+  insert into competencias.jugador_foto (jugador_id, torneo_id, url)
+  values (p_jugador, p_torneo, p_url);
+  update competencias.jugador_maestro set foto_url = p_url where id = p_jugador;
+end $$;
+
+-- Historial para revisión de identidad (staff y gestores del equipo)
+create or replace function competencias.historial_fotos_jugador(p_jugador uuid)
+returns table (url text, torneo text, created_at timestamptz)
+language plpgsql security definer stable
 set search_path = competencias, public
 as $$
 begin
@@ -1559,9 +1653,14 @@ begin
         or exists (select 1 from competencias.comando_tecnico ct
                    where ct.persona_id = p_jugador
                      and competencias.gestiona_equipo(ct.equipo_id, ct.categoria_id)) ) then
-    raise exception 'Sin permiso para actualizar la foto de esta persona';
+    raise exception 'Sin permiso para ver el historial de fotos de esta persona';
   end if;
-  update competencias.jugador_maestro set foto_url = p_url where id = p_jugador;
+  return query
+    select f.url, t.nombre, f.created_at
+    from competencias.jugador_foto f
+    left join competencias.torneo t on t.id = f.torneo_id
+    where f.jugador_id = p_jugador
+    order by f.created_at desc;
 end $$;
 
 create or replace function competencias.actualizar_docs_jugador(p_jugador uuid, p_frente text, p_reverso text)
@@ -1625,10 +1724,12 @@ revoke execute on function competencias.actualizar_identidad_jugador(uuid,text,t
 grant  execute on function competencias.actualizar_identidad_jugador(uuid,text,text,date) to authenticated;
 
 revoke execute on function competencias.gestiona_equipo(uuid,uuid)               from public, anon;
-revoke execute on function competencias.actualizar_foto_jugador(uuid,text)       from public, anon;
+revoke execute on function competencias.actualizar_foto_jugador(uuid,text,uuid)  from public, anon;
+revoke execute on function competencias.historial_fotos_jugador(uuid)            from public, anon;
 revoke execute on function competencias.actualizar_docs_jugador(uuid,text,text)  from public, anon;
 grant  execute on function competencias.gestiona_equipo(uuid,uuid)               to authenticated;
-grant  execute on function competencias.actualizar_foto_jugador(uuid,text)       to authenticated;
+grant  execute on function competencias.actualizar_foto_jugador(uuid,text,uuid)  to authenticated;
+grant  execute on function competencias.historial_fotos_jugador(uuid)            to authenticated;
 grant  execute on function competencias.actualizar_docs_jugador(uuid,text,text)  to authenticated;
 
 -- Partido: staff (admin o mesa) de la marca

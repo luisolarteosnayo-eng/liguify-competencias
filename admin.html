@@ -801,6 +801,7 @@ async function verificarPersona(){
       if(insN&&insN.length){VF_METODO='nfc';const r2=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,pais_documento,foto_url,verificado').eq('id',insN[0].jugador_id).single(); j=r2.data;}
     }
     if(!j){out.innerHTML=banner(false,'NO ENCONTRADO EN LIGUIFY');return;}
+    await fotosDelTorneo([j]);   // foto del torneo (si el club subió una específica)
     // sanción global vigente
     const hoy=new Date().toISOString().slice(0,10);
     const {data:sg}=await sb.from('sancion_global').select('id,vigencia_desde,vigencia_hasta').eq('jugador_id',j.id);
@@ -834,6 +835,7 @@ async function verificarPersona(){
             <p class="text-[11px] text-white/60">${j.pais_documento||'PE'} ${j.nro_documento||''}</p>
             ${sancion?'<p class="text-[11px] font-bold text-brand-500 mt-0.5">⛔ SANCIÓN GLOBAL VIGENTE</p>':''}
           </div>
+          <button onclick='historialFotos("${j.id}",${JSON.stringify(((j.nombres||'')+' '+(j.apellidos||'')).trim()).replace(/'/g,"&#39;")})' class="shrink-0 text-[10px] font-bold text-white/80 border border-white/25 rounded-lg px-2 py-1.5 hover:bg-white/10" title="Historial de fotos para verificar identidad">🕓 FOTOS</button>
         </div>
       </div>
       ${ins.length?`<p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1">Como jugador</p>`+ins.map(i=>`
@@ -1019,6 +1021,7 @@ async function pdfComandoTecnico(){
   const {data:eqs}=await sb.from('equipo').select('id,nombre,club_id').in('id',eqIds);
   const {data:cls}=await sb.from('club').select('id,nombre,escudo_url').in('id',[...new Set((eqs||[]).map(e=>e.club_id))]);
   const {data:ps}=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,pais_documento,foto_url').in('id',[...new Set(cts.map(x=>x.persona_id))]);
+  await fotosDelTorneo(ps||[]);
   const EQm=Object.fromEntries((eqs||[]).map(x=>[x.id,x]));
   const CLm=Object.fromEntries((cls||[]).map(x=>[x.id,x]));
   const Pm=Object.fromEntries((ps||[]).map(x=>[x.id,x]));
@@ -1416,6 +1419,7 @@ async function renderCT(){
   let per={};
   if(ct.length){
     const ps=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,verificado,foto_url,doc_scan_frente_url,doc_scan_reverso_url').in('id',ct.map(i=>i.persona_id));
+    await fotosDelTorneo(ps.data||[]);
     per=Object.fromEntries((ps.data||[]).map(p=>[p.id,p]));
   }
   const max=TORNEO.ct_max_personas??5;
@@ -1557,7 +1561,7 @@ async function altaCT(pais,doc){
   if(ins.error){toast(errNegocio(ins.error));return;}
   try{
     const url=await subirFotoJugador(pid);
-    if(url){const r=await sb.rpc('actualizar_foto_jugador',{p_jugador:pid,p_url:url}); if(r.error) toast(errNegocio(r.error));}
+    if(url){const r=await sb.rpc('actualizar_foto_jugador',{p_jugador:pid,p_url:url,p_torneo:TORNEO.id}); if(r.error) toast(errNegocio(r.error));}
     const fr=await subirDoc('dfr',pid,'frente');
     const rv=await subirDoc('drv',pid,'reverso');
     if(fr||rv){const r2=await sb.rpc('actualizar_docs_jugador',{p_jugador:pid,p_frente:fr,p_reverso:rv}); if(r2.error) toast(errNegocio(r2.error));}
@@ -1573,6 +1577,7 @@ function modalEditCT(i){
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">✏️ COMANDO TÉCNICO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
     <p class="text-sm font-semibold mb-4">${i.nombre}</p>
     ${fotoUI(i.foto_url,i.nombre)}
+    <button onclick='historialFotos("${i.persona_id}",${JSON.stringify(i.nombre||'').replace(/'/g,"&#39;")})' class="text-[10px] font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 mb-3 hover:bg-paper" title="Todas las fotos subidas (no se eliminan): revisión de identidad">🕓 HISTORIAL DE FOTOS</button>
     <div class="border-t border-line pt-2 mb-2">
       <p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-1.5">Documento de identidad (privado)</p>
       ${docUI('dfr','DNI frontal',i.dfr)}
@@ -1593,7 +1598,7 @@ function modalEditCT(i){
 async function guardarEditCT(id,personaId){
   try{
     const url=await subirFotoJugador(personaId);
-    if(url){const r=await sb.rpc('actualizar_foto_jugador',{p_jugador:personaId,p_url:url}); if(r.error){toast(errNegocio(r.error));return;}}
+    if(url){const r=await sb.rpc('actualizar_foto_jugador',{p_jugador:personaId,p_url:url,p_torneo:TORNEO.id}); if(r.error){toast(errNegocio(r.error));return;}}
     const fr=await subirDoc('dfr',personaId,'frente');
     const rv=await subirDoc('drv',personaId,'reverso');
     if(fr||rv){const r2=await sb.rpc('actualizar_docs_jugador',{p_jugador:personaId,p_frente:fr,p_reverso:rv}); if(r2.error){toast(errNegocio(r2.error));return;}}
@@ -1730,6 +1735,7 @@ async function renderLBF(){
   let jug={};
   if(ins.length){
     const js=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,fecha_nacimiento,verificado,foto_url,doc_scan_frente_url,doc_scan_reverso_url,pie_habil,posicion,consentimiento_imagen,autorizacion_url').in('id',ins.map(i=>i.jugador_id));
+    await fotosDelTorneo(js.data||[]);
     jug=Object.fromEntries((js.data||[]).map(j=>[j.id,j]));
   }
   $('lbf-lista').innerHTML=ins.length?ins.map(i=>{const j=jug[i.jugador_id]||{};
@@ -1799,10 +1805,35 @@ async function subirFotoJugador(jugadorId){
   if(!f) return null;
   f=await redimensionar(f, 800, 0.85, true);
   const ext=(f.name.split('.').pop()||'jpg').toLowerCase();
-  const ruta=`jugadores/${jugadorId}.${ext}`;
-  const {error}=await sb.storage.from('publico').upload(ruta,f,{upsert:true,contentType:f.type});
+  // nombre único: las fotos anteriores NO se pisan (historial para verificación)
+  const ruta=`jugadores/${jugadorId}-${Date.now()}.${ext}`;
+  const {error}=await sb.storage.from('publico').upload(ruta,f,{upsert:false,contentType:f.type});
   if(error) throw error;
-  return sb.storage.from('publico').getPublicUrl(ruta).data.publicUrl+'?v='+Date.now();
+  return sb.storage.from('publico').getPublicUrl(ruta).data.publicUrl;
+}
+/* Foto por torneo: si hay foto subida para ESTE torneo se usa esa; si no,
+   queda la última global (jugador_maestro.foto_url) */
+async function fotosDelTorneo(lista){
+  const ids=(lista||[]).map(j=>j.id); if(!ids.length||!window.TORNEO||!TORNEO.id) return;
+  const {data}=await sb.from('jugador_foto').select('jugador_id,url,created_at')
+    .eq('torneo_id',TORNEO.id).in('jugador_id',ids).order('created_at',{ascending:false});
+  const ult={}; (data||[]).forEach(f=>{if(!ult[f.jugador_id])ult[f.jugador_id]=f.url;});
+  lista.forEach(j=>{if(ult[j.id])j.foto_url=ult[j.id];});
+}
+/* Historial de fotos (verificación de identidad): todas las versiones, nunca se borran */
+async function historialFotos(jid,nombre){
+  const r=await sb.rpc('historial_fotos_jugador',{p_jugador:jid});
+  if(r.error){toast(errNegocio(r.error));return;}
+  const fotos=r.data||[];
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">🕓 HISTORIAL DE FOTOS</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-sm font-semibold mb-1">${nombre}</p>
+    <p class="text-[11px] text-ink-400 mb-4">Todas las fotos subidas de la persona (no se eliminan). Úsalas para verificar identidad; la más reciente aparece primero.</p>
+    ${fotos.length?`<div class="grid grid-cols-3 gap-3">${fotos.map((f,ix)=>`
+      <a href="${f.url}" target="_blank" class="block group">
+        <img src="${f.url}" class="w-full aspect-square object-cover rounded-xl border ${ix===0?'border-emerald-400 ring-2 ring-emerald-200':'border-line'} group-hover:opacity-80"/>
+        <p class="text-[10px] text-ink-400 mt-1 leading-tight">${(f.created_at||'').slice(0,10)}${ix===0?' · <b class="text-emerald-600">actual</b>':''}<br>${f.torneo?'🏆 '+f.torneo:'General'}</p>
+      </a>`).join('')}</div>`
+    :'<p class="text-xs text-ink-400 text-center py-4">Sin fotos registradas.</p>'}`);
 }
 /* Documento (frontal/reverso): bucket PRIVADO 'documentos' — ruta + URL firmada */
 function docUI(pref,label,ruta){
@@ -1855,6 +1886,7 @@ function modalEditIns(i){
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">✏️ EDITAR JUGADOR</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
     <p class="text-sm font-semibold mb-4">${i.nombre}</p>
     ${fotoUI(i.foto_url,i.nombre)}
+    <button onclick='historialFotos("${i.jugador_id}",${JSON.stringify(i.nombre||'').replace(/'/g,"&#39;")})' class="text-[10px] font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 mb-3 hover:bg-paper" title="Todas las fotos subidas (no se eliminan): revisión de identidad">🕓 HISTORIAL DE FOTOS</button>
     <div class="border-t border-line pt-2 mb-2">
       <p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-1.5">Identidad (corrige errores de tipeo)</p>
       <div class="grid grid-cols-2 gap-3 text-sm">
@@ -1905,7 +1937,7 @@ async function guardarEditIns(insId,jugadorId){
   let autActivado=false;
   try{
     const url=await subirFotoJugador(jugadorId);
-    if(url){const r=await sb.rpc('actualizar_foto_jugador',{p_jugador:jugadorId,p_url:url}); if(r.error){toast(errNegocio(r.error));return;}}
+    if(url){const r=await sb.rpc('actualizar_foto_jugador',{p_jugador:jugadorId,p_url:url,p_torneo:TORNEO.id}); if(r.error){toast(errNegocio(r.error));return;}}
     const fr=await subirDoc('dfr',jugadorId,'frente');
     const rv=await subirDoc('drv',jugadorId,'reverso');
     if(fr||rv){const r2=await sb.rpc('actualizar_docs_jugador',{p_jugador:jugadorId,p_frente:fr,p_reverso:rv}); if(r2.error){toast(errNegocio(r2.error));return;}}
@@ -2574,6 +2606,7 @@ async function albumEquipo(){
   toast('🖼 Generando álbum A3…');
   const pids=[...new Set([...ins.map(i=>i.jugador_id),...cts.map(c=>c.persona_id)])];
   const {data:js}=await sb.from('jugador_maestro').select('id,nombres,apellidos,foto_url,posicion').in('id',pids);
+  await fotosDelTorneo(js||[]);
   const jm=Object.fromEntries((js||[]).map(j=>[j.id,j]));
   const cl=CLUBES[EQUIPO.club_id]||{};
   await Promise.all([document.fonts.load('80px "Bebas Neue"'),document.fonts.load('700 30px Inter'),document.fonts.load('800 26px Inter')]);
@@ -2736,6 +2769,7 @@ async function imprimirPlanillasJornada(jid){
   if(ins.error){toast(errNegocio(ins.error));return;}
   const jids=[...new Set((ins.data||[]).map(i=>i.jugador_id))];
   const js=jids.length?await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,foto_url').in('id',jids):{data:[]};
+  await fotosDelTorneo(js.data||[]);
   const jmap=Object.fromEntries((js.data||[]).map(x=>[x.id,x]));
   const porEq={}; (ins.data||[]).forEach(i=>{(porEq[i.equipo_id]=porEq[i.equipo_id]||[]).push(i);});
   Object.values(porEq).forEach(l=>l.sort((a,b)=>(a.dorsal??99)-(b.dorsal??99)));
@@ -3349,6 +3383,7 @@ async function abrirAcred(m){
     sb.from('acreditacion_partido').select('*').eq('partido_id',m.id),
     jids.length?sb.from('sancion_global').select('jugador_id,vigencia_desde,vigencia_hasta').in('jugador_id',jids):{data:[]}
   ]);
+  await fotosDelTorneo(js.data||[]);
   const jmap=Object.fromEntries((js.data||[]).map(j=>[j.id,j]));
   const hoy=new Date().toISOString().slice(0,10);
   ACR_SANC=new Set((sg.data||[]).filter(s=>s.vigencia_desde<=hoy&&(!s.vigencia_hasta||s.vigencia_hasta>=hoy)).map(s=>s.jugador_id));

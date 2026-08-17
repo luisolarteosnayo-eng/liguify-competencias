@@ -392,6 +392,7 @@ async function renderPlantel(){
       sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,fecha_nacimiento,verificado,foto_url,doc_scan_frente_url,doc_scan_reverso_url,pie_habil,posicion,autorizacion_url').in('id',ins.map(i=>i.jugador_id)),
       sb.from('planilla_partido').select('inscripcion_id,jugo,goles,minutos,asistencias').in('inscripcion_id',ins.map(i=>i.id))
     ]);
+    await fotosDelTorneo(js.data||[]);
     jug=Object.fromEntries((js.data||[]).map(j=>[j.id,j]));
     (pl.data||[]).forEach(p=>{
       const s=stats[p.inscripcion_id]=stats[p.inscripcion_id]||{pj:0,min:0,g:0,as:0};
@@ -541,6 +542,7 @@ async function renderCT(puedeEditar){
   let per={};
   if(ct.length){
     const ps=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,verificado,foto_url,doc_scan_frente_url,doc_scan_reverso_url').in('id',ct.map(i=>i.persona_id));
+    await fotosDelTorneo(ps.data||[]);
     per=Object.fromEntries((ps.data||[]).map(p=>[p.id,p]));
   }
   const lleno=ct.length>=max;
@@ -627,7 +629,7 @@ async function altaCT(pais,doc){
   if(ins.error){toast(errNegocio(ins.error));return;}
   try{
     const url=await subirFotoJugador(pid);
-    if(url){const r=await sb.rpc('actualizar_foto_jugador',{p_jugador:pid,p_url:url}); if(r.error) toast(errNegocio(r.error));}
+    if(url){const r=await sb.rpc('actualizar_foto_jugador',{p_jugador:pid,p_url:url,p_torneo:EQ.torneo_id}); if(r.error) toast(errNegocio(r.error));}
     const fr=await subirDoc('dfr',pid,'frente');
     const rv=await subirDoc('drv',pid,'reverso');
     if(fr||rv){const r2=await sb.rpc('actualizar_docs_jugador',{p_jugador:pid,p_frente:fr,p_reverso:rv}); if(r2.error) toast(errNegocio(r2.error));}
@@ -651,7 +653,7 @@ function modalEditCT(i){
 async function guardarEditCT(id,personaId){
   try{
     const url=await subirFotoJugador(personaId);
-    if(url){const r=await sb.rpc('actualizar_foto_jugador',{p_jugador:personaId,p_url:url}); if(r.error){toast(errNegocio(r.error));return;}}
+    if(url){const r=await sb.rpc('actualizar_foto_jugador',{p_jugador:personaId,p_url:url,p_torneo:EQ.torneo_id}); if(r.error){toast(errNegocio(r.error));return;}}
     const fr=await subirDoc('dfr',personaId,'frente');
     const rv=await subirDoc('drv',personaId,'reverso');
     if(fr||rv){const r2=await sb.rpc('actualizar_docs_jugador',{p_jugador:personaId,p_frente:fr,p_reverso:rv}); if(r2.error){toast(errNegocio(r2.error));return;}}
@@ -716,10 +718,20 @@ async function subirFotoJugador(jugadorId){
   if(!f) return null;
   f=await redimensionar(f, 800, 0.85, true);
   const ext=(f.name.split('.').pop()||'jpg').toLowerCase();
-  const ruta=`jugadores/${jugadorId}.${ext}`;
-  const {error}=await sb.storage.from('publico').upload(ruta,f,{upsert:true,contentType:f.type});
+  // nombre único: las fotos anteriores NO se pisan (historial para verificación)
+  const ruta=`jugadores/${jugadorId}-${Date.now()}.${ext}`;
+  const {error}=await sb.storage.from('publico').upload(ruta,f,{upsert:false,contentType:f.type});
   if(error) throw error;
-  return sb.storage.from('publico').getPublicUrl(ruta).data.publicUrl+'?v='+Date.now();
+  return sb.storage.from('publico').getPublicUrl(ruta).data.publicUrl;
+}
+/* Foto por torneo: si el club subió una foto para ESTE torneo se usa esa;
+   si no, queda la última global (jugador_maestro.foto_url) */
+async function fotosDelTorneo(lista){
+  const ids=(lista||[]).map(j=>j.id); if(!ids.length) return;
+  const {data}=await sb.from('jugador_foto').select('jugador_id,url,created_at')
+    .eq('torneo_id',EQ.torneo_id).in('jugador_id',ids).order('created_at',{ascending:false});
+  const ult={}; (data||[]).forEach(f=>{if(!ult[f.jugador_id])ult[f.jugador_id]=f.url;});
+  lista.forEach(j=>{if(ult[j.id])j.foto_url=ult[j.id];});
 }
 /* Documento (frontal/reverso): bucket PRIVADO 'documentos' — se guarda la RUTA
    y se visualiza con URL firmada temporal (solo autenticados) */
@@ -825,7 +837,7 @@ async function guardarEditIns(insId,jugadorId){
   let autActivado=false;
   try{
     const url=await subirFotoJugador(jugadorId);
-    if(url){const r=await sb.rpc('actualizar_foto_jugador',{p_jugador:jugadorId,p_url:url}); if(r.error){toast(errNegocio(r.error));return;}}
+    if(url){const r=await sb.rpc('actualizar_foto_jugador',{p_jugador:jugadorId,p_url:url,p_torneo:EQ.torneo_id}); if(r.error){toast(errNegocio(r.error));return;}}
     const fr=await subirDoc('dfr',jugadorId,'frente');
     const rv=await subirDoc('drv',jugadorId,'reverso');
     if(fr||rv){const r2=await sb.rpc('actualizar_docs_jugador',{p_jugador:jugadorId,p_frente:fr,p_reverso:rv}); if(r2.error){toast(errNegocio(r2.error));return;}}
