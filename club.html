@@ -208,13 +208,26 @@ async function cargarHub(){
   MIS=(eqs.data||[]).filter(m=>vistos.has(m.equipo_id)?false:vistos.add(m.equipo_id));
   const porTorneo={};
   MIS.forEach(m=>{(porTorneo[m.torneo_id]=porTorneo[m.torneo_id]||[]).push(m);});
-  $('hub-lista').innerHTML=Object.values(porTorneo).map(grupo=>{
+  HUB_GRUPOS=Object.values(porTorneo); HUB_VER_FIN=false;
+  if(!MIS.length){
+    $('hub-lista').innerHTML=`<div class="text-sm bg-white border border-line rounded-2xl p-6 text-center">
+      <p class="text-ink-400 mb-3">Aún no tienes equipos vinculados. Acepta tu invitación 📨 o canjea el código 🎟 que te dio tu organizador.</p>
+      <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-left">💡 Estás conectado como <b>${(await sb.auth.getSession()).data.session?.user?.email||''}</b>. Las invitaciones llegan al correo EXACTO que registró tu organizador: si te invitó a otro correo, entra con ese (usa el enlace del email que te llegó) o pídele que reenvíe la invitación a este.</p>
+    </div>`;
+  } else renderHubLista();
+  show('s-hub');
+}
+/* Hub: por defecto solo torneos EN CURSO (y en preparación); los FINALIZADOS
+   quedan tras un botón. Los archivados no se muestran. */
+let HUB_GRUPOS=[], HUB_VER_FIN=false;
+function renderHubLista(){
+  const grupoHTML=grupo=>{
     const t=grupo[0];
     const soyCoord=grupo.some(m=>m.rol==='coordinador');
     return `<div class="mb-6">
       <div class="bg-ink-900 text-white rounded-2xl px-5 py-3 mb-2 flex items-center gap-3 flex-wrap">
         <span class="font-display text-2xl tracking-wide">${t.torneo.toUpperCase()}</span>
-        <span class="text-xs text-white/50">${t.marca}</span>
+        <span class="text-xs text-white/50">${t.marca}${t.torneo_estado==='finalizado'?' · FINALIZADO':''}</span>
         ${soyCoord?`<button onclick='modalSubcoordinador("${t.torneo_id}")' class="ml-auto bg-white/10 border border-white/20 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl hover:bg-white/20">➕ SUB-COORDINADOR</button>`:''}
       </div>
       <div class="space-y-2">${grupo.map(m=>`
@@ -228,12 +241,17 @@ async function cargarHub(){
           <span class="text-ink-400">→</span>
         </button>`).join('')}</div>
     </div>`;
-  }).join('')
-  ||`<div class="text-sm bg-white border border-line rounded-2xl p-6 text-center">
-      <p class="text-ink-400 mb-3">Aún no tienes equipos vinculados. Acepta tu invitación 📨 o canjea el código 🎟 que te dio tu organizador.</p>
-      <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-left">💡 Estás conectado como <b>${(await sb.auth.getSession()).data.session?.user?.email||''}</b>. Las invitaciones llegan al correo EXACTO que registró tu organizador: si te invitó a otro correo, entra con ese (usa el enlace del email que te llegó) o pídele que reenvíe la invitación a este.</p>
-    </div>`;
-  show('s-hub');
+  };
+  const est=g=>g[0].torneo_estado;
+  const actuales=HUB_GRUPOS.filter(g=>est(g)!=='finalizado'&&est(g)!=='archivado');
+  const fin=HUB_GRUPOS.filter(g=>est(g)==='finalizado');
+  $('hub-lista').innerHTML=
+    (actuales.map(grupoHTML).join('')||'<p class="text-ink-400 text-sm bg-white border border-line rounded-2xl p-5 mb-4">Sin torneos en curso por el momento.</p>')
+    +(fin.length?`
+      <button onclick="HUB_VER_FIN=!HUB_VER_FIN;renderHubLista()" class="w-full text-left bg-paper border border-dashed border-line rounded-2xl px-5 py-3 mb-4 text-xs font-bold text-ink-500 hover:bg-white">
+        ${HUB_VER_FIN?'▾ OCULTAR':'▸ VER'} TORNEOS FINALIZADOS (${fin.length})
+      </button>
+      ${HUB_VER_FIN?fin.map(grupoHTML).join(''):''}`:'');
 }
 async function aceptarInv(id){
   const {data,error}=await sb.rpc('aceptar_invitacion',{p_id:id});
