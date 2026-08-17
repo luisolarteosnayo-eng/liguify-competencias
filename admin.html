@@ -2587,6 +2587,7 @@ async function renderFixture(){
     `<div class="flex justify-end gap-2 mb-3 flex-wrap">
       <button onclick="exportarExcelFixture()" title="Excel con todas las fechas: día y relación de partidos" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">⬇ EXCEL FIXTURE</button>
       <button onclick="imprimirFixturePDF()" title="PDF del fixture completo con logos de los equipos, para compartir o imprimir" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">🖨 PDF FIXTURE</button>${esAdmin()?`
+      <button onclick="modalReplicar()" title="Copiar estas fechas y cruces a otras categorías del torneo (mismos clubes)" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">⧉ REPLICAR</button>
       <button onclick="modalLlaves()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">🏆 GENERAR LLAVES</button>
       <button onclick="modalFixture()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">⚙️ GENERAR FIXTURE</button>`:''}</div>`
     + ((htmlFechas+htmlFases) || '<p class="text-ink-400 text-sm">Sin partidos.</p>');
@@ -2765,6 +2766,119 @@ async function exportarExcelFixture(){
   XLSX.utils.book_append_sheet(wb,ws,'Fixture');
   XLSX.writeFile(wb,`fixture-${(CAT.nombre_display||'categoria').replace(/[^\w]+/g,'-')}.xlsx`);
   toast(`⬇ Excel del fixture descargado ✔ — ${js.length} fecha(s) de la categoría`);
+}
+
+/* ---- ⧉ REPLICAR FIXTURE a otras categorías del MISMO torneo ----
+   Caso real (INTI CUP): los mismos clubes juegan en 5 categorías y cada club
+   debe enfrentar al MISMO rival en la misma fecha. Se copian las jornadas
+   (número + día) y los cruces de la fase de grupos, emparejando por CLUB:
+   local/visita del origen → el equipo de ESE club en la categoría destino.
+   Las llaves (partidos con etapa) NO se replican. ---- */
+let REP_CATS=[];
+async function modalReplicar(){
+  const src=(await sb.from('partido').select('id,jornada_id,etapa').eq('categoria_id',CAT.id)).data||[];
+  const grupos=src.filter(m=>m.jornada_id&&!m.etapa);
+  if(!grupos.length){toast('⚠ Esta categoría no tiene partidos de fase de grupos que replicar');return;}
+  const cats=(await sb.from('categoria').select('*').eq('torneo_id',TORNEO.id)).data||[];
+  const destinos=cats.filter(c=>c.id!==CAT.id);
+  if(!destinos.length){toast('⚠ El torneo no tiene otras categorías');return;}
+  // clubes del origen y diagnóstico por destino
+  const eqSrc=Object.values(EQUIPOS);
+  const clubesSrc=[...new Set(eqSrc.map(e=>e.club_id))];
+  const eqAll=(await sb.from('equipo').select('id,club_id,categoria_id,estado').in('categoria_id',destinos.map(c=>c.id))).data||[];
+  const faseAll=(await sb.from('fase').select('id,categoria_id').in('categoria_id',destinos.map(c=>c.id))).data||[];
+  const zonaAll=faseAll.length?(await sb.from('zona').select('id,nombre,fase_id').in('fase_id',faseAll.map(f=>f.id))).data||[]:[];
+  const partAll=(await sb.from('partido').select('id,categoria_id').in('categoria_id',destinos.map(c=>c.id))).data||[];
+  REP_CATS=destinos.map(c=>{
+    const eqs=eqAll.filter(e=>e.categoria_id===c.id&&e.estado==='activo');
+    const clubes=new Set(eqs.map(e=>e.club_id));
+    const fases=faseAll.filter(f=>f.categoria_id===c.id).map(f=>f.id);
+    return {...c,
+      faltan:clubesSrc.filter(x=>!clubes.has(x)).map(x=>(CLUBES[x]||{}).nombre||'—'),
+      zonas:zonaAll.filter(z=>fases.includes(z.fase_id)),
+      yaTiene:partAll.filter(p=>p.categoria_id===c.id).length};
+  });
+  const fila=(c,i)=>{
+    const ok=!c.faltan.length&&c.zonas.length;
+    return `<label class="flex items-start gap-2 border ${ok?'border-line':'border-amber-200 bg-amber-50'} rounded-xl px-3 py-2 mb-2 text-sm">
+      <input type="checkbox" id="rp-c-${i}" ${ok?'checked':'disabled'} class="w-4 h-4 accent-[#d9232e] mt-0.5"/>
+      <span class="flex-1 min-w-0">
+        <b>${c.nombre_display||('Categoría '+c.anio_nacimiento)}</b>
+        ${c.yaTiene?`<span class="block text-[10px] font-bold text-amber-700">⚠ ya tiene ${c.yaTiene} partido(s) — marca "Reemplazar" para regenerarla</span>`:''}
+        ${c.faltan.length?`<span class="block text-[10px] text-brand-600 font-bold">Faltan ${c.faltan.length} club(es): ${c.faltan.slice(0,4).join(', ')}${c.faltan.length>4?'…':''} — inscríbelos primero</span>`
+          :!c.zonas.length?'<span class="block text-[10px] text-brand-600 font-bold">Sin zonas creadas — crea la zona primero</span>'
+          :'<span class="block text-[10px] text-emerald-600 font-bold">✔ mismos clubes · lista para replicar</span>'}
+      </span></label>`;
+  };
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⧉ REPLICAR FIXTURE</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-3">Copia las <b>${new Set(grupos.map(m=>m.jornada_id)).size} fecha(s)</b> y los <b>${grupos.length} cruces</b> de <b>${CAT.nombre_display||''}</b> a las categorías elegidas. Los rivales se emparejan <b>por club</b>: cada club enfrenta al mismo rival en la misma fecha. No se copian resultados ni llaves.</p>
+    ${REP_CATS.map(fila).join('')}
+    <label class="flex items-center justify-between text-sm font-semibold border border-line rounded-xl px-3 py-2.5 my-3">
+      <span>Reemplazar partidos existentes<br><span class="text-[10px] text-brand-600 font-normal">⚠ Borra los partidos de fase de grupos de las categorías elegidas (incluye resultados)</span></span>
+      <input id="rp-rep" type="checkbox" class="w-4 h-4 accent-[#d9232e]"/>
+    </label>
+    <button onclick="replicarFixture()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">REPLICAR</button>`);
+}
+async function replicarFixture(){
+  const elegidas=REP_CATS.filter((c,i)=>{const el=$('rp-c-'+i);return el&&el.checked&&!el.disabled;});
+  if(!elegidas.length){toast('⚠ Elige al menos una categoría destino');return;}
+  const reemplazar=$('rp-rep').checked;
+  // origen: jornadas + partidos de fase de grupos
+  const jSrc=(await sb.from('jornada').select('*').eq('categoria_id',CAT.id).order('numero')).data||[];
+  const jById=Object.fromEntries(jSrc.map(j=>[j.id,j]));
+  const pSrc=((await sb.from('partido').select('*').eq('categoria_id',CAT.id)).data||[])
+    .filter(m=>m.jornada_id&&!m.etapa&&m.local_id&&m.visita_id);
+  if(!pSrc.length){toast('⚠ No hay cruces que replicar');return;}
+  const clubDe=eid=>(EQUIPOS[eid]||{}).club_id;
+  let resumen=[];
+  for(const c of elegidas){
+    // mapa club → equipo de la categoría destino
+    const eqs=((await sb.from('equipo').select('id,club_id,estado').eq('categoria_id',c.id)).data||[]).filter(e=>e.estado==='activo');
+    const porClub={}; eqs.forEach(e=>{porClub[e.club_id]=e.id;});
+    // zona destino: la del mismo nombre que la del origen, o la primera
+    const zonaDest=id=>{
+      const zo=ZONAS.find(z=>z.id===id);
+      const m=zo&&c.zonas.find(z=>z.nombre===zo.nombre);
+      return m||c.zonas[0];
+    };
+    if(reemplazar){
+      const viejos=((await sb.from('partido').select('id,etapa,jornada_id').eq('categoria_id',c.id)).data||[]).filter(m=>m.jornada_id&&!m.etapa);
+      if(viejos.length){
+        const del=await sb.from('partido').delete().in('id',viejos.map(m=>m.id));
+        if(del.error){toast(`${c.nombre_display}: ${errNegocio(del.error)}`);return;}
+      }
+    } else {
+      const hay=(await sb.from('partido').select('id').eq('categoria_id',c.id)).data||[];
+      if(hay.length){resumen.push(`${c.nombre_display}: omitida (ya tiene ${hay.length} partidos)`);continue;}
+    }
+    // jornadas destino con el mismo número y día
+    const jDest=(await sb.from('jornada').select('*').eq('categoria_id',c.id)).data||[];
+    const porNum=Object.fromEntries(jDest.map(j=>[j.numero,j]));
+    for(const j of jSrc){
+      if(porNum[j.numero]) continue;
+      const nj=await sb.from('jornada').insert({categoria_id:c.id, numero:j.numero, nombre:j.nombre||('Fecha '+j.numero),
+        fecha:j.fecha, computa_en_tabla:j.computa_en_tabla, horarios_publicados:false}).select().single();
+      if(nj.error){toast(`${c.nombre_display}: ${errNegocio(nj.error)}`);return;}
+      porNum[j.numero]=nj.data;
+    }
+    // cruces emparejados por club
+    const filas=[]; let sinEquipo=0;
+    for(const m of pSrc){
+      const L=porClub[clubDe(m.local_id)], V=porClub[clubDe(m.visita_id)];
+      if(!L||!V){sinEquipo++;continue;}
+      const z=zonaDest(m.zona_id);
+      const j=porNum[(jById[m.jornada_id]||{}).numero];
+      if(!j){sinEquipo++;continue;}
+      filas.push({categoria_id:c.id, fase_id:z?z.fase_id:null, zona_id:z?z.id:null, jornada_id:j.id,
+        local_id:L, visita_id:V, fecha:m.fecha, hora:m.hora, sede:m.sede, cancha:m.cancha, estado:'programado'});
+    }
+    if(!filas.length){resumen.push(`${c.nombre_display}: sin cruces mapeables`);continue;}
+    const ins=await sb.from('partido').insert(filas);
+    if(ins.error){toast(`${c.nombre_display}: ${errNegocio(ins.error)}`);return;}
+    resumen.push(`${c.nombre_display}: ${filas.length} partidos${sinEquipo?` (${sinEquipo} omitidos)`:''}`);
+  }
+  cerrarModal();
+  toast(`⧉ Réplica lista ✔ — ${resumen.join(' · ')}. 🚫 Las fechas nuevas nacen OCULTAS al público: publícalas con 👁 cuando confirmes horarios.`);
 }
 
 /* ---- Fixture completo en PDF: vista de impresión A4 con logos de equipos.
