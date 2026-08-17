@@ -278,16 +278,33 @@ async function cargarTorneos(){
   $('btn-nuevo-torneo').classList.toggle('hidden', !esAdmin());
   const {data:ts,error}=await sb.from('torneo').select('*').eq('marca_id',MARCA.id).order('created_at');
   if(error){msg(errNegocio(error),'err');return;}
-  $('lista-torneos').innerHTML=ts.map(t=>`
-    <div class="w-full bg-white border border-line rounded-2xl px-5 py-4 flex items-center gap-4 hover:shadow-md transition">
+  TORNEOS_TODOS=ts||[]; VER_ARCHIVADOS=false;
+  renderListaTorneos();
+  show('s-torneos');
+}
+/* Lista de torneos: por defecto solo BORRADOR y EN CURSO; los finalizados y
+   archivados quedan plegados tras un botón (siguen siendo editables ahí). */
+let TORNEOS_TODOS=[], VER_ARCHIVADOS=false;
+function renderListaTorneos(){
+  const filaT=(t,cerrado)=>`
+    <div class="w-full bg-white border border-line rounded-2xl px-5 py-4 flex items-center gap-4 hover:shadow-md transition ${cerrado?'opacity-75':''}">
       <span class="w-11 h-11 rounded-xl bg-ink-900 text-white font-display grid place-items-center text-sm overflow-hidden relative">${t.logo_url?`<img src="${t.logo_url}" class="absolute inset-0 w-full h-full object-cover"/>`:(t.nombre.replace(MARCA.nombre,'').trim().slice(0,4)||iniciales(t.nombre))}</span>
       <button onclick='abrirTorneo(${JSON.stringify(t).replace(/'/g,"&#39;")})' class="flex-1 text-left">
         <span class="font-bold block">${t.nombre}</span>
         <span class="text-xs text-ink-400">Temporada ${t.anio} · ${t.estado==='en_curso'?'<b class="text-emerald-600">EN CURSO</b>':t.estado}</span></button>
       ${esAdmin()?`<button onclick='modalTorneo(${JSON.stringify(t).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-500 border border-line rounded-lg px-3 py-2 hover:bg-paper" title="Configuración del torneo">⚙️ CONFIG</button>`:''}
       <button onclick='abrirTorneo(${JSON.stringify(t).replace(/'/g,"&#39;")})' class="text-ink-400">→</button>
-    </div>`).join('');
-  show('s-torneos');
+    </div>`;
+  const esCerrado=t=>['finalizado','archivado'].includes(t.estado);
+  const activos=TORNEOS_TODOS.filter(t=>!esCerrado(t));
+  const cerrados=TORNEOS_TODOS.filter(esCerrado);
+  $('lista-torneos').innerHTML=
+    (activos.map(t=>filaT(t,false)).join('')||'<p class="text-ink-400 text-sm bg-white border border-line rounded-2xl px-5 py-4">Sin torneos en borrador o en curso.</p>')
+    +(cerrados.length?`
+      <button onclick="VER_ARCHIVADOS=!VER_ARCHIVADOS;renderListaTorneos()" class="w-full text-left bg-paper border border-dashed border-line rounded-2xl px-5 py-3 text-xs font-bold text-ink-500 hover:bg-white">
+        ${VER_ARCHIVADOS?'▾ OCULTAR':'▸ VER'} FINALIZADOS Y ARCHIVADOS (${cerrados.length})
+      </button>
+      ${VER_ARCHIVADOS?cerrados.map(t=>filaT(t,true)).join(''):''}`:'');
 }
 
 /* ============ GESTIÓN: STORAGE + MARCA + TORNEO ============ */
