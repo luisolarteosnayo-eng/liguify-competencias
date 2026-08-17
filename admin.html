@@ -2582,7 +2582,8 @@ async function renderFixture(){
     </div>`).join('');
   $('tab-fixture').innerHTML=
     `<div class="flex justify-end gap-2 mb-3 flex-wrap">
-      <button onclick="exportarExcelFixture()" title="Excel con todas las fechas: día y relación de partidos" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">⬇ EXCEL FIXTURE</button>${esAdmin()?`
+      <button onclick="exportarExcelFixture()" title="Excel con todas las fechas: día y relación de partidos" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">⬇ EXCEL FIXTURE</button>
+      <button onclick="imprimirFixturePDF()" title="PDF del fixture completo con logos de los equipos, para compartir o imprimir" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">🖨 PDF FIXTURE</button>${esAdmin()?`
       <button onclick="modalLlaves()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">🏆 GENERAR LLAVES</button>
       <button onclick="modalFixture()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">⚙️ GENERAR FIXTURE</button>`:''}</div>`
     + ((htmlFechas+htmlFases) || '<p class="text-ink-400 text-sm">Sin partidos.</p>');
@@ -2761,6 +2762,86 @@ async function exportarExcelFixture(){
   XLSX.utils.book_append_sheet(wb,ws,'Fixture');
   XLSX.writeFile(wb,`fixture-${(CAT.nombre_display||'categoria').replace(/[^\w]+/g,'-')}.xlsx`);
   toast(`⬇ Excel del fixture descargado ✔ — ${js.length} fecha(s) de la categoría`);
+}
+
+/* ---- Fixture completo en PDF: vista de impresión A4 con logos de equipos.
+   Desde el diálogo de impresión se guarda como PDF o se imprime. ---- */
+async function imprimirFixturePDF(){
+  const {data:pms,error}=await sb.from('partido').select('*').eq('categoria_id',CAT.id).not('jornada_id','is',null);
+  if(error){toast(errNegocio(error));return;}
+  if(!(pms||[]).length){toast('⚠ Esta categoría aún no tiene fechas generadas');return;}
+  const porJ={}; (pms||[]).forEach(m=>{(porJ[m.jornada_id]=porJ[m.jornada_id]||[]).push(m);});
+  const js=[...JORNADAS].sort((a,b)=>(a.numero||0)-(b.numero||0)).filter(j=>porJ[j.id]);
+  const esc=t=>String(t??'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const diaTxt=f=>f?new Date(f+'T00:00:00').toLocaleDateString('es-PE',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'}):'por confirmar';
+  const nom=id=>id?esc(nomEq(EQUIPOS[id]||{})||'Por definir'):'Por definir';
+  const escudo=id=>{
+    const e=EQUIPOS[id]||{}, cl=CLUBES[e.club_id]||{};
+    return cl.escudo_url?`<img class="esc" src="${cl.escudo_url}"/>`
+      :`<span class="esc esc-ini" style="background:${cl.color||'#334155'}">${esc(iniciales(cl.nombre||'?'))}</span>`;
+  };
+  const logoT=TORNEO.logo_url||MARCA.logo_url;
+  const bloques=js.map(j=>{
+    const lista=porJ[j.id].sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')||(a.hora||'').localeCompare(b.hora||''));
+    const dia=j.fecha||(lista.find(m=>m.fecha)||{}).fecha||null;
+    const filas=lista.map(m=>{
+      const fin=['finalizado','walkover'].includes(m.estado);
+      return `<div class="fila">
+        <span class="hora">${m.hora?m.hora.slice(0,5):'--:--'}</span>
+        <span class="eq eq-l">${nom(m.local_id)} ${m.local_id?escudo(m.local_id):''}</span>
+        <span class="marc ${fin?'m-fin':''}">${fin?`${m.goles_local??0} : ${m.goles_visita??0}`:'vs'}${m.penales?`<i>pen ${m.penales_local??0}-${m.penales_visita??0}</i>`:''}</span>
+        <span class="eq">${m.visita_id?escudo(m.visita_id):''} ${nom(m.visita_id)}</span>
+        <span class="sede">${esc(m.sede||'')}${m.cancha?' · '+esc(m.cancha):''}</span>
+      </div>`;}).join('');
+    return `<div class="fecha-blq">
+      <div class="fecha-cab"><span>FECHA ${j.numero??''}</span><span class="fecha-dia">${diaTxt(dia)}</span></div>
+      ${filas}
+    </div>`;
+  }).join('');
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Fixture · ${esc(CAT.nombre_display||'')} · ${esc(TORNEO.nombre)}</title><style>
+    *{margin:0;padding:0;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    @page{size:A4 portrait;margin:10mm}
+    body{background:#eee}
+    .hoja{background:#fff;width:190mm;margin:6mm auto;padding:6mm}
+    @media print{body{background:#fff}.hoja{margin:0;padding:0;width:auto}.no-print{display:none}}
+    .cab{display:flex;align-items:center;gap:5mm;background:#0f172a;color:#fff;border-radius:4mm;padding:4.5mm 6mm;margin-bottom:5mm}
+    .cab img{width:15mm;height:15mm;object-fit:contain;background:#fff;border-radius:3mm;padding:1mm;flex:none}
+    .cab-t1{font-size:19px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;line-height:1.15}
+    .cab-t2{font-size:10px;color:#fbbf24;font-weight:800;text-transform:uppercase;letter-spacing:2.5px;margin-bottom:1mm}
+    .cab-t3{font-size:10px;color:#cbd5e1;font-weight:700;text-transform:uppercase;margin-top:0.5mm}
+    .fecha-blq{page-break-inside:avoid;margin-bottom:4.5mm;border:1px solid #e2e8f0;border-radius:3mm;overflow:hidden}
+    .fecha-cab{display:flex;justify-content:space-between;align-items:center;background:#111827;color:#fff;padding:2.2mm 4mm;font-weight:900;font-size:12px;letter-spacing:1.5px}
+    .fecha-dia{font-size:8.5px;color:#fbbf24;text-transform:uppercase;font-weight:800;letter-spacing:1px}
+    .fila{display:flex;align-items:center;gap:2.5mm;padding:1.7mm 4mm;border-bottom:1px solid #eef1f5;font-size:9.5px}
+    .fila:last-child{border-bottom:0}
+    .fila:nth-of-type(odd){background:#f8fafc}
+    .hora{width:10mm;font-weight:900;color:#d9232e;flex:none}
+    .eq{flex:1;display:flex;align-items:center;gap:2mm;font-weight:800;text-transform:uppercase;min-width:0}
+    .eq-l{justify-content:flex-end;text-align:right}
+    .esc{width:6.5mm;height:6.5mm;object-fit:contain;border-radius:1.5mm;flex:none}
+    .esc-ini{display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:6.5px;font-weight:900}
+    .marc{width:15mm;text-align:center;font-weight:900;font-size:11px;color:#94a3b8;flex:none}
+    .m-fin{color:#111}
+    .marc i{display:block;font-style:normal;font-size:6px;color:#94a3b8;font-weight:700}
+    .sede{width:25mm;text-align:right;font-size:7.5px;color:#64748b;font-weight:700;flex:none}
+    .pie{text-align:center;font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:1px;margin-top:3mm}
+    .barra{position:sticky;top:0;background:#111;color:#fff;padding:10px;text-align:center;font-size:13px;z-index:9}
+    .barra button{background:#d9232e;color:#fff;border:0;border-radius:8px;padding:8px 18px;font-weight:bold;font-size:13px;cursor:pointer;margin-right:10px}
+  </style></head><body>
+  <div class="no-print barra"><button onclick="print()">🖨 IMPRIMIR / GUARDAR PDF</button>${js.length} fecha(s) — en el diálogo elige "Guardar como PDF"</div>
+  <div class="hoja">
+    <div class="cab">
+      ${logoT?`<img src="${logoT}"/>`:''}
+      <div><div class="cab-t2">Fixture oficial</div><div class="cab-t1">${esc(TORNEO.nombre)}</div><div class="cab-t3">${esc(CAT.nombre_display||'')}</div></div>
+    </div>
+    ${bloques}
+    <div class="pie">⚡ POWERED BY LIGUIFY · liguify.com</div>
+  </div>
+  <script>window.onload=function(){setTimeout(function(){window.print();},800);};<\/script>
+  </body></html>`;
+  const w=window.open('','_blank');
+  if(!w){toast('⚠ El navegador bloqueó la ventana — permite pop-ups para generar el PDF');return;}
+  w.document.write(html); w.document.close();
 }
 
 /* ---- Planillas de juego imprimibles por fecha (para apuntar en campo) ---- */
