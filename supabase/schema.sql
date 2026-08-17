@@ -73,6 +73,7 @@ create table competencias.jugador_maestro (
   foto_url             text,
   doc_scan_frente_url  text,                          -- storage PRIVADO (T7)
   doc_scan_reverso_url text,
+  licencia_url         text,                          -- licencia de entrenador (CT), storage PRIVADO
   verificado           boolean not null default false,
   consentimiento_imagen boolean not null default false,  -- T3: foto B/N si false
   consentimiento_fecha  timestamptz,
@@ -1722,6 +1723,27 @@ begin
 end $$;
 revoke execute on function competencias.actualizar_identidad_jugador(uuid,text,text,date) from public, anon;
 grant  execute on function competencias.actualizar_identidad_jugador(uuid,text,text,date) to authenticated;
+
+-- Licencia del entrenador (patch_licencia_ct.sql): imagen en bucket PRIVADO
+-- 'documentos', ruta jugadores/{id}-licencia.ext; solo CT gestionado
+create or replace function competencias.actualizar_licencia_ct(p_persona uuid, p_ruta text)
+returns void
+language plpgsql security definer
+set search_path = competencias, public
+as $$
+begin
+  if coalesce(trim(p_ruta),'') = '' then
+    raise exception 'Ruta de licencia inválida';
+  end if;
+  if not exists (select 1 from competencias.comando_tecnico ct
+                 where ct.persona_id = p_persona
+                   and competencias.gestiona_equipo(ct.equipo_id, ct.categoria_id)) then
+    raise exception 'Sin permiso: la persona no está en un comando técnico que gestiones';
+  end if;
+  update competencias.jugador_maestro set licencia_url = p_ruta where id = p_persona;
+end $$;
+revoke execute on function competencias.actualizar_licencia_ct(uuid,text) from public, anon;
+grant  execute on function competencias.actualizar_licencia_ct(uuid,text) to authenticated;
 
 revoke execute on function competencias.gestiona_equipo(uuid,uuid)               from public, anon;
 revoke execute on function competencias.actualizar_foto_jugador(uuid,text,uuid)  from public, anon;

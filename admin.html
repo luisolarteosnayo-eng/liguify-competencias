@@ -1418,7 +1418,7 @@ async function renderCT(){
   if(error){$('ct-card').innerHTML=`<p class="text-brand-600 text-xs font-bold">${errNegocio(error)}</p>`;return;}
   let per={};
   if(ct.length){
-    const ps=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,verificado,foto_url,doc_scan_frente_url,doc_scan_reverso_url').in('id',ct.map(i=>i.persona_id));
+    const ps=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,verificado,foto_url,doc_scan_frente_url,doc_scan_reverso_url,licencia_url').in('id',ct.map(i=>i.persona_id));
     await fotosDelTorneo(ps.data||[]);
     per=Object.fromEntries((ps.data||[]).map(p=>[p.id,p]));
   }
@@ -1431,7 +1431,7 @@ async function renderCT(){
         :`<button onclick="modalCT()" class="bg-ink-900 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-ink-700">+ AGREGAR MIEMBRO</button>`}
     </div>
     ${ct.length?ct.map(i=>{const p=per[i.persona_id]||{};
-      const edit={id:i.id,rol:i.rol,estado:i.estado,inhabilitado:i.inhabilitado,nombre:(p.nombres||'')+' '+(p.apellidos||''),persona_id:i.persona_id,foto_url:p.foto_url||null,dfr:p.doc_scan_frente_url||null,drv:p.doc_scan_reverso_url||null};
+      const edit={id:i.id,rol:i.rol,estado:i.estado,inhabilitado:i.inhabilitado,nombre:(p.nombres||'')+' '+(p.apellidos||''),persona_id:i.persona_id,foto_url:p.foto_url||null,dfr:p.doc_scan_frente_url||null,drv:p.doc_scan_reverso_url||null,lic:p.licencia_url||null};
       return `<div class="fila-persona flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 border-b border-line last:border-0 ${i.inhabilitado?'bg-red-50/60':''}">
         <span class="w-8 h-8 rounded-full grid place-items-center text-[10px] font-bold text-white overflow-hidden relative shrink-0" style="background:#2b3550">${p.foto_url?`<img src="${p.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales((p.nombres||'')+' '+(p.apellidos||''))}</span>
         <span class="text-[9px] font-bold bg-sky-100 text-sky-700 rounded px-1.5 py-0.5 whitespace-nowrap shrink-0">${i.rol}</span>
@@ -1539,6 +1539,7 @@ async function buscarPersonaCT(){
         ${fotoUI(null,'CT')}
         ${docUI('dfr','DNI frontal',null)}
         ${docUI('drv','DNI reverso',null)}
+        ${docUI('lic','Licencia',null)}
       </div>
       <button onclick="altaCT('${pais}','${doc}')" class="w-full bg-amber-600 text-white text-sm font-bold py-2.5 rounded-xl hover:bg-amber-700">CREAR E INSCRIBIR (queda PENDIENTE)</button></div>`;
   }
@@ -1565,6 +1566,8 @@ async function altaCT(pais,doc){
     const fr=await subirDoc('dfr',pid,'frente');
     const rv=await subirDoc('drv',pid,'reverso');
     if(fr||rv){const r2=await sb.rpc('actualizar_docs_jugador',{p_jugador:pid,p_frente:fr,p_reverso:rv}); if(r2.error) toast(errNegocio(r2.error));}
+    const lc=await subirDoc('lic',pid,'licencia');
+    if(lc){const r3=await sb.rpc('actualizar_licencia_ct',{p_persona:pid,p_ruta:lc}); if(r3.error) toast(errNegocio(r3.error));}
   }catch(e){toast('Fotos: '+(e.message||e));}
   cerrarModal(); toast('Miembro del CT creado con sus fotos — PENDIENTE de validación ✔'); renderCT();
 }
@@ -1579,9 +1582,10 @@ function modalEditCT(i){
     ${fotoUI(i.foto_url,i.nombre)}
     <button onclick='historialFotos("${i.persona_id}",${JSON.stringify(i.nombre||'').replace(/'/g,"&#39;")})' class="text-[10px] font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 mb-3 hover:bg-paper" title="Todas las fotos subidas (no se eliminan): revisión de identidad">🕓 HISTORIAL DE FOTOS</button>
     <div class="border-t border-line pt-2 mb-2">
-      <p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-1.5">Documento de identidad (privado)</p>
+      <p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-1.5">Documentos (privados)</p>
       ${docUI('dfr','DNI frontal',i.dfr)}
       ${docUI('drv','DNI reverso',i.drv)}
+      ${docUI('lic','Licencia',i.lic)}
     </div>
     <div class="grid grid-cols-2 gap-3 text-sm mb-3">
       <label class="block"><span class="text-ink-400 font-semibold text-xs">Rol</span>
@@ -1602,6 +1606,8 @@ async function guardarEditCT(id,personaId){
     const fr=await subirDoc('dfr',personaId,'frente');
     const rv=await subirDoc('drv',personaId,'reverso');
     if(fr||rv){const r2=await sb.rpc('actualizar_docs_jugador',{p_jugador:personaId,p_frente:fr,p_reverso:rv}); if(r2.error){toast(errNegocio(r2.error));return;}}
+    const lc=await subirDoc('lic',personaId,'licencia');
+    if(lc){const r3=await sb.rpc('actualizar_licencia_ct',{p_persona:personaId,p_ruta:lc}); if(r3.error){toast(errNegocio(r3.error));return;}}
   }catch(e){toast('Fotos: '+(e.message||e));return;}
   const {error}=await sb.from('comando_tecnico').update({rol:$('ec-r').value, estado:$('ec-e').value, inhabilitado:$('ec-i').checked}).eq('id',id);
   if(error){toast(errNegocio(error));return;}
