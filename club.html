@@ -976,7 +976,7 @@ async function renderPartidos(){
         </div>
         <div class="flex-1 min-w-0 flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm ${gV?'font-bold':''}">${lado(m.visita_id,true)}</div>
       </div>
-      <p class="text-[10px] text-ink-400 text-center pb-2">${ctx}${(m.jornada&&m.jornada.horarios_publicados===false)?' · 🕒 horario por confirmar':`${m.fecha?' · '+m.fecha:''}${m.hora?' '+m.hora.slice(0,5):''}${m.sede?' · '+m.sede:''}`}</p>
+      <p class="text-[10px] text-ink-400 text-center pb-2">${ctx}${(m.jornada&&m.jornada.horarios_publicados===false)?' · 🕒 horario por confirmar':`${m.fecha?' · '+m.fecha:''}${m.hora?' '+m.hora.slice(0,5):''}${m.sede?' · '+m.sede:''}`}${m.video_url?' · 📺 video':''}</p>
     </div>`;
   };
   const jugados=(pms||[]).filter(m=>['finalizado','walkover'].includes(m.estado));
@@ -1037,6 +1037,7 @@ async function detallePartidoClub(id){
       <p class="font-display text-5xl tracking-wider">${m.goles_local??'–'} : ${m.goles_visita??'–'}</p>
       ${m.penales?`<p class="text-[10px] text-ink-400">penales ${m.penales_local} x ${m.penales_visita}</p>`:''}
       <p class="text-[10px] text-ink-400">${ctx}${m.fecha?' · '+m.fecha:''}${m.hora?' '+m.hora.slice(0,5):''}${m.sede?' · '+m.sede:''}</p>
+      ${m.video_url?`<a href="${m.video_url}" target="_blank" rel="noopener" class="inline-flex items-center gap-2 bg-brand-500 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-brand-600 mt-2">📺 VER VIDEO DEL PARTIDO</a>`:''}
     </div>
     <div class="flex items-center justify-between border-b-2 border-ink-900 pb-1 mt-3">
       <p class="font-display text-lg tracking-wide truncate">${nomDe(EQ.equipo_id)} — MI PLANTEL</p>

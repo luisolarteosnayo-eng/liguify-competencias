@@ -3305,6 +3305,8 @@ async function modalResultado(m){
         <input id="rs-pv" type="number" min="0" value="${m.penales_visita??0}" class="w-12 border border-line rounded-lg text-center py-1 font-bold"/>
       </span>
     </div>
+    <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">📺 Video del partido (URL de YouTube u otro — visible en el público)</span>
+      <input id="rs-vid" type="url" value="${m.video_url||''}" placeholder="https://youtube.com/..." class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
     ${RS_INS.length?`<div class="border-t border-line pt-2 mb-3">
       <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-2">Estadísticas por jugador (opcional)</p>
       <div class="grid sm:grid-cols-2 gap-x-6 gap-y-2">
@@ -3329,9 +3331,9 @@ async function guardarResultado(id){
   // Volver a PROGRAMADO = borrar el resultado completo (marcador, penales,
   // figura y estadísticas por jugador de ESTE partido) y recalcular la tabla
   if($('rs-e').value==='programado'){
-    if(!confirm('El partido volverá a PROGRAMADO.\n\nSe borran: marcador, penales, figura y las estadísticas por jugador de este partido (goles, tarjetas, minutos y asistencias). La tabla se recalcula.\n\n¿Continuar?'))return;
+    if(!confirm('El partido volverá a PROGRAMADO.\n\nSe borran: marcador, penales, figura, el enlace de video y las estadísticas por jugador de este partido (goles, tarjetas, minutos y asistencias). La tabla se recalcula.\n\n¿Continuar?'))return;
     const {error}=await sb.from('partido').update({goles_local:null,goles_visita:null,estado:'programado',
-      penales:false,penales_local:null,penales_visita:null,figura_inscripcion_id:null}).eq('id',id);
+      penales:false,penales_local:null,penales_visita:null,figura_inscripcion_id:null,video_url:null}).eq('id',id);
     if(error){toast(errNegocio(error));return;}
     const pl=await sb.from('planilla_partido').update({jugo:false,goles:0,amarillas:0,rojas:0,minutos:0,asistencias:0}).eq('partido_id',id);
     if(pl.error) toast('Partido reprogramado, pero la planilla no se pudo limpiar: '+errNegocio(pl.error));
@@ -3357,9 +3359,11 @@ async function guardarResultado(id){
     if(!confirm(`⚠ La suma de goles por jugador (${sumL} : ${sumV}) no coincide con el marcador (${gl} : ${gv}).\n\nPuede ser válido (autogol) — ¿guardar de todos modos?`))return;
   }
   const pen=$('rs-pen').checked;
+  let vid=($('rs-vid')&&$('rs-vid').value.trim())||null;
+  if(vid&&!/^https?:\/\//i.test(vid)) vid='https://'+vid;
   const {error}=await sb.from('partido').update({goles_local:+gl,goles_visita:+gv,estado:$('rs-e').value,
     penales:pen, penales_local:pen?+$('rs-pl').value||0:null, penales_visita:pen?+$('rs-pv').value||0:null,
-    figura_inscripcion_id:($('rs-fig')&&$('rs-fig').value)||null}).eq('id',id);
+    figura_inscripcion_id:($('rs-fig')&&$('rs-fig').value)||null, video_url:vid}).eq('id',id);
   if(error){toast(errNegocio(error));return;}
   if(cambios.length){
     const up=await sb.from('planilla_partido').upsert(cambios,{onConflict:'partido_id,inscripcion_id'});

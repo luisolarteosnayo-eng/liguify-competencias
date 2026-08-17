@@ -304,6 +304,7 @@ create table competencias.partido (
   penales_local  int,
   penales_visita int,
   figura_inscripcion_id uuid references competencias.inscripcion_lbf(id),  -- ⭐ figura del partido
+  video_url    text,          -- 📺 URL del video del partido (YouTube u otro), visible en el público
   comentario   text,
   visible      boolean not null default true,
   created_by   uuid,
