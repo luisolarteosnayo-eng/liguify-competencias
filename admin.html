@@ -2186,7 +2186,8 @@ async function modalFixture(){
         </select></label>
       <label><span class="text-ink-400 font-semibold text-xs">Fecha de inicio</span><input id="gf-f" type="date" value="${hoy.toISOString().slice(0,10)}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
       <label><span class="text-ink-400 font-semibold text-xs">Días entre fechas</span><input id="gf-int" type="number" min="1" value="7" class="w-full border-b border-line py-1.5 font-semibold"/></label>
-      <label><span class="text-ink-400 font-semibold text-xs">Hora del primer partido</span><input id="gf-h" type="time" value="09:00" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Hora del primer partido <span class="text-ink-300 font-normal">(opcional)</span></span><input id="gf-h" type="time" value="" class="w-full border-b border-line py-1.5 font-semibold"/>
+        <span class="block text-[10px] text-ink-400 mt-0.5">En blanco: los partidos nacen sin horario (lo asignas después con ⚙ FECHA o el Excel de horarios).</span></label>
       <label><span class="text-ink-400 font-semibold text-xs">Sede</span><input id="gf-s" placeholder="Arena 7" class="w-full border-b border-line py-1.5 font-semibold"/></label>
     </div>
     <label class="flex items-center justify-between text-sm font-semibold border border-line rounded-xl px-3 py-2.5 mb-4">
@@ -2230,18 +2231,20 @@ async function generarFixture(){
       jorPorNum[r+1]=nj.data;
     }
   }
-  // construir e insertar partidos (horas escalonadas entre TODAS las zonas de la fecha)
-  const hBase=$('gf-h').value||'09:00', sede=$('gf-s').value.trim()||null;
+  // construir e insertar partidos. La hora es OPCIONAL: en blanco los partidos
+  // nacen sin horario (se asigna después); con hora, se escalonan entre TODAS
+  // las zonas de la fecha.
+  const hBase=$('gf-h').value||'', sede=$('gf-s').value.trim()||null;
   const filas=[];
   for(let r=0;r<totalFechas;r++){
     const d=new Date(fInicio+'T00:00:00'); d.setDate(d.getDate()+r*intervalo);
     let slot=0;
     zonasOk.forEach(z=>{
       (rr[z.id][r]||[]).forEach(([l,v])=>{
-        const h=((+hBase.slice(0,2))+slot)%24;
+        const h=hBase?String(((+hBase.slice(0,2))+slot)%24).padStart(2,'0')+':'+hBase.slice(3):null;
         filas.push({categoria_id:CAT.id, fase_id:z.fase_id, zona_id:z.id, jornada_id:jorPorNum[r+1].id,
           local_id:l, visita_id:v, fecha:d.toISOString().slice(0,10),
-          hora:String(h).padStart(2,'0')+':'+hBase.slice(3), sede, estado:'programado'});
+          hora:h, sede, estado:'programado'});
         slot++;
       });
     });
@@ -2287,7 +2290,7 @@ async function modalLlaves(){
           <option value="4">5º y 6º de cada zona</option>
         </select></label>
       <label><span class="text-ink-400 font-semibold text-xs">Fecha</span><input id="ll-f" type="date" value="${new Date(Date.now()+3*864e5).toISOString().slice(0,10)}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
-      <label><span class="text-ink-400 font-semibold text-xs">Hora del primer partido</span><input id="ll-h" type="time" value="09:00" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      <label><span class="text-ink-400 font-semibold text-xs">Hora del primer partido <span class="text-ink-300 font-normal">(opcional)</span></span><input id="ll-h" type="time" value="" class="w-full border-b border-line py-1.5 font-semibold"/></label>
       <label><span class="text-ink-400 font-semibold text-xs">Sede</span><input id="ll-s" placeholder="Arena 7" class="w-full border-b border-line py-1.5 font-semibold"/></label>
     </div>
     <div id="ll-rows" class="space-y-2 mb-4"></div>
@@ -2340,8 +2343,8 @@ async function crearPlantilla(){
   if(Z.length!==2&&Z.length!==4){toast('⚠ La plantilla automática requiere 2 o 4 zonas. Usa EQUIPOS DIRECTOS.');return;}
   const faseId=await llFaseElegida(); if(!faseId) return;
   const o=+($('ll-desde').value||0);
-  const fecha=$('ll-f').value, hBase=$('ll-h').value||'09:00', sede=$('ll-s').value.trim()||null;
-  const hora=i=>String(((+hBase.slice(0,2))+i)%24).padStart(2,'0')+':'+hBase.slice(3);
+  const fecha=$('ll-f').value, hBase=$('ll-h').value||'', sede=$('ll-s').value.trim()||null;
+  const hora=i=>hBase?String(((+hBase.slice(0,2))+i)%24).padStart(2,'0')+':'+hBase.slice(3):null;
   const cupo=(z,p)=>({t:'zona',zona:z,puesto:p});
   const base={categoria_id:CAT.id,fase_id:faseId,zona_id:null,jornada_id:null,estado:'programado',fecha,sede};
   let semis;
@@ -2490,7 +2493,7 @@ async function crearLlaves(){
     FASES.push(nf.data); faseId=nf.data.id;
   }
   const etapa=$('ll-etapa').value, n=ETAPAS_LLAVE[etapa];
-  const hBase=$('ll-h').value||'09:00', fecha=$('ll-f').value, sede=$('ll-s').value.trim()||null;
+  const hBase=$('ll-h').value||'', fecha=$('ll-f').value, sede=$('ll-s').value.trim()||null;
   const filas=[];
   for(let i=0;i<n;i++){
     const l=$(`ll-l-${i}`).value, v=$(`ll-v-${i}`).value;
@@ -2498,7 +2501,7 @@ async function crearLlaves(){
     if(l===v){toast(`⚠ ${etapa} #${i+1}: un equipo no puede jugar contra sí mismo`);return;}
     filas.push({categoria_id:CAT.id, fase_id:faseId, zona_id:null, jornada_id:null,
       etapa: n>1?`${etapa} #${i+1}`:etapa, local_id:l, visita_id:v,
-      fecha, hora:String(((+hBase.slice(0,2))+i)%24).padStart(2,'0')+':'+hBase.slice(3),
+      fecha, hora:hBase?String(((+hBase.slice(0,2))+i)%24).padStart(2,'0')+':'+hBase.slice(3):null,
       sede, estado:'programado'});
   }
   if(!filas.length){toast('⚠ Define al menos una llave con ambos equipos');return;}
