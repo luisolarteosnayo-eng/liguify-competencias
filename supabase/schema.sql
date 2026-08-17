@@ -1217,16 +1217,24 @@ from competencias.jugador_maestro j;
 -- LBF pública (alineaciones): dorsal + nombre, sin datos médicos/documentales.
 -- La foto se resuelve POR TORNEO (patch_fotos_historial.sql): la subida para
 -- ese torneo, o si no hay, la última global — siempre con consentimiento.
+-- ⚠ Se resuelve con JOIN LATERAL inline, NO con foto_torneo(): el cuerpo de
+-- una función dentro de una vista corre con el rol del visitante (anon) y
+-- fallaba con permission denied (patch_fix_foto_publico.sql).
 create or replace view competencias.vista_lbf_publica as
 select i.id as inscripcion_id, i.equipo_id, i.categoria_id, i.dorsal, i.capitan,
        i.es_excepcion, jp.nombres, jp.apellidos, jp.anio_nacimiento,
        case when jp.consentimiento_imagen
-            then competencias.foto_torneo(i.jugador_id, cat.torneo_id) else null end as foto_url,
+            then coalesce(ft.url, jp.foto_url) else null end as foto_url,
        jp.consentimiento_imagen,
        jp.pie_habil, jp.posicion, jp.mes_nacimiento
 from competencias.inscripcion_lbf i
 join competencias.vista_jugador_publico jp on jp.id = i.jugador_id
 join competencias.categoria cat on cat.id = i.categoria_id
+left join lateral (
+  select f.url from competencias.jugador_foto f
+  where f.jugador_id = i.jugador_id and f.torneo_id = cat.torneo_id
+  order by f.created_at desc limit 1
+) ft on true
 where i.en_lbf and not i.inhabilitado;
 
 -- ============================================================================
@@ -1598,10 +1606,12 @@ create policy jf_read on competencias.jugador_foto for select
                     and competencias.gestiona_equipo(ct.equipo_id, ct.categoria_id)) );
 grant select on competencias.jugador_foto to authenticated;
 
--- Foto a mostrar en un torneo: la última del torneo, o la última global
+-- Foto a mostrar en un torneo: la última del torneo, o la última global.
+-- SECURITY DEFINER (la usan las RPC de carnets); SIN execute para anon — y las
+-- vistas públicas NO la llaman (usan lateral inline, ver vista_lbf_publica).
 create or replace function competencias.foto_torneo(p_jugador uuid, p_torneo uuid)
 returns text
-language sql stable
+language sql stable security definer
 set search_path = competencias, public
 as $$
   select coalesce(
@@ -1610,6 +1620,8 @@ as $$
       order by f.created_at desc limit 1),
     (select j.foto_url from competencias.jugador_maestro j where j.id = p_jugador))
 $$;
+revoke execute on function competencias.foto_torneo(uuid,uuid) from public, anon;
+grant  execute on function competencias.foto_torneo(uuid,uuid) to authenticated;
 
 create or replace function competencias.actualizar_foto_jugador(p_jugador uuid, p_url text, p_torneo uuid default null)
 returns void
