@@ -2174,10 +2174,17 @@ function roundRobin(ids){
 }
 async function modalFixture(){
   const ez=ZONAS.length?await sb.from('equipo_en_zona').select('*').in('zona_id',ZONAS.map(z=>z.id)):{data:[]};
-  const conteo={}; (ez.data||[]).forEach(x=>conteo[x.zona_id]=(conteo[x.zona_id]||0)+1);
+  // se cuentan SOLO los equipos activos: los retirados no entran en el fixture
+  const activo=id=>(EQUIPOS[id]||{}).estado==='activo';
+  const conteo={}, retiradosEnZona=[];
+  (ez.data||[]).forEach(x=>{
+    if(activo(x.equipo_id)) conteo[x.zona_id]=(conteo[x.zona_id]||0)+1;
+    else if(EQUIPOS[x.equipo_id]) retiradosEnZona.push(nomEq(EQUIPOS[x.equipo_id]));
+  });
   const hoy=new Date(); hoy.setDate(hoy.getDate()+3);
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⚙️ GENERAR FIXTURE</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
-    <p class="text-xs text-ink-400 mb-4">Todos contra todos por zona (N equipos → N−1 fechas, sin repetición). Las <b>fechas son compartidas</b>: en cada jornada juegan todas las zonas. Zona impar = un descanso por fecha.</p>
+    <p class="text-xs text-ink-400 mb-3">Todos contra todos por zona (N equipos → N−1 fechas, sin repetición). Las <b>fechas son compartidas</b>: en cada jornada juegan todas las zonas. Zona impar = un descanso por fecha.</p>
+    ${retiradosEnZona.length?`<p class="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-3">🚫 No entran al fixture ${retiradosEnZona.length} equipo(s) RETIRADO(S): ${retiradosEnZona.join(', ')}</p>`:''}
     <div class="grid grid-cols-2 gap-3 text-sm mb-3">
       <label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Alcance</span>
         <select id="gf-z" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
@@ -2199,9 +2206,11 @@ async function modalFixture(){
 async function generarFixture(){
   const sel=$('gf-z').value;
   const zonasSel = sel==='__all__' ? ZONAS : ZONAS.filter(z=>z.id===sel);
-  // equipos por zona
+  // equipos por zona — SOLO ACTIVOS: los equipos RETIRADOS siguen asignados a
+  // la zona (para conservar su historial) pero no deben entrar en el fixture
   const ez=await sb.from('equipo_en_zona').select('*').in('zona_id',zonasSel.map(z=>z.id));
-  const porZona={}; (ez.data||[]).forEach(x=>{(porZona[x.zona_id]=porZona[x.zona_id]||[]).push(x.equipo_id);});
+  const activo=id=>(EQUIPOS[id]||{}).estado==='activo';
+  const porZona={}; (ez.data||[]).filter(x=>activo(x.equipo_id)).forEach(x=>{(porZona[x.zona_id]=porZona[x.zona_id]||[]).push(x.equipo_id);});
   const zonasOk=zonasSel.filter(z=>(porZona[z.id]||[]).length>=2);
   if(!zonasOk.length){toast('⚠ Se necesitan al menos 2 equipos en la zona para generar');return;}
   // guardia de resultados existentes
@@ -2782,8 +2791,8 @@ async function modalReplicar(){
   const cats=(await sb.from('categoria').select('*').eq('torneo_id',TORNEO.id)).data||[];
   const destinos=cats.filter(c=>c.id!==CAT.id);
   if(!destinos.length){toast('⚠ El torneo no tiene otras categorías');return;}
-  // clubes del origen y diagnóstico por destino
-  const eqSrc=Object.values(EQUIPOS);
+  // clubes del origen (solo equipos ACTIVOS) y diagnóstico por destino
+  const eqSrc=Object.values(EQUIPOS).filter(e=>e.estado==='activo');
   const clubesSrc=[...new Set(eqSrc.map(e=>e.club_id))];
   const eqAll=(await sb.from('equipo').select('id,club_id,categoria_id,estado').in('categoria_id',destinos.map(c=>c.id))).data||[];
   const faseAll=(await sb.from('fase').select('id,categoria_id').in('categoria_id',destinos.map(c=>c.id))).data||[];
@@ -2826,8 +2835,9 @@ async function replicarFixture(){
   // origen: jornadas + partidos de fase de grupos
   const jSrc=(await sb.from('jornada').select('*').eq('categoria_id',CAT.id).order('numero')).data||[];
   const jById=Object.fromEntries(jSrc.map(j=>[j.id,j]));
+  const act=id=>(EQUIPOS[id]||{}).estado==='activo';   // los retirados no se replican
   const pSrc=((await sb.from('partido').select('*').eq('categoria_id',CAT.id)).data||[])
-    .filter(m=>m.jornada_id&&!m.etapa&&m.local_id&&m.visita_id);
+    .filter(m=>m.jornada_id&&!m.etapa&&m.local_id&&m.visita_id&&act(m.local_id)&&act(m.visita_id));
   if(!pSrc.length){toast('⚠ No hay cruces que replicar');return;}
   const clubDe=eid=>(EQUIPOS[eid]||{}).club_id;
   let resumen=[];
