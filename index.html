@@ -322,9 +322,15 @@ function renderTorneosPub(){
       </span><span class="text-ink-400">→</span>
     </button>`;
   const enCurso=PUB_TORNEOS.filter(t=>t.estado==='en_curso');
-  const anteriores=PUB_TORNEOS.filter(t=>t.estado==='finalizado');
+  let anteriores=PUB_TORNEOS.filter(t=>t.estado==='finalizado');
+  let principales=enCurso;
+  // sin torneos en curso → se muestra el último finalizado como principal
+  if(!enCurso.length&&anteriores.length){
+    principales=[anteriores[anteriores.length-1]];
+    anteriores=anteriores.slice(0,-1);
+  }
   $('torneos').innerHTML=
-    (enCurso.map(filaT).join('')||'<p class="text-ink-400 text-sm bg-white border border-line rounded-2xl px-5 py-4">Sin torneos en curso por el momento.</p>')
+    (principales.map(filaT).join('')||'<p class="text-ink-400 text-sm bg-white border border-line rounded-2xl px-5 py-4">Sin torneos publicados por el momento.</p>')
     +(anteriores.length?`
       <button onclick="PUB_VER_ANTERIORES=!PUB_VER_ANTERIORES;renderTorneosPub()" class="w-full text-left bg-paper border border-dashed border-line rounded-2xl px-5 py-3 text-xs font-bold text-ink-500 hover:bg-white">
         ${PUB_VER_ANTERIORES?'▾ OCULTAR':'▸ VER'} TORNEOS ANTERIORES (${anteriores.length})
