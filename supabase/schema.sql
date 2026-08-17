@@ -1679,3 +1679,28 @@ select 'OK: esquema competencias v1 COMPLETO' as resultado,
        (select count(*) from information_schema.tables where table_schema='competencias') as tablas,
        (select count(*) from competencias.partido) as partidos,
        (select count(*) from competencias.vista_tabla_zona) as filas_standings;
+
+-- ---- SOLICITUDES DE TORNEOS (registro público → backoffice super-admin) ----
+-- Formulario en liguify.com; solo es_super ve y gestiona (alta/baja/descartada);
+-- al dar de alta se vincula con la marca creada. Futuro: estados de cuenta.
+create table if not exists competencias.solicitud_torneo (
+  id            uuid primary key default gen_random_uuid(),
+  nombre_torneo text not null check (char_length(nombre_torneo) between 2 and 80),
+  contacto      text not null check (char_length(contacto) between 2 and 80),
+  telefono      text not null check (char_length(telefono) between 6 and 25),
+  email         text not null check (email ~* '^[^@\s]+@[^@\s]+\.[^@\s]+$' and char_length(email) <= 120),
+  estado        text not null default 'nueva' check (estado in ('nueva','alta','baja','descartada')),
+  marca_id      uuid references competencias.marca(id),
+  nota          text,
+  created_at    timestamptz not null default now(),
+  atendida_at   timestamptz
+);
+alter table competencias.solicitud_torneo enable row level security;
+create policy sol_ins_publica on competencias.solicitud_torneo for insert
+  to anon, authenticated with check (true);
+create policy sol_super_read on competencias.solicitud_torneo for select
+  using (competencias.es_super());
+create policy sol_super_upd on competencias.solicitud_torneo for update
+  using (competencias.es_super()) with check (competencias.es_super());
+grant insert on competencias.solicitud_torneo to anon, authenticated;
+grant select, update on competencias.solicitud_torneo to authenticated;

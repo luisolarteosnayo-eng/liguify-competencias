@@ -55,6 +55,10 @@ tailwind.config={theme:{extend:{
     <h1 class="font-display text-4xl tracking-wide mb-1">CAMPEONATOS</h1>
     <p class="text-ink-500 text-sm mb-6">Marcas organizadoras — datos en vivo desde la base de datos</p>
     <div class="grid grid-cols-2 md:grid-cols-3 gap-4" id="catalogo"></div>
+    <button onclick="modalRegistroTorneo()" class="mt-6 w-full border-2 border-dashed border-brand-500/50 bg-white/60 rounded-2xl px-5 py-4 text-left hover:bg-white hover:shadow-md transition">
+      <span class="font-display text-2xl tracking-wide text-brand-600">➕ ¿ORGANIZAS UN TORNEO?</span>
+      <span class="block text-xs text-ink-500 mt-0.5">Regístralo aquí: te contactamos y lo damos de alta en Liguify con su propia página, fixture, tablas y módulo de clubes.</span>
+    </button>
   </section>
 
   <!-- TORNEOS DE LA MARCA -->
@@ -141,6 +145,45 @@ const nomEq=eq=>eq.nombre||(CLUBES[eq.club_id]||{}).nombre||'—';
 /* Modal (detalle del partido) */
 function abrirModal(html){$('modal-body').innerHTML=html;const m=$('modal');m.classList.remove('hidden');m.classList.add('flex');}
 function cerrarModal(){const m=$('modal');m.classList.add('hidden');m.classList.remove('flex');}
+
+/* ---- Registro público de torneos (lead → backoffice del super-admin) ---- */
+function modalRegistroTorneo(){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">➕ REGISTRA TU TORNEO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-500 mb-4">Déjanos los datos básicos y te contactamos para dar de alta tu torneo en Liguify.</p>
+    <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Nombre del torneo *</span>
+      <input id="rt-n" maxlength="80" placeholder="Ej. ARRIAGOL CUP" class="w-full border-b-2 border-line py-1.5 font-semibold outline-none focus:border-brand-500"/></label>
+    <div class="grid sm:grid-cols-2 gap-3 mb-3">
+      <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Nombre de contacto *</span>
+        <input id="rt-c" maxlength="80" placeholder="Tu nombre" class="w-full border-b-2 border-line py-1.5 font-semibold outline-none focus:border-brand-500"/></label>
+      <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Teléfono / WhatsApp *</span>
+        <input id="rt-t" maxlength="25" placeholder="999 888 777" class="w-full border-b-2 border-line py-1.5 font-semibold outline-none focus:border-brand-500"/></label>
+    </div>
+    <label class="block text-sm mb-1"><span class="text-ink-400 font-semibold text-xs">Email *</span>
+      <input id="rt-e" type="email" maxlength="120" placeholder="tucorreo@gmail.com" class="w-full border-b-2 border-line py-1.5 font-semibold outline-none focus:border-brand-500"/></label>
+    <p class="text-[11px] text-ink-400 mb-4">💡 Usa el email con el que entrarás al sistema (tu cuenta de Google u otro correo): con ese mismo te daremos el acceso de administrador.</p>
+    <p id="rt-err" class="hidden text-xs font-bold text-brand-600 mb-2"></p>
+    <button id="rt-btn" onclick="enviarRegistroTorneo()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">📨 ENVIAR SOLICITUD</button>`);
+}
+async function enviarRegistroTorneo(){
+  const v=id=>($(id)?$(id).value.trim():'');
+  const n=v('rt-n'), c=v('rt-c'), t=v('rt-t'), e=v('rt-e');
+  const errEl=$('rt-err');
+  const fail=m=>{errEl.textContent='⚠ '+m; errEl.classList.remove('hidden');};
+  if(n.length<2) return fail('Escribe el nombre del torneo.');
+  if(c.length<2) return fail('Escribe el nombre de contacto.');
+  if(t.length<6) return fail('Escribe un teléfono válido.');
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return fail('Escribe un email válido.');
+  $('rt-btn').disabled=true; $('rt-btn').textContent='Enviando…';
+  const {error}=await sb.from('solicitud_torneo').insert({nombre_torneo:n, contacto:c, telefono:t, email:e});
+  if(error){$('rt-btn').disabled=false;$('rt-btn').textContent='📨 ENVIAR SOLICITUD';return fail(error.message);}
+  $('modal-body').innerHTML=`<div class="text-center py-8">
+    <p class="text-5xl mb-3">✅</p>
+    <h3 class="font-display text-3xl tracking-wide mb-2">¡SOLICITUD ENVIADA!</h3>
+    <p class="text-sm text-ink-500 mb-1">Registramos <b>${n.replace(/</g,'&lt;')}</b>.</p>
+    <p class="text-xs text-ink-400 mb-5">Te contactaremos a ${t.replace(/</g,'&lt;')} · ${e.replace(/</g,'&lt;')} para darlo de alta.</p>
+    <button onclick="cerrarModal()" class="bg-ink-900 text-white font-bold px-6 py-2.5 rounded-xl hover:bg-ink-700">ENTENDIDO</button>
+  </div>`;
+}
 async function abrirDetallePartido(id){
   const m=PART_IDX[id]; if(!m) return;
   const L=EQUIPOS[m.local_id], V=EQUIPOS[m.visita_id];

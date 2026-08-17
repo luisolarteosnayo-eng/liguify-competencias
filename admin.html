@@ -260,10 +260,13 @@ function cambiarMarca(id){
 
 /* ============ TORNEOS ============ */
 async function cargarTorneos(){
+  let nSol=0;
+  if(ES_SUPER){try{const r=await sb.from('solicitud_torneo').select('id',{count:'exact',head:true}).eq('estado','nueva'); nSol=r.count||0;}catch(e){}}
   const selMarcas=(MARCAS.length>1||ES_SUPER)?`<div class="flex gap-2 mb-3 flex-wrap items-center">
     <span class="text-[10px] uppercase tracking-widest text-ink-400 font-bold">Mis marcas:</span>
     ${MARCAS.map(m=>`<button onclick="cambiarMarca('${m.id}')" class="text-xs font-bold px-4 py-2 rounded-xl border ${m.id===MARCA.id?'bg-ink-900 text-white border-ink-900':'bg-white border-line text-ink-500 hover:bg-paper'}">${m.nombre.toUpperCase()}</button>`).join('')}
     ${ES_SUPER?`<button onclick="modalNuevaMarca()" class="text-xs font-bold px-4 py-2 rounded-xl border border-dashed border-brand-500 text-brand-600 hover:bg-brand-50">+ NUEVA MARCA</button>
+    <button onclick="modalSolicitudes()" title="Backoffice: torneos registrados desde la página pública (altas, bajas)" class="text-xs font-bold px-4 py-2 rounded-xl border ${nSol?'bg-amber-400 text-ink-900 border-amber-400':'border-line text-ink-500 hover:bg-paper'}">🗂 SOLICITUDES${nSol?` (${nSol})`:''}</button>
     <button onclick="modalCatalogos()" title="Maestro de datos: valores de Posición, Pie hábil y futuros atributos" class="text-xs font-bold px-4 py-2 rounded-xl border border-line text-ink-500 hover:bg-paper">⚙ CATÁLOGOS</button>`:''}
   </div>`:'';
   $('marca-card').innerHTML=selMarcas+`<div class="bg-ink-900 text-white rounded-2xl p-5 flex items-center gap-4 flex-wrap">
@@ -424,6 +427,67 @@ async function catToggle(id,activo){
 }
 
 /* ---- ALTA DE MARCAS (solo super-admin) + USUARIOS por marca ---- */
+/* ---- 🗂 SOLICITUDES (backoffice super-admin): torneos registrados desde la
+   página pública — nueva → alta (crea la marca) / baja / descartada ---- */
+let SOL_FILTRO='nueva', SOL_PENDIENTE=null;
+function modalSolicitudes(){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">🗂 SOLICITUDES DE TORNEOS</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-3">Registros desde la página pública. Al dar de alta se abre + NUEVA MARCA con los datos precargados y la solicitud queda vinculada. (Próximamente: estados de cuenta por marca.)</p>
+    <div id="sol-filtros" class="flex gap-1.5 mb-3 flex-wrap"></div>
+    <div id="sol-lista" class="text-sm">Cargando…</div>`);
+  cargarSolicitudes();
+}
+async function cargarSolicitudes(){
+  const filtros=[['nueva','NUEVAS'],['alta','ALTAS'],['baja','BAJAS'],['descartada','DESCARTADAS'],['todas','TODAS']];
+  $('sol-filtros').innerHTML=filtros.map(([v,l])=>`<button onclick="SOL_FILTRO='${v}';cargarSolicitudes()" class="text-[10px] font-bold px-3 py-1.5 rounded-full border ${SOL_FILTRO===v?'bg-ink-900 text-white border-ink-900':'bg-white border-line text-ink-500 hover:bg-paper'}">${l}</button>`).join('');
+  let q=sb.from('solicitud_torneo').select('*').order('created_at',{ascending:false});
+  if(SOL_FILTRO!=='todas') q=q.eq('estado',SOL_FILTRO);
+  const {data,error}=await q;
+  if(error){$('sol-lista').innerHTML=`<p class="text-brand-600 text-xs font-bold">${errNegocio(error)}</p>`;return;}
+  const chipE=e=>({nueva:'bg-amber-100 text-amber-700',alta:'bg-emerald-100 text-emerald-700',baja:'bg-brand-100 text-brand-600',descartada:'bg-paper text-ink-400'})[e]||'bg-paper text-ink-400';
+  $('sol-lista').innerHTML=(data||[]).length?data.map(s=>`
+    <div class="border border-line rounded-xl px-4 py-3 mb-2">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="font-bold flex-1 min-w-0">${s.nombre_torneo}</span>
+        <span class="text-[9px] font-bold uppercase rounded-full px-2 py-0.5 ${chipE(s.estado)}">${s.estado}</span>
+        <span class="text-[10px] text-ink-400">${new Date(s.created_at).toLocaleDateString('es-PE',{day:'2-digit',month:'2-digit',year:'2-digit'})}</span>
+      </div>
+      <p class="text-xs text-ink-500 mt-1">👤 ${s.contacto} · <a href="https://wa.me/${(s.telefono||'').replace(/\D/g,'')}" target="_blank" class="font-bold text-emerald-700 hover:underline">📱 ${s.telefono}</a> · ✉️ ${s.email}</p>
+      ${s.nota?`<p class="text-[11px] text-ink-400 mt-1">📝 ${s.nota}</p>`:''}
+      <div class="flex gap-1.5 mt-2 flex-wrap">
+        ${s.estado==='nueva'?`
+          <button onclick='solCrearMarca("${s.id}",${JSON.stringify(s.nombre_torneo)},${JSON.stringify(s.email)})' class="bg-emerald-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg hover:bg-emerald-800">➕ DAR DE ALTA (CREAR MARCA)</button>
+          <button onclick="solEstado('${s.id}','descartada')" class="text-[10px] font-bold text-ink-400 border border-line rounded-lg px-3 py-1.5 hover:bg-paper">DESCARTAR</button>`:''}
+        ${s.estado==='alta'?`<button onclick="solEstado('${s.id}','baja')" class="text-[10px] font-bold text-brand-600 border border-brand-100 rounded-lg px-3 py-1.5 hover:bg-brand-50">DAR DE BAJA</button>`:''}
+        ${s.estado==='baja'?`<button onclick="solEstado('${s.id}','alta')" class="text-[10px] font-bold text-emerald-700 border border-emerald-300 rounded-lg px-3 py-1.5 hover:bg-emerald-50">REACTIVAR (ALTA)</button>`:''}
+        ${s.estado==='descartada'?`<button onclick="solEstado('${s.id}','nueva')" class="text-[10px] font-bold text-ink-500 border border-line rounded-lg px-3 py-1.5 hover:bg-paper">RECUPERAR</button>`:''}
+        <button onclick="solNota('${s.id}',${JSON.stringify(s.nota||'')})" class="text-[10px] font-bold text-ink-400 border border-line rounded-lg px-3 py-1.5 hover:bg-paper">📝 NOTA</button>
+      </div>
+    </div>`).join('')
+    :'<p class="text-ink-400 text-xs py-4 text-center">Sin solicitudes en este filtro.</p>';
+}
+async function solEstado(id,estado){
+  const {error}=await sb.from('solicitud_torneo').update({estado,atendida_at:new Date().toISOString()}).eq('id',id);
+  if(error){toast(errNegocio(error));return;}
+  toast(`Solicitud marcada como ${estado.toUpperCase()} ✔`);
+  cargarSolicitudes();
+}
+async function solNota(id,actual){
+  const n=prompt('Nota interna de la solicitud:',actual||'');
+  if(n===null)return;
+  const {error}=await sb.from('solicitud_torneo').update({nota:n||null}).eq('id',id);
+  if(error){toast(errNegocio(error));return;}
+  cargarSolicitudes();
+}
+function solCrearMarca(id,nombre,email){
+  SOL_PENDIENTE=id;
+  cerrarModal();
+  modalNuevaMarca();
+  $('nm-n').value=nombre;
+  $('nm-s').value=nombre.toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,30);
+  $('nm-owner').value=email;
+  toast('Datos de la solicitud precargados — revisa membresía y logo, y CREAR MARCA');
+}
 function modalNuevaMarca(){
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">+ NUEVA MARCA</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
     <p class="text-xs text-ink-400 mb-4">Da de alta una marca cliente. Tú quedas como admin para configurarla; el dueño se asigna por email.</p>
@@ -460,6 +524,12 @@ async function crearMarca(){
     const r=await sb.rpc('asignar_rol_marca',{p_email:oe, p_marca:mk.id, p_rol:'admin_marca'});
     if(r.error) extra=' · dueño: '+errNegocio(r.error);
     else extra=r.data==='OK'?' · dueño asignado ✔':' · ⚠ el dueño aún no tiene cuenta: pídele entrar una vez a liguify.com/admin y asígnalo desde 👥 USUARIOS';
+  }
+  // si venía de una solicitud del backoffice, se marca DE ALTA y se vincula
+  if(SOL_PENDIENTE){
+    await sb.from('solicitud_torneo').update({estado:'alta',marca_id:mk.id,atendida_at:new Date().toISOString()}).eq('id',SOL_PENDIENTE);
+    SOL_PENDIENTE=null;
+    extra+=' · solicitud marcada DE ALTA ✔';
   }
   MARCAS.push(mk); MARCAS.sort((a,b)=>a.nombre.localeCompare(b.nombre));
   ROLES.push({marca_id:mk.id, rol:'admin_marca'});
