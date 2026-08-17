@@ -531,7 +531,7 @@ function imprimirCarnetCT(){
   w.document.close();
 }
 /* ---- COMANDO TÉCNICO (misma maestra global de personas) ---- */
-const CT_ROLES=['Entrenador','Asistente Técnico','Preparador físico','Preparador de arqueros','Médico'];
+const CT_ROLES=['Entrenador','Asistente Técnico','Preparador físico','Preparador de arqueros','Médico','Coordinador'];
 async function renderCT(puedeEditar){
   const [ctq,tq]=await Promise.all([
     sb.from('comando_tecnico').select('*').eq('equipo_id',EQ.equipo_id).order('created_at'),

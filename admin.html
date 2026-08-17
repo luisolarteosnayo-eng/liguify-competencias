@@ -1412,7 +1412,7 @@ async function abrirLBF(eqId){
   await Promise.all([renderLBF(),renderCT()]); show('s-lbf');
 }
 /* ---- COMANDO TÉCNICO (por equipo/torneo; misma maestra global de personas) ---- */
-const CT_ROLES=['Entrenador','Asistente Técnico','Preparador físico','Preparador de arqueros','Médico'];
+const CT_ROLES=['Entrenador','Asistente Técnico','Preparador físico','Preparador de arqueros','Médico','Coordinador'];
 async function renderCT(){
   const {data:ct,error}=await sb.from('comando_tecnico').select('*').eq('equipo_id',EQUIPO.id).order('created_at');
   if(error){$('ct-card').innerHTML=`<p class="text-brand-600 text-xs font-bold">${errNegocio(error)}</p>`;return;}

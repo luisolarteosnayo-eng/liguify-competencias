@@ -1504,7 +1504,7 @@ create table if not exists competencias.comando_tecnico (
   equipo_id    uuid not null references competencias.equipo(id) on delete cascade,
   categoria_id uuid not null references competencias.categoria(id) on delete cascade,
   persona_id   uuid not null references competencias.jugador_maestro(id),
-  rol          text not null check (rol in ('Entrenador','Asistente Técnico','Preparador físico','Preparador de arqueros','Médico')),
+  rol          text not null check (rol in ('Entrenador','Asistente Técnico','Preparador físico','Preparador de arqueros','Médico','Coordinador')),
   estado       text not null default 'pendiente' check (estado in ('pendiente','activo')),
   inhabilitado boolean not null default false,
   qr_token     text,                               -- carnet: QR → liguify.com/verificar?ct=<token>
