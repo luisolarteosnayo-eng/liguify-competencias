@@ -213,6 +213,11 @@ async function cargarHub(){
   MIS=(eqs.data||[]).filter(m=>vistos.has(m.equipo_id)?false:vistos.add(m.equipo_id));
   const porTorneo={};
   MIS.forEach(m=>{(porTorneo[m.torneo_id]=porTorneo[m.torneo_id]||[]).push(m);});
+  // dentro de cada torneo: por CLUB (alfabético) y luego CATEGORÍA descendente (2019, 2018, …)
+  Object.values(porTorneo).forEach(g=>g.sort((a,b)=>
+    (a.club_nombre||'').localeCompare(b.club_nombre||'','es')
+    || (b.anio||0)-(a.anio||0)
+    || (a.modalidad||'').localeCompare(b.modalidad||'','es')));
   HUB_GRUPOS=Object.values(porTorneo); HUB_VER_FIN=false;
   if(!MIS.length){
     $('hub-lista').innerHTML=`<div class="text-sm bg-white border border-line rounded-2xl p-6 text-center">

@@ -1145,7 +1145,9 @@ async function pdfComandoTecnico(){
   let n=0;
   const cuerpo=clubesOrden.map(cid=>{
     const cl=CLm[cid]||{};
-    const catsOrden=Object.keys(porClub[cid]).sort((a,b)=>((CATm[a]||{}).nombre_display||'').localeCompare((CATm[b]||{}).nombre_display||'','es',{numeric:true}));
+    // categorías en orden DESCENDENTE por año (2019, 2018, 2017, …)
+    const catsOrden=Object.keys(porClub[cid]).sort((a,b)=>((CATm[b]||{}).anio_nacimiento||0)-((CATm[a]||{}).anio_nacimiento||0)
+      ||((CATm[a]||{}).nombre_display||'').localeCompare((CATm[b]||{}).nombre_display||'','es',{numeric:true}));
     return `<div class="club">
       <div class="club-h">${cl.escudo_url?`<img src="${cl.escudo_url}"/>`:''}<span>${esc(cl.nombre||'—')}</span></div>
       ${catsOrden.map(catId=>{
@@ -1272,6 +1274,10 @@ async function renderEquipos(){
   const activos=Object.values(EQUIPOS).filter(e=>e.estado==='activo');
   const sinZona=activos.filter(e=>!asignados.has(e.id));
   const retirados=Object.values(EQUIPOS).filter(e=>e.estado==='inactivo');
+  // todas las listas de equipos van ordenadas por CLUB (alfabético)
+  const porClubNom=(a,b)=>(nomEq(a)||'').localeCompare(nomEq(b)||'','es');
+  activos.sort(porClubNom); sinZona.sort(porClubNom); retirados.sort(porClubNom);
+  Object.keys(porZona).forEach(z=>porZona[z].sort((x,y)=>porClubNom(EQUIPOS[x]||{},EQUIPOS[y]||{})));
   const cardSinZona = sinZona.length ? `<div class="bg-white border-2 border-amber-300 rounded-2xl mb-4 overflow-hidden">
       <div class="bg-amber-500 text-white px-5 py-2.5 font-display text-lg tracking-wide">⚠ EQUIPOS SIN ZONA <span class="text-xs font-sans font-semibold">— no aparecen en fixture ni tabla hasta asignarlos</span></div>
       ${sinZona.map(e=>`<div class="flex items-center gap-3 px-5 py-2.5 border-b border-line last:border-0">
