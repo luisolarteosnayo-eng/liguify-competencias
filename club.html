@@ -554,7 +554,7 @@ async function renderCT(puedeEditar){
   const ct=ctq.data||[], max=(tq.data&&tq.data.ct_max_personas)??5;
   let per={};
   if(ct.length){
-    const ps=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,verificado,foto_url,doc_scan_frente_url,doc_scan_reverso_url,licencia_url').in('id',ct.map(i=>i.persona_id));
+    const ps=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,fecha_nacimiento,verificado,foto_url,doc_scan_frente_url,doc_scan_reverso_url,licencia_url').in('id',ct.map(i=>i.persona_id));
     await fotosDelTorneo(ps.data||[]);
     per=Object.fromEntries((ps.data||[]).map(p=>[p.id,p]));
   }
@@ -567,7 +567,7 @@ async function renderCT(puedeEditar){
         :'<span class="text-[10px] font-bold text-ink-400">Solo lectura</span>'}
     </div>
     ${ct.length?ct.map(i=>{const p=per[i.persona_id]||{};
-      const edit={id:i.id,rol:i.rol,nombre:(p.nombres||'')+' '+(p.apellidos||''),persona_id:i.persona_id,foto_url:p.foto_url||null,dfr:p.doc_scan_frente_url||null,drv:p.doc_scan_reverso_url||null,lic:p.licencia_url||null};
+      const edit={id:i.id,rol:i.rol,nombre:(p.nombres||'')+' '+(p.apellidos||''),persona_id:i.persona_id,foto_url:p.foto_url||null,dfr:p.doc_scan_frente_url||null,drv:p.doc_scan_reverso_url||null,lic:p.licencia_url||null,nombres:p.nombres||'',apellidos:p.apellidos||'',fnac:p.fecha_nacimiento||''};
       return `<div class="fila-persona flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 border-b border-line last:border-0 ${i.inhabilitado?'bg-red-50/60':''}">
         <span class="w-8 h-8 rounded-full grid place-items-center text-[10px] font-bold text-white overflow-hidden relative shrink-0" style="background:#2b3550">${p.foto_url?`<img src="${p.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales((p.nombres||'')+' '+(p.apellidos||''))}</span>
         <span class="text-[9px] font-bold bg-sky-100 text-sky-700 rounded px-1.5 py-0.5 whitespace-nowrap shrink-0">${i.rol}</span>
@@ -653,9 +653,22 @@ async function altaCT(pais,doc){
   cerrarModal(); toast('Miembro del CT creado con sus fotos — PENDIENTE de validación ✔'); renderPlantel();
 }
 function modalEditCT(i){
+  window.__EC_ORIG={nombres:i.nombres||'',apellidos:i.apellidos||'',fnac:i.fnac||''};
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">✏️ COMANDO TÉCNICO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
     <p class="text-sm font-semibold mb-4">${i.nombre} <span class="text-[10px] text-ink-400">· ${i.rol}</span></p>
     ${fotoUI(i.foto_url,i.nombre)}
+    <div class="border-t border-line pt-2 mb-2">
+      <p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-1.5">Identidad (corrige errores de tipeo)</p>
+      <div class="grid grid-cols-2 gap-3 text-sm">
+        <label class="block"><span class="text-ink-400 font-semibold text-xs">Nombres</span>
+          <input id="ec-nom" value="${(i.nombres||'').replace(/"/g,'&quot;')}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+        <label class="block"><span class="text-ink-400 font-semibold text-xs">Apellidos</span>
+          <input id="ec-ape" value="${(i.apellidos||'').replace(/"/g,'&quot;')}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+        <label class="col-span-2 block"><span class="text-ink-400 font-semibold text-xs">Fecha de nacimiento</span>
+          <input id="ec-fnac" type="date" value="${i.fnac||''}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+      </div>
+      <p class="text-[10px] text-ink-400 mt-1.5">Si la identidad ya fue <b>verificada</b> por el organizador, solo él puede corregirla.</p>
+    </div>
     <div class="border-t border-line pt-2 mb-2">
       <p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-1.5">Documentos (privados)</p>
       ${docUI('dfr','DNI frontal',i.dfr)}
@@ -668,6 +681,13 @@ function modalEditCT(i){
     <button onclick='guardarEditCT("${i.id}","${i.persona_id}")' class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR</button>`);
 }
 async function guardarEditCT(id,personaId){
+  // identidad: solo si cambió (nombres/apellidos/fecha — errores de tipeo)
+  const o=window.__EC_ORIG||{};
+  const nom=$('ec-nom')?$('ec-nom').value.trim():null, ape=$('ec-ape')?$('ec-ape').value.trim():null, fn=$('ec-fnac')?$('ec-fnac').value:null;
+  if(nom!==null&&(nom!==o.nombres||ape!==o.apellidos||fn!==o.fnac)){
+    const ri=await sb.rpc('actualizar_identidad_jugador',{p_jugador:personaId,p_nombres:nom,p_apellidos:ape,p_fecha:fn||null});
+    if(ri.error){toast(errNegocio(ri.error));return;}
+  }
   try{
     const url=await subirFotoJugador(personaId);
     if(url){const r=await sb.rpc('actualizar_foto_jugador',{p_jugador:personaId,p_url:url,p_torneo:EQ.torneo_id}); if(r.error){toast(errNegocio(r.error));return;}}
