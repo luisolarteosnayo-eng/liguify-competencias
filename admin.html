@@ -62,6 +62,7 @@ tailwind.config={theme:{extend:{
     <div class="flex items-center justify-between mb-3 mt-6 flex-wrap gap-2">
       <h2 class="font-display text-2xl tracking-wide">TORNEOS DE LA MARCA</h2>
       <div class="flex gap-2">
+        <button onclick="modalProgramacion()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper" title="Pegar la parrilla del día (hora y cancha) y aplicarla a todos los torneos de la marca">📅 PROGRAMACIÓN DEL DÍA</button>
         <button onclick="modalDuplicados()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper" title="Jugadores con el mismo documento en más de un equipo de la marca">🔎 DUPLICADOS</button>
         <button onclick="modalNuevoTorneo()" id="btn-nuevo-torneo" class="hidden bg-brand-500 text-white font-bold px-4 py-2 rounded-xl text-sm hover:bg-brand-600">+ NUEVO TORNEO</button>
       </div>
@@ -904,6 +905,111 @@ async function confirmarDorsal(insId){
 }
 
 /* ---- Reporte de jugadores duplicados (misma persona en varios equipos) ---- */
+/* ---- 📅 PROGRAMACIÓN DEL DÍA: pegar la parrilla (hora y cancha) y aplicarla
+   a TODOS los torneos de la marca de una sola vez. El partido se identifica
+   por los NOMBRES de los equipos (no por ID), con la columna CATEGORÍA como
+   desempate cuando el mismo cruce existe en varias categorías/torneos.
+   Pensado para la parrilla que el organizador ya arma en su propio Excel. ---- */
+let PROG_UPD=[];
+function modalProgramacion(){
+  const hoy=new Date(); hoy.setDate(hoy.getDate()+3);
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">📅 PROGRAMACIÓN DEL DÍA</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-3">Pega aquí tu parrilla (desde Excel, con <b>Ctrl+C / Ctrl+V</b>) y el sistema pone <b>hora, cancha y sede</b> a los partidos de ese día en <b>todos los torneos de ${MARCA.nombre}</b>. Los partidos se buscan por los <b>nombres de los equipos</b>: no necesitas IDs ni un orden determinado.</p>
+    <div class="bg-paper border border-line rounded-xl px-3 py-2 mb-3 text-[11px] text-ink-500">
+      <b class="text-ink-900">Columnas (una fila por partido, separadas por TAB):</b><br>
+      CATEGORÍA · LOCAL · VISITA · HORA · CANCHA · SEDE<br>
+      <span class="text-ink-400">CATEGORÍA acepta lo que ya usas: <i>2019 F7</i>, <i>2015 F9</i>, <i>2014 F11 ORO</i>, <i>2014 F11 PLATA</i>. CANCHA y SEDE son opcionales. Si el cruce solo existe en una categoría, puedes dejar CATEGORÍA vacía.</span>
+    </div>
+    <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Día de juego (define qué partidos se actualizan)</span>
+      <input id="pg-dia" type="date" value="${hoy.toISOString().slice(0,10)}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+    <textarea id="pg-txt" rows="9" placeholder="2019 F7&#9;UNITED SOCCER&#9;CARAB&#9;10:10&#9;Cancha 45&#10;2015 F9&#9;SPORTING CRISTAL - BASE&#9;DANIEL CORNEJO&#9;09:10&#9;Cancha 46" class="w-full border border-line rounded-xl p-3 text-xs" style="font-family:monospace"></textarea>
+    <button onclick="previsualizarProgramacion()" class="w-full bg-ink-900 text-white font-bold py-2.5 rounded-xl mt-3 hover:bg-ink-700">VER QUÉ SE VA A ACTUALIZAR</button>`, true);
+}
+const progNorm=s=>String(s==null?'':s).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+const progHora=s=>{ const t=String(s==null?'':s).trim(); if(!t) return null;
+  const p2=n=>String(n).padStart(2,'0');
+  if(/^\d+([.,]\d+)?$/.test(t)){                                   /* numérico puro */
+    const n=parseFloat(t.replace(',','.'));
+    if(n>=0&&n<1.5){const mins=Math.round(n*24*60); return p2(Math.floor(mins/60)%24)+':'+p2(mins%60);}  /* serial de Excel: 0.4236 = 10:10 */
+    const par=t.replace(',','.').split('.');                        /* 9.30 = 09:30 · 14 = 14:00 */
+    const h=+par[0], mm=par[1]?+(par[1]+'00').slice(0,2):0;
+    return (h<24&&mm<60)?p2(h)+':'+p2(mm):undefined;
+  }
+  let m=t.match(/^(\d{1,2})(?:[:h.](\d{2}))?\s*(a\.?m|p\.?m)\.?$/i);   /* 7 pm · 2:30 pm */
+  if(m){let h=(+m[1])%12; if(/p/i.test(m[3]))h+=12; const mm=m[2]||'00'; return (+mm<60)?p2(h)+':'+mm:undefined;}
+  m=t.match(/^(\d{1,2})\s*[:h]\s*(\d{2})/i);                          /* 10:10 · 9h30 */
+  if(m) return (+m[1]<24&&+m[2]<60)?p2(+m[1])+':'+m[2]:undefined;
+  return undefined; };
+async function previsualizarProgramacion(){
+  const dia=$('pg-dia').value;
+  if(!dia){toast('⚠ Indica el día de juego');return;}
+  const filas=$('pg-txt').value.split(/\r?\n/).map(l=>l.trim()).filter(Boolean)
+    .map(l=>l.split('\t').length>1?l.split('\t'):l.split(/\s{2,}|;|\|/))
+    .map(a=>a.map(x=>x.trim()));
+  if(!filas.length){toast('⚠ Pega al menos una fila');return;}
+  const cats=(await sb.from('categoria').select('id,nombre_display,torneo:torneo_id(id,nombre,marca_id)')).data||[];
+  const mios=cats.filter(c=>c.torneo&&c.torneo.marca_id===MARCA.id);
+  const pms=mios.length?(await sb.from('partido').select('id,categoria_id,local_id,visita_id,fecha,hora,sede,cancha,estado')
+    .in('categoria_id',mios.map(c=>c.id)).eq('fecha',dia)).data||[]:[];
+  if(!pms.length){toast(`⚠ No hay partidos programados para el ${dia} en ${MARCA.nombre}`);return;}
+  const eqIds=[...new Set(pms.flatMap(m=>[m.local_id,m.visita_id]).filter(Boolean))];
+  const eqs=(await sb.from('equipo').select('id,nombre,club_id').in('id',eqIds)).data||[];
+  const cls=(await sb.from('club').select('id,nombre').in('id',[...new Set(eqs.map(e=>e.club_id))])).data||[];
+  const CL=Object.fromEntries(cls.map(c=>[c.id,c.nombre]));
+  const EQ=Object.fromEntries(eqs.map(e=>[e.id,{nom:e.nombre||CL[e.club_id]||'', club:CL[e.club_id]||''}]));
+  const CT=Object.fromEntries(mios.map(c=>[c.id,{cat:c.nombre_display||'', torneo:c.torneo.nombre||''}]));
+  const nombresDe=id=>{const e=EQ[id]||{};return [progNorm(e.nom),progNorm(e.club)].filter(Boolean);};
+  const res=[];
+  filas.forEach((a,i)=>{
+    const enc=a.map(progNorm).join(' ');
+    if(/local/.test(enc)&&/visita/.test(enc)&&/hora/.test(enc)) return;   /* encabezado pegado por error */
+    const catTxt=a[0], localTxt=a[1], visitaTxt=a[2], horaTxt=a[3], canchaTxt=a[4], sedeTxt=a[5];
+    const f={n:i+1, txt:`${localTxt||'?'} vs ${visitaTxt||'?'}`};
+    if(!localTxt||!visitaTxt){f.err='faltan LOCAL o VISITA';res.push(f);return;}
+    const hora=progHora(horaTxt);
+    if(hora===undefined){f.err=`HORA inválida ("${horaTxt}") — usa HH:MM`;res.push(f);return;}
+    const L=progNorm(localTxt), V=progNorm(visitaTxt);
+    let cand=pms.filter(m=>nombresDe(m.local_id).includes(L)&&nombresDe(m.visita_id).includes(V));
+    if(!cand.length) cand=pms.filter(m=>nombresDe(m.visita_id).includes(L)&&nombresDe(m.local_id).includes(V));
+    if(cand.length>1&&catTxt){
+      const toks=progNorm(catTxt).split(' ').filter(Boolean);
+      const filtra=cand.filter(m=>{const c=CT[m.categoria_id]||{};const ref=progNorm(c.cat+' '+c.torneo).split(' ');return toks.every(t=>ref.includes(t));});
+      if(filtra.length) cand=filtra;
+    }
+    if(!cand.length){f.err=`no encontrado el ${dia} en ${MARCA.nombre}`;res.push(f);return;}
+    if(cand.length>1){f.err=`ambiguo: coincide con ${cand.length} partidos (agrega la CATEGORÍA)`;res.push(f);return;}
+    const m=cand[0], c=CT[m.categoria_id]||{};
+    const upd={hora:hora, cancha:(canchaTxt||'').trim()||m.cancha||null, sede:(sedeTxt||'').trim()||m.sede||null};
+    f.id=m.id; f.upd=upd; f.donde=`${c.torneo} · ${c.cat}`;
+    f.label=`${(EQ[m.local_id]||{}).nom} vs ${(EQ[m.visita_id]||{}).nom}`;
+    f.cambia=(upd.hora||'')!==(m.hora?m.hora.slice(0,5):'')||(upd.cancha||'')!==(m.cancha||'')||(upd.sede||'')!==(m.sede||'');
+    res.push(f);
+  });
+  const errores=res.filter(x=>x.err), ok=res.filter(x=>!x.err&&x.cambia), igual=res.filter(x=>!x.err&&!x.cambia);
+  const vistos={}; ok.forEach(x=>{vistos[x.id]=(vistos[x.id]||0)+1;});
+  const dobles=Object.values(vistos).filter(v=>v>1).length;
+  PROG_UPD=ok;
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">📅 VISTA PREVIA</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs mb-3"><b class="text-emerald-700">${ok.length} para actualizar</b> · <span class="text-ink-400">${igual.length} sin cambios</span> · <b class="${errores.length?'text-brand-600':'text-ink-400'}">${errores.length} con error</b>${dobles?` · <b class="text-amber-700">⚠ ${dobles} partido(s) recibieron 2 filas</b>`:''}</p>
+    ${ok.length?`<div class="max-h-52 overflow-y-auto border border-line rounded-xl mb-3">${ok.map(x=>`
+      <div class="px-3 py-1.5 border-b border-line last:border-0 text-xs"><b>${x.label}</b> — 🕒 ${x.upd.hora}${x.upd.cancha?' · 📍 '+x.upd.cancha:''}
+        <span class="text-ink-400 block">${x.donde}</span></div>`).join('')}</div>`:''}
+    ${errores.length?`<div class="max-h-40 overflow-y-auto border border-brand-100 bg-brand-50 rounded-xl mb-3">${errores.map(x=>`
+      <div class="px-3 py-1.5 border-b border-brand-100 last:border-0 text-xs"><b>Fila ${x.n}:</b> ${x.txt}
+        <span class="text-brand-600 block font-semibold">${x.err}</span></div>`).join('')}</div>`:''}
+    <button onclick="aplicarProgramacion('${dia}')" ${ok.length?'':'disabled'} class="w-full ${ok.length?'bg-brand-500 hover:bg-brand-600':'bg-ink-300 cursor-not-allowed'} text-white font-bold py-2.5 rounded-xl">APLICAR ${ok.length} CAMBIO(S)</button>
+    <button onclick="modalProgramacion()" class="w-full border border-line font-bold py-2 rounded-xl mt-2 text-sm hover:bg-paper">← Volver a pegar</button>`, true);
+}
+async function aplicarProgramacion(dia){
+  if(!PROG_UPD.length){toast('Nada que aplicar');return;}
+  let ok=0, err=0, msg='';
+  for(const x of PROG_UPD){
+    const r=await sb.from('partido').update(x.upd).eq('id',x.id);
+    if(r.error){err++; msg=errNegocio(r.error);} else ok++;
+  }
+  cerrarModal();
+  toast(`📅 Programación del ${dia} aplicada ✔ — ${ok} partido(s) actualizados${err?` · ${err} con error: ${msg}`:''}. Publica cada fecha con 👁 cuando esté confirmada.`);
+}
 async function modalDuplicados(){
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">🔎 JUGADORES DUPLICADOS</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
     <p class="text-xs text-ink-400 mb-3">Personas (mismo documento) inscritas en <b>más de un equipo</b> en los torneos de ${MARCA.nombre}. Dentro de una misma categoría la BD ya lo impide; estos son cruces entre categorías o torneos, para tu revisión.</p>
