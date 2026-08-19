@@ -3487,13 +3487,15 @@ async function generarImagenJornada(jid,modo){
   const dia=await diaDeJornada(jid);
   const diaTxt=dia?new Date(dia+'T00:00:00').toLocaleDateString('es-PE',{weekday:'long',day:'numeric',month:'long'}).toUpperCase():'DÍA POR CONFIRMAR';
 
-  const lienzo=(lista,sede)=>{
+  const lienzo=(lista,sede,headComun,altoComun)=>{
     // ¿todas en la misma cancha? entonces la cancha también sube a la cabecera
     const canchas=[...new Set(lista.map(m=>(m.cancha||'').trim()).filter(Boolean))];
     const canchaComun=canchas.length===1&&canchas[0]&&lista.every(m=>(m.cancha||'').trim())?canchas[0]:null;
     const lugarCab=[sede,canchaComun].filter(Boolean).join('  ·  ');
     const canchaEnFila=!canchaComun&&canchas.length>0;
-    const W=1080, HEAD=lugarCab?352:300, ROW=112, FOOT=96, H=HEAD+lista.length*ROW+FOOT;
+    // TODAS las sedes de una misma fecha salen del MISMO tamaño (para redes):
+    // se usa el alto de la sede con más partidos y las filas se centran.
+    const W=1080, HEAD=headComun, ROW=112, FOOT=96, H=altoComun;
     const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
     const x=cv.getContext('2d');
     const dib=(img,cx,cy,r,color,ini)=>{
@@ -3526,8 +3528,10 @@ async function generarImagenJornada(jid,modo){
       x.fillStyle='rgba(255,255,255,.85)'; x.font=fitText('📍 '+lugarCab.toUpperCase(),'42px "Bebas Neue"',830);
       x.fillText('📍 '+lugarCab.toUpperCase(),218,306);
     }
+    // si esta sede tiene menos partidos que la mayor, sus filas se centran
+    const offsetY=HEAD+22+Math.max(0,Math.round(((H-HEAD-FOOT)-lista.length*ROW)/2));
     lista.forEach((m,i)=>{
-      const y=HEAD+22+i*ROW, hCard=ROW-20, cy=y+hCard/2;
+      const y=offsetY+i*ROW, hCard=ROW-20, cy=y+hCard/2;
       x.fillStyle='#ffffff';
       x.beginPath(); x.roundRect(28,y,W-56,hCard,22); x.fill();
       x.strokeStyle='#e9e6e0'; x.lineWidth=2; x.stroke();
@@ -3572,9 +3576,16 @@ async function generarImagenJornada(jid,modo){
   };
 
   const slug=s=>String(s||'sin-sede').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'sin-sede';
+  // tamaño común: la cabecera más alta y la sede con más partidos
+  const cabDe=s=>{const l=porSede[s], can=[...new Set(l.map(m=>(m.cancha||'').trim()).filter(Boolean))];
+    const comun=can.length===1&&l.every(m=>(m.cancha||'').trim())?can[0]:null;
+    return ([s,comun].filter(Boolean).join(' ')?352:300);};
+  const headComun=Math.max(...sedes.map(cabDe));
+  const maxFilas=Math.max(...sedes.map(s=>porSede[s].length));
+  const altoComun=headComun+maxFilas*112+96;
   let n=0;
   for(const sede of sedes){
-    const cv=lienzo(porSede[sede],sede);
+    const cv=lienzo(porSede[sede],sede,headComun,altoComun);
     window.__CV=cv;   // referencia para vista previa / QA (última generada)
     await new Promise(res=>{
       try{
