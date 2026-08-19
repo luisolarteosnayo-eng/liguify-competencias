@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Guía de inicio · Organizadores — Liguify</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<script>tailwind.config={theme:{extend:{colors:{brand:{50:'#fdf2f2',100:'#fbe3e4',500:'#d9232e',600:'#c11e28'},ink:{300:'#b9c0cf',400:'#8b93a7',500:'#5b6478',700:'#2b3550',900:'#171e2e'},paper:'#faf9f7',line:'#e9e6e0'},fontFamily:{display:['"Bebas Neue"','sans-serif'],sans:['Inter','sans-serif']}}}}</script>
+<style>
+  body{font-family:Inter,sans-serif}
+  .font-display{font-family:"Bebas Neue",sans-serif}
+  /* resaltado pulsante del control que se explica */
+  .hl{position:relative}
+  .hl::after{content:'';position:absolute;inset:-6px;border:3px solid #d9232e;border-radius:14px;animation:pulso 1.4s infinite}
+  @keyframes pulso{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(1.04)}}
+  .slide{animation:entra .45s ease}
+  @keyframes entra{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  #barra{transition:width .2s linear}
+</style>
+</head>
+<body class="bg-ink-900 min-h-screen flex flex-col">
+
+<header class="text-white">
+  <div class="max-w-3xl mx-auto px-4 py-4 flex items-center gap-3">
+    <span class="w-9 h-9 rounded-xl bg-brand-500 grid place-items-center font-display text-xl">L</span>
+    <div class="flex-1"><p class="font-display text-2xl tracking-wide leading-none">GUÍA DEL ORGANIZADOR</p>
+      <p class="text-[10px] uppercase tracking-widest text-white/50 font-bold">Modo Admin · Liguify Competencias</p></div>
+    <a href="admin.html" class="bg-white/10 border border-white/20 text-xs font-bold px-4 py-2 rounded-xl hover:bg-white/20">IR AL ADMIN →</a>
+  </div>
+</header>
+
+<main class="flex-1 flex flex-col max-w-3xl w-full mx-auto px-4 pb-6">
+  <div class="h-1 bg-white/10 rounded-full overflow-hidden mb-3"><div id="barra" class="h-full bg-brand-500" style="width:0%"></div></div>
+
+  <div class="bg-paper rounded-2xl flex-1 flex flex-col overflow-hidden">
+    <div class="px-5 pt-4 flex items-center justify-between gap-2">
+      <span id="capitulo" class="text-[10px] font-bold uppercase tracking-widest text-brand-600"></span>
+      <span id="contador" class="text-[10px] font-bold text-ink-400"></span>
+    </div>
+    <div id="stage" class="flex-1 px-5 py-4 overflow-y-auto"></div>
+  </div>
+
+  <div class="flex items-center justify-center gap-2 mt-4">
+    <button onclick="ir(0)" class="text-white/60 hover:text-white text-lg px-2" title="Inicio">⏮</button>
+    <button onclick="ant()" class="bg-white/10 border border-white/20 text-white font-bold px-5 py-2.5 rounded-xl hover:bg-white/20">◀ ANTERIOR</button>
+    <button id="btn-auto" onclick="toggleAuto()" class="bg-brand-500 text-white font-bold px-5 py-2.5 rounded-xl hover:bg-brand-600">⏸ PAUSA</button>
+    <button onclick="sig()" class="bg-white/10 border border-white/20 text-white font-bold px-5 py-2.5 rounded-xl hover:bg-white/20">SIGUIENTE ▶</button>
+  </div>
+  <div id="puntos" class="flex items-center justify-center gap-1.5 mt-3 flex-wrap"></div>
+  <p class="text-center text-[10px] text-white/40 mt-3">¿Buscas la guía para los clubes? <a href="guia.html" class="underline hover:text-white/70">Míralas aquí</a> y compártela con tus coordinadores.</p>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+/* Maquetas reutilizables (recreaciones simplificadas de la app real) */
+const chip=(t,c)=>`<span class="text-[10px] font-bold px-2 py-1 rounded-full ${c}">${t}</span>`;
+const btn=(t,c,hl)=>`<span class="${hl?'hl ':''}inline-block ${c} text-xs font-bold px-4 py-2.5 rounded-xl">${t}</span>`;
+const card=h=>`<div class="bg-white border border-line rounded-2xl p-5 shadow-sm">${h}</div>`;
+const campo=(l,v)=>`<div class="mb-2"><p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider">${l}</p>
+  <p class="border-b border-line py-1 text-sm font-semibold">${v}</p></div>`;
+const fila=(izq,der)=>`<div class="flex items-center gap-3 px-4 py-2.5 border-b border-line last:border-0 text-sm">
+  <span class="flex-1 font-semibold">${izq}</span>${der}</div>`;
+
+const SLIDES=[
+// ── CAP 1 · EMPEZAR ─────────────────────────────────────────
+{cap:'Capítulo 1 · Empezar', html:`
+  <div class="text-center py-8">
+    <p class="text-6xl mb-4">🏆</p>
+    <h2 class="font-display text-5xl tracking-wide mb-3">GUÍA DEL ORGANIZADOR</h2>
+    <p class="text-ink-500 text-sm max-w-md mx-auto">En 6 capítulos verás cómo crear tu torneo, sus categorías y grupos, inscribir equipos y jugadores, y enviar los accesos a los clubes para que ellos mismos carguen su plantel. Puedes dejar que avance solo (como un video) o navegar con los botones.</p>
+  </div>`},
+{cap:'Capítulo 1 · Empezar', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">1. ENTRA A TU PANEL</h3>
+  ${card(`<div class="bg-ink-900 rounded-2xl px-4 py-3 flex items-center gap-3 text-white">
+    <span class="w-8 h-8 rounded-lg bg-brand-500 grid place-items-center font-display">L</span>
+    <span class="font-display text-xl tracking-wide">LIGUIFY <span class="text-white/50">ADMIN</span></span>
+    <span class="ml-auto text-[10px] text-white/60">tucorreo@gmail.com · admin_marca</span>
+  </div>`)}
+  <p class="text-sm text-ink-500 mt-4">Entra a <b>liguify.com/admin</b> con <b>Google</b> o con <b>email y contraseña</b>. Arriba a la derecha verás siempre tu correo y tu rol: <b>admin_marca</b> (configuras todo) o <b>mesa_control</b> (solo carga resultados y acredita).</p>`},
+{cap:'Capítulo 1 · Empezar', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">2. TU MARCA ORGANIZADORA</h3>
+  ${card(`<div class="bg-ink-900 rounded-2xl p-4 text-white flex items-center gap-3 flex-wrap">
+    <span class="w-12 h-12 rounded-xl bg-white/10 grid place-items-center font-display text-lg">TU</span>
+    <div class="flex-1 min-w-40">
+      <p class="text-[9px] uppercase tracking-widest text-white/50 font-bold">Marca organizadora</p>
+      <p class="font-display text-2xl tracking-wide">TU MARCA</p>
+      <p class="text-[10px] text-emerald-400">🔗 tumarca.liguify.com</p>
+    </div>
+    ${btn('✏️ EDITAR MARCA','bg-white/10 border border-white/20 text-white')}
+    ${btn('👥 USUARIOS','bg-white/10 border border-white/20 text-white')}
+  </div>`)}
+  <p class="text-sm text-ink-500 mt-4">Tu <b>marca</b> es tu organización (por ejemplo, tu liga o tu copa) y agrupa todos tus torneos. Con <b>✏️ EDITAR MARCA</b> cambias nombre, logo y dirección web pública; con <b>👥 USUARIOS</b> das acceso a tu equipo de trabajo por correo.</p>`},
+
+// ── CAP 2 · CREAR EL TORNEO ─────────────────────────────────
+{cap:'Capítulo 2 · Crear el torneo', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">3. CREA TU TORNEO</h3>
+  ${card(`<div class="flex items-center justify-between mb-3">
+      <p class="font-display text-xl tracking-wide">TORNEOS DE LA MARCA</p>${btn('+ NUEVO TORNEO','bg-brand-500 text-white',true)}
+    </div>
+    ${campo('Nombre','APERTURA 2026')}${campo('Año','2026')}`)}
+  <p class="text-sm text-ink-500 mt-4">Pulsa <b>+ NUEVO TORNEO</b>, escribe el nombre y el año. Nace en estado <b>BORRADOR</b>: es tuyo para trabajarlo con calma y <b>todavía no se ve en la página pública</b>.</p>`},
+{cap:'Capítulo 2 · Crear el torneo', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">4. CONFIGÚRALO CON ⚙️</h3>
+  ${card(fila('<b>APERTURA 2026</b><span class="block text-[10px] text-ink-400">Temporada 2026 · borrador</span>',btn('⚙️ CONFIG','bg-white border border-line text-ink-500',true)))}
+  <p class="text-sm text-ink-500 mt-4">En <b>⚙️ CONFIG</b> defines las reglas: puntos por victoria y empate, criterios de desempate, cuántos jugadores admite la lista de buena fe, si los clubes pueden cargar su plantel, si exiges <b>autorización de padre/tutor</b>, el logo del torneo y sus documentos (bases, reglamento). Ahí mismo, cuando esté todo listo, cambias el estado a <b>EN CURSO</b> para publicarlo.</p>`},
+
+// ── CAP 3 · CATEGORÍAS Y GRUPOS ─────────────────────────────
+{cap:'Capítulo 3 · Categorías y grupos', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">5. AGREGA LAS CATEGORÍAS</h3>
+  ${card(`<div class="flex items-center justify-between mb-3">
+      <p class="font-display text-xl tracking-wide">CATEGORÍAS</p>${btn('+ NUEVA CATEGORÍA','bg-brand-500 text-white',true)}
+    </div>
+    ${campo('Año de nacimiento','2015')}${campo('Modalidad','F9')}${campo('Duración del partido (min)','50 · vacío = hereda del torneo')}`)}
+  <p class="text-sm text-ink-500 mt-4">Cada categoría es un año de nacimiento + una modalidad (F7, F9, F11). La <b>duración del partido</b> es opcional: si la dejas vacía hereda la del torneo, y sirve para calcular el % de participación de cada jugador. Puedes tener 2015/F9 y 2014/F11 en el mismo torneo.</p>`},
+{cap:'Capítulo 3 · Categorías y grupos', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">6. CREA LOS GRUPOS (ZONAS)</h3>
+  ${card(`<div class="flex justify-end gap-2 mb-3">${btn('+ NUEVA ZONA','bg-white border border-line text-ink-500',true)}${btn('+ NUEVO EQUIPO','bg-brand-500 text-white')}</div>
+    <div class="bg-ink-900 text-white px-4 py-2 rounded-t-xl font-display text-lg tracking-wide">ZONA A</div>
+    <div class="border border-line rounded-b-xl">${fila('CLUB EJEMPLO','')}${fila('OTRO CLUB','')}</div>`)}
+  <p class="text-sm text-ink-500 mt-4">Dentro de la categoría, en la pestaña <b>Equipos y LBF</b>, crea las zonas (Zona A, Zona B…). Si tu categoría juega todos contra todos, con <b>una sola zona</b> basta. Cada zona tiene su propia tabla de posiciones.</p>`},
+
+// ── CAP 4 · EQUIPOS ─────────────────────────────────────────
+{cap:'Capítulo 4 · Equipos', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">7. INSCRIBE LOS EQUIPOS</h3>
+  ${card(`<div class="flex justify-end mb-3">${btn('+ NUEVO EQUIPO','bg-brand-500 text-white',true)}</div>
+    ${campo('Club','— nuevo club —')}${campo('Nombre del club','SPORTING EJEMPLO')}
+    ${campo('Nombre del equipo (opcional)','Vacío = nombre del club · ej. ALIANZA A')}${campo('Zona','Zona A')}`)}
+  <p class="text-sm text-ink-500 mt-4">Elige un club ya registrado o crea uno nuevo con su escudo. El <b>nombre del equipo</b> solo se usa si el club presenta dos equipos en la misma categoría (ALIANZA A y ALIANZA B). Asígnale su zona al crearlo: si no lo haces, aparecerá en <b>⚠ EQUIPOS SIN ZONA</b> y no entrará al fixture ni a la tabla.</p>`},
+{cap:'Capítulo 4 · Equipos', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">8. MOVER, RETIRAR O REACTIVAR</h3>
+  ${card(`<div class="border border-line rounded-xl">
+    ${fila('CLUB EJEMPLO',`${btn('LBF (0) →','text-brand-600')}${btn('⇄ ZONA','bg-white border border-line text-ink-500')}${btn('RETIRAR','bg-white border border-line text-ink-500')}`)}
+  </div>
+  <div class="bg-paper border border-line rounded-xl mt-3 px-4 py-2 text-xs text-ink-400">RETIRADOS DEL TORNEO — historial y LBF conservados</div>`)}
+  <p class="text-sm text-ink-500 mt-4">Con <b>⇄ ZONA</b> mueves un equipo de grupo (el sistema te avisa si ya tiene partidos ahí). <b>RETIRAR</b> no borra nada: el equipo se inactiva conservando su plantel y su historial, sale de la tabla y <b>no entra en los fixtures que generes después</b>. Siempre puedes <b>REACTIVAR</b>lo.</p>`},
+
+// ── CAP 5 · JUGADORES ───────────────────────────────────────
+{cap:'Capítulo 5 · Jugadores', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">9. LA LISTA DE BUENA FE (LBF)</h3>
+  ${card(`${fila('CLUB EJEMPLO',btn('LBF (0) →','text-brand-600',true))}
+  <div class="mt-3 flex items-center justify-between">
+    <p class="font-display text-lg tracking-wide">PLANTEL · LISTA DE BUENA FE <span class="text-xs font-sans text-ink-400">0/35</span></p>
+    ${btn('+ AGREGAR JUGADOR/A','bg-ink-900 text-white')}
+  </div>`)}
+  <p class="text-sm text-ink-500 mt-4">Entra al plantel de cada equipo con <b>LBF →</b>. Ahí ves cuántos jugadores lleva inscritos sobre el máximo que fijaste en la configuración del torneo. Un aviso <b>⚠ SIN LBF</b> te señala de un vistazo los equipos que aún no cargaron su plantel.</p>`},
+{cap:'Capítulo 5 · Jugadores', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">10. AGREGAR POR DOCUMENTO</h3>
+  ${card(`<div class="flex gap-2 mb-3">
+      <span class="border border-line rounded-xl px-2 py-2 text-sm font-semibold">PE</span>
+      <span class="flex-1 border border-line rounded-xl px-3 py-2 text-sm font-semibold text-ink-400">N° de documento</span>
+      ${btn('BUSCAR','bg-ink-900 text-white',true)}
+    </div>
+    <p class="text-xs text-ink-500">Si el jugador ya existe en Liguify, se inscribe sin volver a digitar sus datos. Si no existe, completas nombres, apellidos y fecha de nacimiento.</p>`)}
+  <p class="text-sm text-ink-500 mt-4">Siempre se empieza por el <b>documento</b>: así una misma persona no se duplica y el sistema impide que un jugador esté en dos equipos de la misma categoría. Puedes subir su <b>foto</b> y su <b>DNI</b> (los documentos quedan en almacenamiento privado).</p>`},
+{cap:'Capítulo 5 · Jugadores', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">11. ATAJO: IMPORTAR PLANTEL</h3>
+  ${card(`<div class="flex justify-end gap-2">${btn('⬇ IMPORTAR PLANTEL','bg-white border border-line text-ink-500',true)}${btn('👤 COORDINADOR','bg-white border border-line text-ink-500')}</div>
+    <p class="text-xs text-ink-500 mt-3">Copia la lista de buena fe que ese mismo club ya tuvo en otro torneo o categoría: dorsales y capitán se conservan.</p>`)}
+  <p class="text-sm text-ink-500 mt-4">Si el club ya jugó contigo antes, no vuelvas a digitar: con <b>⬇ IMPORTAR PLANTEL</b> traes su lista completa en un clic. Los jugadores llegan como <b>PENDIENTES</b> para que valides su documentación en este torneo.</p>`},
+
+// ── CAP 6 · ACCESOS A LOS CLUBES ────────────────────────────
+{cap:'Capítulo 6 · Accesos a los clubes', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">12. QUE CADA CLUB CARGUE LO SUYO</h3>
+  <div class="grid sm:grid-cols-2 gap-3">
+    ${card(`<p class="text-2xl mb-1">📨</p><p class="font-bold text-sm mb-1">Coordinador del club</p>
+      <p class="text-xs text-ink-500">Lo invitas tú con su correo. Ve <b>todos los equipos</b> de ese club en el torneo.</p>`)}
+    ${card(`<p class="text-2xl mb-1">🎓</p><p class="font-bold text-sm mb-1">Sub-coordinador</p>
+      <p class="text-xs text-ink-500">Lo nombra el propio coordinador y le asigna <b>categorías</b> concretas.</p>`)}
+  </div>
+  <p class="text-sm text-ink-500 mt-4">No tienes que cargar tú todos los planteles: invita al coordinador de cada club y él registra a sus jugadores. Todo el acceso es <b>por correo electrónico</b>; entran con Google o con email y contraseña.</p>`},
+{cap:'Capítulo 6 · Accesos a los clubes', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">13. INVITA AL COORDINADOR</h3>
+  ${card(`<div class="flex justify-end mb-3">${btn('👤 COORDINADOR','bg-white border border-line text-ink-500',true)}</div>
+    ${campo('Email (obligatorio)','coordinador@club.pe')}${campo('Nombre','Juan Pérez')}${campo('Teléfono','999 888 777')}
+    <div class="mt-3">${btn('📨 INVITAR COORDINADOR','bg-brand-500 text-white')}</div>`)}
+  <p class="text-sm text-ink-500 mt-4">Desde el plantel de cualquier equipo del club, pulsa <b>👤 COORDINADOR</b> y escribe su correo. Le llega un <b>enlace de acceso</b> a ese correo: lo abre, acepta la invitación y ya puede trabajar. En ese mismo panel ves quién es el coordinador vigente y puedes <b>revocarle</b> el acceso cuando quieras.</p>`},
+{cap:'Capítulo 6 · Accesos a los clubes', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">14. EL CORREO EXACTO IMPORTA</h3>
+  ${card(`<div class="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3">
+    <p class="text-xs text-amber-800">💡 La invitación llega <b>al correo EXACTO</b> que registraste. Si el coordinador entra con otro correo (su Gmail en vez del Hotmail que anotaste), verá su panel vacío.</p>
+  </div>`)}
+  <p class="text-sm text-ink-500 mt-4">Es el motivo número uno de las consultas: confirma el correo antes de invitar. Si se equivocó, revoca la invitación y vuelve a enviarla al correo correcto. Comparte con tus clubes la <b>guía del modo club</b> (liguify.com/guia) para que sepan qué hacer al recibirla.</p>`},
+{cap:'Capítulo 6 · Accesos a los clubes', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">15. TÚ VALIDAS, ELLOS CARGAN</h3>
+  ${card(`<div class="border border-line rounded-xl">
+    ${fila('Jugador de ejemplo',`${chip('PENDIENTE','bg-amber-100 text-amber-700')}${btn('✏️','bg-white border border-line text-ink-500')}`)}
+    ${fila('Otro jugador',`${chip('ACTIVO','bg-emerald-100 text-emerald-700')}${btn('✏️','bg-white border border-line text-ink-500')}`)}
+  </div>`)}
+  <p class="text-sm text-ink-500 mt-4">Todo lo que carga un club queda <b>PENDIENTE</b> hasta que tú lo revises: abres el jugador con <b>✏️</b> y lo pasas a <b>ACTIVO</b>. Si el torneo exige autorización de padre/tutor, el jugador se activa solo cuando el club sube ese documento. El control siempre es tuyo.</p>`},
+{cap:'Capítulo 6 · Accesos a los clubes', html:`
+  <div class="text-center py-8">
+    <p class="text-6xl mb-4">🏁</p>
+    <h2 class="font-display text-5xl tracking-wide mb-3">¡TU TORNEO ESTÁ LISTO!</h2>
+    <p class="text-ink-500 text-sm max-w-md mx-auto mb-6">Ya tienes torneo, categorías, grupos, equipos, jugadores y a cada club trabajando con su propio acceso. El siguiente paso es generar el <b>fixture</b> desde la pestaña Fixture/Resultados, publicar cada fecha con 👁 y cargar los resultados.</p>
+    <a href="admin.html" class="inline-block bg-brand-500 text-white font-bold px-8 py-3 rounded-xl hover:bg-brand-600">🏆 IR AL ADMIN</a>
+  </div>`},
+];
+
+let IDX=0, AUTO=true, TIMER=null, T0=0;
+const DUR=9000;   // 9s por diapositiva en modo auto
+function render(){
+  const s=SLIDES[IDX];
+  $('stage').innerHTML=`<div class="slide">${s.html}</div>`;
+  $('capitulo').textContent=s.cap;
+  $('contador').textContent=`${IDX+1} / ${SLIDES.length}`;
+  $('puntos').innerHTML=SLIDES.map((x,i)=>`<button onclick="ir(${i})" class="w-2.5 h-2.5 rounded-full ${i===IDX?'bg-brand-500':'bg-white/25 hover:bg-white/50'}"></button>`).join('');
+  reiniciarBarra();
+}
+function reiniciarBarra(){ T0=Date.now(); $('barra').style.width='0%'; }
+function tick(){
+  if(!AUTO) return;
+  const p=Math.min(100,(Date.now()-T0)/DUR*100);
+  $('barra').style.width=p+'%';
+  if(p>=100){ IDX=(IDX+1)%SLIDES.length; render(); }
+}
+function ir(i){ IDX=i; render(); }
+function sig(){ IDX=Math.min(SLIDES.length-1,IDX+1); render(); }
+function ant(){ IDX=Math.max(0,IDX-1); render(); }
+function toggleAuto(){
+  AUTO=!AUTO;
+  $('btn-auto').textContent=AUTO?'⏸ PAUSA':'▶ AUTO';
+  if(AUTO) reiniciarBarra(); else $('barra').style.width='0%';
+}
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight')sig();
+  if(e.key==='ArrowLeft')ant();
+  if(e.key===' '){e.preventDefault();toggleAuto();}
+});
+render();
+TIMER=setInterval(tick,150);
+</script>
+</body>
+</html>
