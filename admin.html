@@ -76,7 +76,8 @@ tailwind.config={theme:{extend:{
       <h1 id="t-titulo" class="font-display text-4xl tracking-wide"></h1>
       <div class="flex gap-2 flex-wrap">
         <button onclick="modalVerificarPersona()" title="Validar si un jugador o CT está inscrito en ESTE torneo: escanea el QR, digita/escanea el DNI o lee el NFC" class="bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-emerald-800">🪪 VERIFICAR</button>
-        <button onclick="modalProgramacion()" title="Pegar la parrilla de una fecha (hora y cancha) y aplicarla a los partidos de este torneo" class="bg-white border border-line font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-paper">📅 PROGRAMACIÓN</button>
+        <button onclick="modalProgramacion()" title="Pegar la parrilla de una fecha (hora y cancha) y aplicarla a los partidos de este torneo" class="bg-white border border-line font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-paper">📤 SUBIR PROGRAMACIÓN</button>
+        <button onclick="modalDescargarProgramacion()" title="PDF de la programación del torneo: elige la fecha; sale agrupada por categoría y ordenada por hora" class="bg-white border border-line font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-paper">🖨 DESCARGAR PROGRAMACIÓN</button>
         <button onclick="pdfComandoTecnico()" title="Relación del comando técnico de todo el torneo (foto, DNI, nombres) — para torneos sin carnets" class="bg-white border border-line font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-paper">🖨 COMANDO TÉCNICO</button>
         <button onclick="modalCategoria()" class="bg-brand-500 text-white font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-brand-600">+ NUEVA CATEGORÍA</button>
       </div>
@@ -916,6 +917,126 @@ async function confirmarDorsal(insId){
    El partido se identifica por los NOMBRES de los equipos, con la columna
    CATEGORÍA como desempate. ---- */
 let PROG_UPD=[], PROG_JORNADAS=[];
+/* ---- 🖨 DESCARGAR PROGRAMACIÓN (PDF del TORNEO por fecha) ----
+   Se elige la fecha; el PDF sale AGRUPADO POR CATEGORÍA y, dentro de cada
+   categoría, ordenado por fecha, hora y club local. ---- */
+let DESC_FECHAS=[];
+async function modalDescargarProgramacion(){
+  if(!TORNEO||!TORNEO.id){toast('⚠ Abre un torneo');return;}
+  const cats=(await sb.from('categoria').select('id,nombre_display,anio_nacimiento,modalidad').eq('torneo_id',TORNEO.id)).data||[];
+  if(!cats.length){toast('⚠ Este torneo no tiene categorías');return;}
+  const js=(await sb.from('jornada').select('id,numero,fecha,categoria_id').in('categoria_id',cats.map(c=>c.id)).order('numero')).data||[];
+  if(!js.length){toast('⚠ Este torneo aún no tiene fechas generadas');return;}
+  const porNum={}; js.forEach(j=>{(porNum[j.numero]=porNum[j.numero]||[]).push(j);});
+  DESC_FECHAS=Object.keys(porNum).map(Number).sort((a,b)=>a-b).map(n=>{
+    const dias=[...new Set(porNum[n].map(j=>j.fecha).filter(Boolean))].sort();
+    return {numero:n, ids:porNum[n].map(j=>j.id), dia:dias[0]||'', varios:dias.length>1};
+  });
+  const hoy=new Date().toISOString().slice(0,10);
+  const prox=DESC_FECHAS.find(f=>f.dia&&f.dia>=hoy)||DESC_FECHAS[DESC_FECHAS.length-1];
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">🖨 DESCARGAR PROGRAMACIÓN</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">PDF de <b>${TORNEO.nombre}</b> agrupado por <b>categoría</b> y ordenado por <b>fecha, hora y club</b>. Desde el diálogo de impresión eliges <b>Guardar como PDF</b>.</p>
+    <label class="block text-sm mb-4"><span class="text-ink-400 font-semibold text-xs">Fecha a descargar</span>
+      <select id="dp-f" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
+        ${DESC_FECHAS.map(f=>`<option value="${f.numero}" ${prox&&f.numero===prox.numero?'selected':''}>Fecha ${f.numero}${f.dia?' · '+f.dia:''}${f.varios?' (días distintos)':''}</option>`).join('')}
+        <option value="__all__">Todas las fechas del torneo</option>
+      </select></label>
+    <button onclick="imprimirProgramacionTorneo()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GENERAR PDF</button>`);
+}
+async function imprimirProgramacionTorneo(){
+  const sel=$('dp-f').value, todas=sel==='__all__';
+  const f=DESC_FECHAS.find(x=>String(x.numero)===String(sel));
+  const cats=(await sb.from('categoria').select('id,nombre_display,anio_nacimiento,modalidad').eq('torneo_id',TORNEO.id)).data||[];
+  const js=(await sb.from('jornada').select('id,numero,fecha,categoria_id').in('categoria_id',cats.map(c=>c.id))).data||[];
+  const jIds=todas?js.map(j=>j.id):(f?f.ids:[]);
+  if(!jIds.length){toast('⚠ Sin fechas que descargar');return;}
+  const pms=(await sb.from('partido').select('*').in('jornada_id',jIds)).data||[];
+  if(!pms.length){toast('⚠ Esa fecha no tiene partidos');return;}
+  const eqs=(await sb.from('equipo').select('id,nombre,club_id').in('id',[...new Set(pms.flatMap(m=>[m.local_id,m.visita_id]).filter(Boolean))])).data||[];
+  const cls=(await sb.from('club').select('id,nombre,escudo_url,color').in('id',[...new Set(eqs.map(e=>e.club_id))])).data||[];
+  const CL=Object.fromEntries(cls.map(c=>[c.id,c]));
+  const EQ=Object.fromEntries(eqs.map(e=>[e.id,{nom:e.nombre||(CL[e.club_id]||{}).nombre||'—', club:(CL[e.club_id]||{}).nombre||'', cl:CL[e.club_id]||{}}]));
+  const JN=Object.fromEntries(js.map(j=>[j.id,j]));
+  const CT=Object.fromEntries(cats.map(c=>[c.id,c]));
+  const esc=t=>String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const diaTxt=d=>d?new Date(d+'T00:00:00').toLocaleDateString('es-PE',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'}):'día por confirmar';
+  const escudo=id=>{const e=EQ[id]; if(!e) return '';
+    return e.cl.escudo_url?`<img class="esc" src="${e.cl.escudo_url}"/>`
+      :`<span class="esc esc-ini" style="background:${e.cl.color||'#334155'}">${esc(iniciales(e.club||'?'))}</span>`;};
+  const nom=id=>id?esc((EQ[id]||{}).nom||'Por definir'):'Por definir';
+  // agrupar por CATEGORÍA (año descendente) y ordenar por fecha, hora y club local
+  const porCat={}; pms.forEach(m=>{(porCat[m.categoria_id]=porCat[m.categoria_id]||[]).push(m);});
+  const catsOrden=Object.keys(porCat).sort((a,b)=>((CT[b]||{}).anio_nacimiento||0)-((CT[a]||{}).anio_nacimiento||0));
+  const bloques=catsOrden.map(cid=>{
+    const lista=porCat[cid].sort((a,b)=>
+      ((JN[a.jornada_id]||{}).numero||0)-((JN[b.jornada_id]||{}).numero||0)
+      || (a.fecha||'9999').localeCompare(b.fecha||'9999')
+      || (a.hora||'99:99').localeCompare(b.hora||'99:99')
+      || ((EQ[a.local_id]||{}).club||'').localeCompare((EQ[b.local_id]||{}).club||'','es'));
+    const filas=lista.map(m=>{
+      const fin=['finalizado','walkover'].includes(m.estado);
+      return `<div class="fila">
+        ${todas?`<span class="fnum">F${(JN[m.jornada_id]||{}).numero||''}</span>`:''}
+        <span class="hora">${m.hora?m.hora.slice(0,5):'--:--'}</span>
+        <span class="eq eq-l">${nom(m.local_id)} ${m.local_id?escudo(m.local_id):''}</span>
+        <span class="marc ${fin?'m-fin':''}">${fin?`${m.goles_local??0} : ${m.goles_visita??0}`:'vs'}</span>
+        <span class="eq">${m.visita_id?escudo(m.visita_id):''} ${nom(m.visita_id)}</span>
+        <span class="sede">${esc(m.cancha||'')}${m.cancha&&m.sede?' · ':''}${esc(m.sede||'')}</span>
+      </div>`;}).join('');
+    const c=CT[cid]||{};
+    return `<div class="cat-blq">
+      <div class="cat-cab"><span>${esc(c.nombre_display||('Categoría '+c.anio_nacimiento+' / '+c.modalidad))}</span><span class="cat-n">${lista.length} partido(s)</span></div>
+      ${filas}
+    </div>`;
+  }).join('');
+  const sub=todas?`Todas las fechas · ${DESC_FECHAS.length} fecha(s)`:`Fecha ${f.numero} · ${diaTxt(f.dia)}`;
+  const logoT=TORNEO.logo_url||MARCA.logo_url;
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Programación · ${esc(TORNEO.nombre)} · ${esc(sub)}</title><style>
+    *{margin:0;padding:0;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    @page{size:A4 portrait;margin:10mm}
+    body{background:#eee}
+    .hoja{background:#fff;width:190mm;margin:6mm auto;padding:6mm}
+    @media print{body{background:#fff}.hoja{margin:0;padding:0;width:auto}.no-print{display:none}}
+    .cab{display:flex;align-items:center;gap:5mm;background:#0f172a;color:#fff;border-radius:4mm;padding:4.5mm 6mm;margin-bottom:5mm}
+    .cab img{width:15mm;height:15mm;object-fit:contain;background:#fff;border-radius:3mm;padding:1mm;flex:none}
+    .cab-t1{font-size:19px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;line-height:1.15}
+    .cab-t2{font-size:10px;color:#fbbf24;font-weight:800;text-transform:uppercase;letter-spacing:2.5px;margin-bottom:1mm}
+    .cab-t3{font-size:10px;color:#cbd5e1;font-weight:700;text-transform:uppercase;margin-top:.5mm}
+    .cat-blq{page-break-inside:avoid;margin-bottom:4.5mm;border:1px solid #e2e8f0;border-radius:3mm;overflow:hidden}
+    .cat-cab{display:flex;justify-content:space-between;align-items:center;background:#111827;color:#fff;padding:2.2mm 4mm;font-weight:900;font-size:12px;letter-spacing:1.5px;text-transform:uppercase}
+    .cat-n{font-size:8.5px;color:#fbbf24;font-weight:800;letter-spacing:1px}
+    .fila{display:flex;align-items:center;gap:2.5mm;padding:1.7mm 4mm;border-bottom:1px solid #eef1f5;font-size:9.5px}
+    .fila:last-child{border-bottom:0}
+    .fila:nth-of-type(odd){background:#f8fafc}
+    .fnum{width:7mm;font-weight:900;color:#64748b;flex:none;font-size:8px}
+    .hora{width:10mm;font-weight:900;color:#d9232e;flex:none}
+    .eq{flex:1;display:flex;align-items:center;gap:2mm;font-weight:800;text-transform:uppercase;min-width:0}
+    .eq-l{justify-content:flex-end;text-align:right}
+    .esc{width:6.5mm;height:6.5mm;object-fit:contain;border-radius:1.5mm;flex:none}
+    .esc-ini{display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:6.5px;font-weight:900}
+    .marc{width:15mm;text-align:center;font-weight:900;font-size:11px;color:#94a3b8;flex:none}
+    .m-fin{color:#111}
+    .sede{width:32mm;text-align:right;font-size:7.5px;color:#64748b;font-weight:700;flex:none}
+    .pie{text-align:center;font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:1px;margin-top:3mm}
+    .barra{position:sticky;top:0;background:#111;color:#fff;padding:10px;text-align:center;font-size:13px;z-index:9}
+    .barra button{background:#d9232e;color:#fff;border:0;border-radius:8px;padding:8px 18px;font-weight:bold;font-size:13px;cursor:pointer;margin-right:10px}
+  </style></head><body>
+  <div class="no-print barra"><button onclick="print()">🖨 IMPRIMIR / GUARDAR PDF</button>${pms.length} partido(s) · ${catsOrden.length} categoría(s) — en el diálogo elige "Guardar como PDF"</div>
+  <div class="hoja">
+    <div class="cab">
+      ${logoT?`<img src="${logoT}"/>`:''}
+      <div><div class="cab-t2">Programación</div><div class="cab-t1">${esc(TORNEO.nombre)}</div><div class="cab-t3">${esc(sub)}</div></div>
+    </div>
+    ${bloques}
+    <div class="pie">⚡ POWERED BY LIGUIFY · liguify.com</div>
+  </div>
+  <script>window.onload=function(){setTimeout(function(){window.print();},800);};<\/script>
+  </body></html>`;
+  const w=window.open('','_blank');
+  if(!w){toast('⚠ El navegador bloqueó la ventana — permite pop-ups para generar el PDF');return;}
+  w.document.write(html); w.document.close();
+  cerrarModal();
+}
 async function modalProgramacion(){
   if(!TORNEO||!TORNEO.id){toast('⚠ Abre un torneo para programar sus partidos');return;}
   const cats=(await sb.from('categoria').select('id,nombre_display').eq('torneo_id',TORNEO.id)).data||[];
