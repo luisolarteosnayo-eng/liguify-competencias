@@ -3531,11 +3531,24 @@ async function intercambiarJornada(jid){
 async function eliminarJornada(jid){
   const j=JORNADAS.find(x=>x.id===jid);
   // re-validar contra BD (otro usuario pudo cargar un resultado)
-  const ms=(await sb.from('partido').select('id,estado').eq('jornada_id',jid)).data||[];
+  const ms=(await sb.from('partido').select('id,estado,local_id,visita_id,hora').eq('jornada_id',jid).order('hora')).data||[];
   if(ms.some(m=>['finalizado','walkover','en_vivo'].includes(m.estado))){
     toast('⛔ No se puede eliminar: la fecha tiene partidos jugados o en vivo');return;
   }
-  if(!confirm(`¿ELIMINAR la Fecha ${j.numero} completa?\n\nSe borran sus ${ms.length} partido(s) programado(s). Los equipos y la tabla no se tocan. Esta acción no se puede deshacer.`))return;
+  if(!ms.length&&!confirm(`La Fecha ${j.numero} no tiene partidos. ¿Eliminarla igual?`))return;
+  // DOBLE VALIDACIÓN: 1) detalle de lo que se borra · 2) escribir el número
+  const nom=id=>EQUIPOS[id]?nomEq(EQUIPOS[id]):'Por definir';
+  const lista=ms.slice(0,12).map(m=>`  · ${m.hora?m.hora.slice(0,5)+'  ':''}${nom(m.local_id)} vs ${nom(m.visita_id)}`).join('\n')
+    +(ms.length>12?`\n  · …y ${ms.length-12} partido(s) más`:'');
+  if(!confirm(`⚠ VAS A ELIMINAR LA FECHA ${j.numero} COMPLETA (${j.fecha||'sin día'})\n\n`
+    +`Se BORRARÁN estos ${ms.length} partido(s) programado(s):\n\n${lista}\n\n`
+    +`Se pierden sus cruces, día, horarios, sedes y canchas.\n`
+    +`Los equipos, los planteles y la tabla NO se tocan.\n\n`
+    +`⛔ ESTA ACCIÓN NO SE PUEDE DESHACER.\n\n¿Continuar?`))return;
+  const resp=prompt(`CONFIRMACIÓN FINAL — Fecha ${j.numero}\n\nSe eliminarán ${ms.length} partido(s) sin posibilidad de recuperarlos.\n\nEscribe el número de la fecha (${j.numero}) para confirmar:`);
+  if(String(resp==null?'':resp).trim()!==String(j.numero)){
+    toast(resp==null?'Eliminación cancelada':'⚠ El número no coincide — la fecha NO se eliminó');return;
+  }
   const d1=await sb.from('partido').delete().eq('jornada_id',jid);
   if(d1.error){toast(errNegocio(d1.error));return;}
   const d2=await sb.from('jornada').delete().eq('id',jid);
