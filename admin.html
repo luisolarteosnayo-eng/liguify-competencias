@@ -1569,8 +1569,8 @@ async function renderEquipos(){
           <button onclick="asignarZona('${e.id}')" class="text-xs font-bold text-white bg-amber-500 rounded-lg px-3 py-1.5 hover:bg-amber-600">ASIGNAR</button>`
           :ZONAS.length?'':'<span class="text-[10px] text-amber-600 font-bold">crea una zona primero</span>'}
         ${btnLBF(e)}
-        ${esAdmin()&&MOSTRAR_CODIGO_DELEGADO?`<button onclick="modalCodigoDelegado('${e.id}')" title="Acceso del delegado (código de un solo uso)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-paper">🎟</button>
-        ${btnRetirar(e)}`:''}
+        ${esAdmin()&&MOSTRAR_CODIGO_DELEGADO?`<button onclick="modalCodigoDelegado('${e.id}')" title="Acceso del delegado (código de un solo uso)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-paper">🎟</button>`:''}
+        ${esAdmin()?btnRetirar(e):''}
       </div>`).join('')}
     </div>` : '';
   const cardRetirados = retirados.length ? `<div class="bg-white border border-line rounded-2xl mb-4 overflow-hidden opacity-80">
@@ -1594,8 +1594,8 @@ async function renderEquipos(){
         return `<div class="flex items-center gap-3 px-5 py-2.5 border-b border-line last:border-0">
           ${badgeEq(e)}<span class="flex-1 font-semibold text-sm">${nomEq(e)}</span>
           ${btnLBF(e)}
-          ${esAdmin()&&MOSTRAR_CODIGO_DELEGADO?`<button onclick="modalCodigoDelegado('${e.id}')" title="Acceso del delegado (código de un solo uso)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-paper">🎟</button>
-          <button onclick="modalZonaEquipo('${e.id}','${z.id}')" title="Mover de zona o quitar de la zona (validado contra sus partidos)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-paper">⇄ ZONA</button>
+          ${esAdmin()&&MOSTRAR_CODIGO_DELEGADO?`<button onclick="modalCodigoDelegado('${e.id}')" title="Acceso del delegado (código de un solo uso)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-paper">🎟</button>`:''}
+          ${esAdmin()?`<button onclick="modalZonaEquipo('${e.id}','${z.id}')" title="Mover de zona o quitar de la zona (validado contra sus partidos)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-paper">⇄ ZONA</button>
           ${btnRetirar(e)}`:''}
         </div>`;}).join('')||'<p class="px-5 py-5 text-sm text-ink-400">Zona sin equipos.</p>'}
     </div>`).join('')+cardRetirados;
