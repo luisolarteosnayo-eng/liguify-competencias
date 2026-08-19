@@ -289,6 +289,10 @@ async function cargarTorneos(){
 /* Lista de torneos: por defecto solo BORRADOR y EN CURSO; los finalizados y
    archivados quedan plegados tras un botón (siguen siendo editables ahí). */
 let TORNEOS_TODOS=[], VER_ARCHIVADOS=false;
+/* Acceso de los clubes: solo por INVITACIÓN POR EMAIL (coordinador y
+   sub-coordinador). El código 🎟 de un solo uso queda OCULTO por decisión de
+   producto (2026-08-17) — generaba confusión; para reactivarlo, poner true. */
+const MOSTRAR_CODIGO_DELEGADO=false;
 function renderListaTorneos(){
   const filaT=(t,cerrado)=>`
     <div class="w-full bg-white border border-line rounded-2xl px-5 py-4 flex items-center gap-4 hover:shadow-md transition ${cerrado?'opacity-75':''}">
@@ -1314,7 +1318,7 @@ async function renderEquipos(){
           <button onclick="asignarZona('${e.id}')" class="text-xs font-bold text-white bg-amber-500 rounded-lg px-3 py-1.5 hover:bg-amber-600">ASIGNAR</button>`
           :ZONAS.length?'':'<span class="text-[10px] text-amber-600 font-bold">crea una zona primero</span>'}
         ${btnLBF(e)}
-        ${esAdmin()?`<button onclick="modalCodigoDelegado('${e.id}')" title="Acceso del delegado (código de un solo uso)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-paper">🎟</button>
+        ${esAdmin()&&MOSTRAR_CODIGO_DELEGADO?`<button onclick="modalCodigoDelegado('${e.id}')" title="Acceso del delegado (código de un solo uso)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-paper">🎟</button>
         ${btnRetirar(e)}`:''}
       </div>`).join('')}
     </div>` : '';
@@ -1339,7 +1343,7 @@ async function renderEquipos(){
         return `<div class="flex items-center gap-3 px-5 py-2.5 border-b border-line last:border-0">
           ${badgeEq(e)}<span class="flex-1 font-semibold text-sm">${nomEq(e)}</span>
           ${btnLBF(e)}
-          ${esAdmin()?`<button onclick="modalCodigoDelegado('${e.id}')" title="Acceso del delegado (código de un solo uso)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-paper">🎟</button>
+          ${esAdmin()&&MOSTRAR_CODIGO_DELEGADO?`<button onclick="modalCodigoDelegado('${e.id}')" title="Acceso del delegado (código de un solo uso)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-paper">🎟</button>
           <button onclick="modalZonaEquipo('${e.id}','${z.id}')" title="Mover de zona o quitar de la zona (validado contra sus partidos)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-paper">⇄ ZONA</button>
           ${btnRetirar(e)}`:''}
         </div>`;}).join('')||'<p class="px-5 py-5 text-sm text-ink-400">Zona sin equipos.</p>'}

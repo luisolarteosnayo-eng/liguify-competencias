@@ -42,7 +42,7 @@ tailwind.config={theme:{extend:{
   <section id="s-login" class="screen">
     <div class="max-w-sm mx-auto bg-white border border-line rounded-2xl p-6 mt-10">
       <h1 class="font-display text-3xl tracking-wide mb-1">MI CLUB</h1>
-      <p class="text-xs text-ink-400 mb-5">Acceso para delegados y coordinadores de club. Si tu organizador te dio un <b>código de equipo</b>, primero crea tu cuenta (o entra con Google) y luego canjéalo.</p>
+      <p class="text-xs text-ink-400 mb-5">Acceso para coordinadores y delegados de club. Entra con <b>Google</b> o con <b>email y contraseña</b>, usando el <b>mismo correo</b> con el que te registró tu organizador.</p>
       <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Email</span>
         <input id="lg-e" class="w-full border-b border-line py-1.5 font-semibold" placeholder="delegado@miclub.pe"/></label>
       <label class="block text-sm mb-5"><span class="text-ink-400 font-semibold text-xs">Contraseña</span>
@@ -64,7 +64,10 @@ tailwind.config={theme:{extend:{
   <!-- THE HUB: MIS EQUIPOS -->
   <section id="s-hub" class="screen">
     <div id="hub-inv"></div>
-    <div class="bg-white border-2 border-dashed border-line rounded-2xl p-5 mb-6">
+    <!-- OCULTO (decisión 2026-08-17): el acceso se gestiona solo por invitación
+         por email (coordinador / sub-coordinador). El canje sigue funcionando
+         para quien ya tenga un código: basta quitar la clase "hidden". -->
+    <div class="bg-white border-2 border-dashed border-line rounded-2xl p-5 mb-6 hidden">
       <p class="font-display text-xl tracking-wide mb-1">🎟 CANJEAR CÓDIGO DE EQUIPO</p>
       <p class="text-xs text-ink-400 mb-3">El organizador del torneo te entrega un código de un solo uso que te vincula como delegado de tu equipo.</p>
       <div class="flex gap-2 max-w-sm">
@@ -139,7 +142,7 @@ async function crearCuenta(){
   if(!email||pass.length<6){msg('Escribe tu email y una contraseña de al menos 6 caracteres.','err');return;}
   const {error}=await sb.auth.signUp({email,password:pass});
   if(error){msg('No se pudo crear la cuenta: '+error.message,'err');return;}
-  msg(null); toast('Cuenta creada ✔ — ahora canjea tu código de equipo'); iniciar();
+  msg(null); toast('Cuenta creada ✔ — aquí verás los equipos que te asigne tu organizador'); iniciar();
 }
 async function entrarGoogle(){
   const {error}=await sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+location.pathname}});
@@ -221,7 +224,7 @@ async function cargarHub(){
   HUB_GRUPOS=Object.values(porTorneo); HUB_VER_FIN=false;
   if(!MIS.length){
     $('hub-lista').innerHTML=`<div class="text-sm bg-white border border-line rounded-2xl p-6 text-center">
-      <p class="text-ink-400 mb-3">Aún no tienes equipos vinculados. Acepta tu invitación 📨 o canjea el código 🎟 que te dio tu organizador.</p>
+      <p class="text-ink-400 mb-3">Aún no tienes equipos vinculados. Cuando tu organizador (o el coordinador de tu club) te registre, verás aquí la invitación 📨 para aceptarla.</p>
       <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-left">💡 Estás conectado como <b>${(await sb.auth.getSession()).data.session?.user?.email||''}</b>. Las invitaciones llegan al correo EXACTO que registró tu organizador: si te invitó a otro correo, entra con ese (usa el enlace del email que te llegó) o pídele que reenvíe la invitación a este.</p>
     </div>`;
   } else renderHubLista();
