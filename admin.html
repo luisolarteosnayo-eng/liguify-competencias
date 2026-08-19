@@ -1,4 +1,4 @@
-<meta charset="utf-8" />
+<title>${jid?`Fecha ${(js[0]||{}).numero||''}`:'Fixture'} · ${esc(CAT.nombre_display||'')} · ${esc(TORNEO.nombre)}</title><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Liguify — Panel Administrador</title>
 <script src="https://cdn.tailwindcss.com"></script>
@@ -2775,7 +2775,8 @@ async function renderFixture(){
   const htmlFechas=fechas.map(n=>{
     const jid=porFecha[n][0].jornada_id||'';
     const j=JORNADAS.find(x=>x.id===jid);
-    const btnHor=j?`<button onclick="imprimirPlanillasJornada('${jid}')" title="Imprimir las planillas de juego de todos los partidos de esta fecha (para apuntar en campo)" class="text-[10px] font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 mr-1 hover:bg-paper">🖨 PLANILLAS</button>
+    const btnHor=j?`<button onclick="imprimirFixturePDF('${jid}')" title="PDF de la programación de esta fecha (con escudos, horarios y canchas) — para compartir o imprimir" class="text-[10px] font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 mr-1 hover:bg-paper">🖨 PDF</button>
+      <button onclick="imprimirPlanillasJornada('${jid}')" title="Imprimir las planillas de juego de todos los partidos de esta fecha (para apuntar en campo)" class="text-[10px] font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 mr-1 hover:bg-paper">🖨 PLANILLAS</button>
       <button onclick="modalJornada('${jid}')" title="Gestión de la jornada: cambiar día, intercambiar con otra fecha, Excel, eliminar" class="text-[10px] font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 mr-1 hover:bg-paper">⚙ FECHA</button>
       <button onclick="toggleHorarios('${jid}',${j.horarios_publicados===false?'true':'false'})" title="Controla si esta jornada completa se muestra en el módulo público" class="text-[10px] font-bold rounded-lg px-3 py-1.5 mr-1 ${j.horarios_publicados===false?'bg-amber-100 text-amber-700 border border-amber-300':'text-ink-400 border border-line hover:bg-paper'}">${j.horarios_publicados===false?'🚫 OCULTA EN PÚBLICO':'👁 VISIBLE EN PÚBLICO'}</button>`:'';
     return `<div class="bg-white border border-line rounded-2xl mb-4">
@@ -3091,10 +3092,13 @@ async function replicarFixture(){
 
 /* ---- Fixture completo en PDF: vista de impresión A4 con logos de equipos.
    Desde el diálogo de impresión se guarda como PDF o se imprime. ---- */
-async function imprimirFixturePDF(){
-  const {data:pms,error}=await sb.from('partido').select('*').eq('categoria_id',CAT.id).not('jornada_id','is',null);
+/* jid opcional: PDF de UNA fecha (programación del día); sin él, el fixture completo */
+async function imprimirFixturePDF(jid){
+  let q=sb.from('partido').select('*').eq('categoria_id',CAT.id).not('jornada_id','is',null);
+  if(jid) q=q.eq('jornada_id',jid);
+  const {data:pms,error}=await q;
   if(error){toast(errNegocio(error));return;}
-  if(!(pms||[]).length){toast('⚠ Esta categoría aún no tiene fechas generadas');return;}
+  if(!(pms||[]).length){toast(jid?'⚠ Esta fecha no tiene partidos':'⚠ Esta categoría aún no tiene fechas generadas');return;}
   const porJ={}; (pms||[]).forEach(m=>{(porJ[m.jornada_id]=porJ[m.jornada_id]||[]).push(m);});
   const js=[...JORNADAS].sort((a,b)=>(a.numero||0)-(b.numero||0)).filter(j=>porJ[j.id]);
   const esc=t=>String(t??'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
@@ -3157,7 +3161,7 @@ async function imprimirFixturePDF(){
   <div class="hoja">
     <div class="cab">
       ${logoT?`<img src="${logoT}"/>`:''}
-      <div><div class="cab-t2">Fixture oficial</div><div class="cab-t1">${esc(TORNEO.nombre)}</div><div class="cab-t3">${esc(CAT.nombre_display||'')}</div></div>
+      <div><div class="cab-t2">${jid?`Programación · Fecha ${(js[0]||{}).numero||''}`:'Fixture oficial'}</div><div class="cab-t1">${esc(TORNEO.nombre)}</div><div class="cab-t3">${esc(CAT.nombre_display||'')}</div></div>
     </div>
     ${bloques}
     <div class="pie">⚡ POWERED BY LIGUIFY · liguify.com</div>
@@ -3291,7 +3295,8 @@ async function modalJornada(jid){
 
     <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1.5">Compartir programación</p>
     <button onclick="generarImagenJornada('${jid}')" class="w-full bg-ink-900 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-ink-700 mb-2">🖼 DESCARGAR IMAGEN DE LA PROGRAMACIÓN</button>
-    <button onclick="generarImagenJornada('${jid}','resultados')" class="w-full bg-emerald-700 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-emerald-800 mb-4">🏁 DESCARGAR IMAGEN DE RESULTADOS</button>
+    <button onclick="generarImagenJornada('${jid}','resultados')" class="w-full bg-emerald-700 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-emerald-800 mb-2">🏁 DESCARGAR IMAGEN DE RESULTADOS</button>
+    <button onclick="imprimirFixturePDF('${jid}')" class="w-full bg-white border border-line text-ink-500 text-xs font-bold py-2.5 rounded-xl hover:bg-paper mb-4">🖨 PDF DE LA PROGRAMACIÓN (A4)</button>
 
     <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1.5">Horarios en Excel</p>
     <div class="flex gap-2 mb-1">
