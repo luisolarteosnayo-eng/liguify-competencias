@@ -77,6 +77,7 @@ tailwind.config={theme:{extend:{
       <div class="flex gap-2 flex-wrap">
         <button onclick="modalVerificarPersona()" title="Validar si un jugador o CT está inscrito en ESTE torneo: escanea el QR, digita/escanea el DNI o lee el NFC" class="bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-emerald-800">🪪 VERIFICAR</button>
         <button onclick="modalProgramacion()" title="Pegar la parrilla de una fecha (hora y cancha) y aplicarla a los partidos de este torneo" class="bg-white border border-line font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-paper">📤 SUBIR PROGRAMACIÓN</button>
+        <button onclick="modalAvisar()" title="Avisar por email a los clubes que la programación de una fecha ya está disponible" class="bg-white border border-line font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-paper">📧 AVISAR</button>
         <button onclick="modalDescargarProgramacion()" title="PDF de la programación del torneo: elige la fecha; sale agrupada por categoría y ordenada por hora" class="bg-white border border-line font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-paper">🖨 DESCARGAR PROGRAMACIÓN</button>
         <button onclick="pdfComandoTecnico()" title="Relación del comando técnico de todo el torneo (foto, DNI, nombres) — para torneos sin carnets" class="bg-white border border-line font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-paper">🖨 COMANDO TÉCNICO</button>
         <button onclick="modalCategoria()" class="bg-brand-500 text-white font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-brand-600">+ NUEVA CATEGORÍA</button>
@@ -921,6 +922,88 @@ let PROG_UPD=[], PROG_JORNADAS=[];
    Se elige la fecha; el PDF sale AGRUPADO POR CATEGORÍA y, dentro de cada
    categoría, ordenado por fecha, hora y club local. ---- */
 let DESC_FECHAS=[];
+/* ---- 📧 AVISAR A LOS EQUIPOS: comunica por email que la programación de una
+   fecha ya está disponible. Cada club recibe SUS partidos y, si su plantel
+   está incompleto, un recordatorio. El envío lo hace la Edge Function
+   'enviar-aviso-programacion' (Resend). ---- */
+let AV_FECHAS=[], AV_DEST=[];
+async function modalAvisar(){
+  if(!TORNEO||!TORNEO.id){toast('⚠ Abre un torneo');return;}
+  const cats=(await sb.from('categoria').select('id').eq('torneo_id',TORNEO.id)).data||[];
+  if(!cats.length){toast('⚠ Este torneo no tiene categorías');return;}
+  const js=(await sb.from('jornada').select('id,numero,fecha,categoria_id').in('categoria_id',cats.map(c=>c.id))).data||[];
+  if(!js.length){toast('⚠ Este torneo aún no tiene fechas');return;}
+  const pms=(await sb.from('partido').select('jornada_id,hora').in('categoria_id',cats.map(c=>c.id))).data||[];
+  const conHora={}; pms.forEach(m=>{if(m.hora)conHora[m.jornada_id]=(conHora[m.jornada_id]||0)+1;});
+  const d=new Date(); const hoy=new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+  const porNum={}; js.forEach(j=>{(porNum[j.numero]=porNum[j.numero]||[]).push(j);});
+  AV_FECHAS=Object.keys(porNum).map(Number).sort((a,b)=>a-b).map(n=>{
+    const dias=[...new Set(porNum[n].map(j=>j.fecha).filter(Boolean))].sort();
+    return {numero:n, dia:dias[0]||'', horas:porNum[n].reduce((a,j)=>a+(conHora[j.id]||0),0)};
+  }).filter(f=>f.dia&&f.dia>=hoy&&f.horas>0);
+  if(!AV_FECHAS.length){toast('⚠ No hay fechas por jugar con horarios cargados — súbelos con 📤 SUBIR PROGRAMACIÓN');return;}
+  const envios=(await sb.from('aviso_programacion').select('fecha_numero,enviados,created_at').eq('torneo_id',TORNEO.id).order('created_at',{ascending:false}).limit(5)).data||[];
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">📧 AVISAR A LOS EQUIPOS</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-3">Envía un correo a los coordinadores y delegados de <b>${TORNEO.nombre}</b> avisando que la programación ya está disponible. Cada club recibe <b>sus propios partidos</b> (hora, rival y cancha) y un recordatorio si su plantel está incompleto.</p>
+    <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Fecha a comunicar</span>
+      <select id="av-f" onchange="previsualizarAviso()" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
+        ${AV_FECHAS.map((f,i)=>`<option value="${f.numero}" ${i===0?'selected':''}>Fecha ${f.numero}${f.dia?' · '+f.dia:''}</option>`).join('')}
+      </select></label>
+    ${envios.length?`<p class="text-[10px] text-ink-400 mb-2">Últimos avisos: ${envios.map(e=>`Fecha ${e.fecha_numero} (${e.enviados} correos, ${String(e.created_at).slice(0,10)})`).join(' · ')}</p>`:''}
+    <div id="av-prev" class="text-sm">Cargando destinatarios…</div>`, true);
+  previsualizarAviso();
+}
+async function previsualizarAviso(){
+  const fecha=+$('av-f').value;
+  $('av-prev').innerHTML='<p class="text-xs text-ink-400">Cargando destinatarios…</p>';
+  const r=await sb.rpc('destinatarios_programacion',{p_torneo:TORNEO.id,p_fecha:fecha});
+  if(r.error){$('av-prev').innerHTML=`<p class="text-brand-600 text-xs font-bold">${errNegocio(r.error)}</p>`;return;}
+  AV_DEST=r.data||[];
+  const con=AV_DEST.filter(c=>(c.emails||[]).length), sin=AV_DEST.filter(c=>!(c.emails||[]).length);
+  const correos=[...new Set(con.flatMap(c=>c.emails))].length;
+  $('av-prev').innerHTML=`
+    <p class="text-xs mb-2"><b class="text-emerald-700">${con.length} club(es) · ${correos} correo(s)</b>${sin.length?` · <b class="text-amber-700">${sin.length} sin correo</b>`:''}</p>
+    <div class="max-h-56 overflow-y-auto border border-line rounded-xl mb-3">
+      ${AV_DEST.map(c=>`<div class="px-3 py-1.5 border-b border-line last:border-0 text-xs flex items-center gap-2">
+        <span class="flex-1 min-w-0"><b>${c.club}</b>
+          <span class="block text-ink-400">${(c.partidos||[]).length} partido(s)${c.lbf_total?` · LBF ${c.lbf_total}${c.lbf_pendientes?` (${c.lbf_pendientes} pend.)`:''}`:' · sin LBF'}</span></span>
+        <span class="${(c.emails||[]).length?'text-emerald-700':'text-amber-700'} font-bold shrink-0">${(c.emails||[]).length?(c.emails||[]).join(', '):'sin correo'}</span>
+      </div>`).join('')}
+    </div>
+    ${sin.length?`<p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-3">⚠ ${sin.map(c=>c.club).join(', ')} no ${sin.length>1?'tienen':'tiene'} correo registrado: invita a su coordinador con 👤 COORDINADOR para que reciba los avisos.</p>`:''}
+    <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Antes de enviar a todos, puedes probar con un correo tuyo (opcional)</span>
+      <input id="av-prueba" type="email" placeholder="tucorreo@gmail.com" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+    <div class="flex gap-2">
+      <button onclick="enviarAviso(true)" class="flex-1 bg-white border border-line font-bold py-2.5 rounded-xl text-sm hover:bg-paper">✉️ ENVIAR PRUEBA</button>
+      <button onclick="enviarAviso(false)" ${con.length?'':'disabled'} class="flex-1 ${con.length?'bg-brand-500 hover:bg-brand-600':'bg-ink-300 cursor-not-allowed'} text-white font-bold py-2.5 rounded-xl text-sm">📧 ENVIAR A ${con.length} CLUB(ES)</button>
+    </div>`;
+}
+async function enviarAviso(prueba){
+  const fecha=+$('av-f').value;
+  const prueba_a=($('av-prueba')&&$('av-prueba').value.trim())||'';
+  if(prueba&&!prueba_a){toast('⚠ Escribe un correo para la prueba');return;}
+  if(!prueba){
+    const con=AV_DEST.filter(c=>(c.emails||[]).length);
+    const correos=[...new Set(con.flatMap(c=>c.emails))].length;
+    if(!confirm(`Se enviará el aviso de la Fecha ${fecha} a ${con.length} club(es) — ${correos} correo(s).\n\nCada club recibe solo sus partidos. ¿Continuar?`))return;
+  }
+  toast(prueba?'✉️ Enviando prueba…':'📧 Enviando avisos…');
+  const r=await sb.functions.invoke('enviar-aviso-programacion',{body:{torneo_id:TORNEO.id,fecha,...(prueba?{prueba_a}:{})}});
+  if(r.error){
+    const msg=String(r.error.message||r.error);
+    toast(/not found|404/i.test(msg)
+      ? '⚠ La función de envío aún no está desplegada en Supabase (enviar-aviso-programacion). Ver supabase/functions/README.md'
+      : '⚠ No se pudo enviar: '+msg);
+    return;
+  }
+  const d=r.data||{};
+  if(d.error){toast('⚠ '+d.error);return;}
+  const ok=(d.enviados||[]).reduce((a,e)=>a+(e.to||[]).length,0);
+  const mal=(d.fallidos||[]).filter(f=>f.error!=='sin correos registrados');
+  cerrarModal();
+  toast(prueba?`✉️ Prueba enviada a ${prueba_a} ✔`
+    :`📧 Aviso enviado ✔ — ${ok} correo(s) a ${(d.enviados||[]).length} club(es)${mal.length?` · ${mal.length} con error: ${mal[0].error}`:''}`);
+}
 async function modalDescargarProgramacion(){
   if(!TORNEO||!TORNEO.id){toast('⚠ Abre un torneo');return;}
   const cats=(await sb.from('categoria').select('id,nombre_display,anio_nacimiento,modalidad').eq('torneo_id',TORNEO.id)).data||[];
