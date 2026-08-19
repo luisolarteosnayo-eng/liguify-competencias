@@ -62,9 +62,7 @@ tailwind.config={theme:{extend:{
     <div id="marca-card"></div>
     <div class="flex items-center justify-between mb-3 mt-6 flex-wrap gap-2">
       <h2 class="font-display text-2xl tracking-wide">TORNEOS DE LA MARCA</h2>
-      <div class="flex gap-2">
-        <button onclick="modalProgramacion()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper" title="Pegar la parrilla del día (hora y cancha) y aplicarla a todos los torneos de la marca">📅 PROGRAMACIÓN DEL DÍA</button>
-        <button onclick="modalDuplicados()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper" title="Jugadores con el mismo documento en más de un equipo de la marca">🔎 DUPLICADOS</button>
+      <div class="flex gap-2">        <button onclick="modalDuplicados()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper" title="Jugadores con el mismo documento en más de un equipo de la marca">🔎 DUPLICADOS</button>
         <button onclick="modalNuevoTorneo()" id="btn-nuevo-torneo" class="hidden bg-brand-500 text-white font-bold px-4 py-2 rounded-xl text-sm hover:bg-brand-600">+ NUEVO TORNEO</button>
       </div>
     </div>
@@ -78,6 +76,7 @@ tailwind.config={theme:{extend:{
       <h1 id="t-titulo" class="font-display text-4xl tracking-wide"></h1>
       <div class="flex gap-2 flex-wrap">
         <button onclick="modalVerificarPersona()" title="Validar si un jugador o CT está inscrito en ESTE torneo: escanea el QR, digita/escanea el DNI o lee el NFC" class="bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-emerald-800">🪪 VERIFICAR</button>
+        <button onclick="modalProgramacion()" title="Pegar la parrilla de una fecha (hora y cancha) y aplicarla a los partidos de este torneo" class="bg-white border border-line font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-paper">📅 PROGRAMACIÓN</button>
         <button onclick="pdfComandoTecnico()" title="Relación del comando técnico de todo el torneo (foto, DNI, nombres) — para torneos sin carnets" class="bg-white border border-line font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-paper">🖨 COMANDO TÉCNICO</button>
         <button onclick="modalCategoria()" class="bg-brand-500 text-white font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-brand-600">+ NUEVA CATEGORÍA</button>
       </div>
@@ -910,25 +909,53 @@ async function confirmarDorsal(insId){
 }
 
 /* ---- Reporte de jugadores duplicados (misma persona en varios equipos) ---- */
-/* ---- 📅 PROGRAMACIÓN DEL DÍA: pegar la parrilla (hora y cancha) y aplicarla
-   a TODOS los torneos de la marca de una sola vez. El partido se identifica
-   por los NOMBRES de los equipos (no por ID), con la columna CATEGORÍA como
-   desempate cuando el mismo cruce existe en varias categorías/torneos.
-   Pensado para la parrilla que el organizador ya arma en su propio Excel. ---- */
-let PROG_UPD=[];
-function modalProgramacion(){
+/* ---- 📅 PROGRAMACIÓN: pegar la parrilla (hora y cancha) y aplicarla a los
+   partidos del TORNEO abierto. Se puede acotar a una FECHA concreta (lo más
+   directo) o trabajar por día; y ampliarse a los demás torneos de la marca
+   cuando la parrilla mezcla varios (caso INTI CUP: ORO + PLATA el mismo día).
+   El partido se identifica por los NOMBRES de los equipos, con la columna
+   CATEGORÍA como desempate. ---- */
+let PROG_UPD=[], PROG_JORNADAS=[];
+async function modalProgramacion(){
+  if(!TORNEO||!TORNEO.id){toast('⚠ Abre un torneo para programar sus partidos');return;}
+  const cats=(await sb.from('categoria').select('id,nombre_display').eq('torneo_id',TORNEO.id)).data||[];
+  const js=cats.length?(await sb.from('jornada').select('id,numero,fecha,categoria_id').in('categoria_id',cats.map(c=>c.id)).order('numero')).data||[]:[];
+  // una "fecha" del torneo agrupa las jornadas con el mismo número en todas sus categorías
+  const porNum={}; js.forEach(j=>{(porNum[j.numero]=porNum[j.numero]||[]).push(j);});
+  PROG_JORNADAS=Object.keys(porNum).map(Number).sort((a,b)=>a-b).map(n=>{
+    const dias=[...new Set(porNum[n].map(j=>j.fecha).filter(Boolean))].sort();
+    return {numero:n, ids:porNum[n].map(j=>j.id), dia:dias[0]||'', varios:dias.length>1};
+  });
   const hoy=new Date(); hoy.setDate(hoy.getDate()+3);
-  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">📅 PROGRAMACIÓN DEL DÍA</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
-    <p class="text-xs text-ink-400 mb-3">Pega aquí tu parrilla (desde Excel, con <b>Ctrl+C / Ctrl+V</b>) y el sistema pone <b>hora, cancha y sede</b> a los partidos de ese día en <b>todos los torneos de ${MARCA.nombre}</b>. Los partidos se buscan por los <b>nombres de los equipos</b>: no necesitas IDs ni un orden determinado.</p>
+  const porDefecto=PROG_JORNADAS.find(f=>f.dia&&f.dia>=new Date().toISOString().slice(0,10))||PROG_JORNADAS[PROG_JORNADAS.length-1];
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">📅 PROGRAMACIÓN</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-3">Pega tu parrilla (desde Excel, con <b>Ctrl+C / Ctrl+V</b>) y el sistema pone <b>hora, cancha y sede</b> a los partidos de <b>${TORNEO.nombre}</b>. Los partidos se buscan por los <b>nombres de los equipos</b>: no necesitas IDs ni un orden determinado.</p>
     <div class="bg-paper border border-line rounded-xl px-3 py-2 mb-3 text-[11px] text-ink-500">
       <b class="text-ink-900">Columnas (una fila por partido, separadas por TAB):</b><br>
       CATEGORÍA · LOCAL · VISITA · HORA · CANCHA · SEDE<br>
-      <span class="text-ink-400">CATEGORÍA acepta lo que ya usas: <i>2019 F7</i>, <i>2015 F9</i>, <i>2014 F11 ORO</i>, <i>2014 F11 PLATA</i>. CANCHA y SEDE son opcionales. Si el cruce solo existe en una categoría, puedes dejar CATEGORÍA vacía.</span>
+      <span class="text-ink-400">CATEGORÍA acepta lo que ya usas: <i>2019 F7</i>, <i>2015 F9</i>, <i>2014 F11 ORO</i>. CANCHA y SEDE son opcionales. Si el cruce solo existe en una categoría, puedes dejar CATEGORÍA vacía.</span>
     </div>
-    <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Día de juego (define qué partidos se actualizan)</span>
-      <input id="pg-dia" type="date" value="${hoy.toISOString().slice(0,10)}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
-    <textarea id="pg-txt" rows="9" placeholder="2019 F7&#9;UNITED SOCCER&#9;CARAB&#9;10:10&#9;Cancha 45&#10;2015 F9&#9;SPORTING CRISTAL - BASE&#9;DANIEL CORNEJO&#9;09:10&#9;Cancha 46" class="w-full border border-line rounded-xl p-3 text-xs" style="font-family:monospace"></textarea>
+    <div class="grid sm:grid-cols-2 gap-3 mb-3">
+      <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Fecha del torneo</span>
+        <select id="pg-fecha" onchange="progSyncDia()" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
+          ${PROG_JORNADAS.map(f=>`<option value="${f.numero}" ${porDefecto&&f.numero===porDefecto.numero?'selected':''}>Fecha ${f.numero}${f.dia?' · '+f.dia:''}${f.varios?' (días distintos)':''}</option>`).join('')}
+          <option value="">— por día, sin elegir fecha —</option>
+        </select></label>
+      <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Día de juego</span>
+        <input id="pg-dia" type="date" value="${(porDefecto&&porDefecto.dia)||hoy.toISOString().slice(0,10)}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+    </div>
+    <label class="flex items-center gap-2 text-xs font-semibold mb-3">
+      <input id="pg-marca" type="checkbox" class="w-4 h-4 accent-[#d9232e]"/>
+      Buscar también en los otros torneos de ${MARCA.nombre} <span class="text-ink-400 font-normal">(parrillas que mezclan torneos)</span>
+    </label>
+    <textarea id="pg-txt" rows="8" placeholder="2019 F7&#9;UNITED SOCCER&#9;CARAB&#9;10:10&#9;Cancha 45&#10;2015 F9&#9;SPORTING CRISTAL - BASE&#9;DANIEL CORNEJO&#9;09:10&#9;Cancha 46" class="w-full border border-line rounded-xl p-3 text-xs" style="font-family:monospace"></textarea>
     <button onclick="previsualizarProgramacion()" class="w-full bg-ink-900 text-white font-bold py-2.5 rounded-xl mt-3 hover:bg-ink-700">VER QUÉ SE VA A ACTUALIZAR</button>`, true);
+}
+/* al elegir una fecha del torneo, el día se autocompleta */
+function progSyncDia(){
+  const n=$('pg-fecha').value;
+  const f=PROG_JORNADAS.find(x=>String(x.numero)===String(n));
+  if(f&&f.dia) $('pg-dia').value=f.dia;
 }
 const progNorm=s=>String(s==null?'':s).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
 const progHora=s=>{ const t=String(s==null?'':s).trim(); if(!t) return null;
@@ -946,17 +973,23 @@ const progHora=s=>{ const t=String(s==null?'':s).trim(); if(!t) return null;
   if(m) return (+m[1]<24&&+m[2]<60)?p2(+m[1])+':'+m[2]:undefined;
   return undefined; };
 async function previsualizarProgramacion(){
-  const dia=$('pg-dia').value;
-  if(!dia){toast('⚠ Indica el día de juego');return;}
+  const dia=$('pg-dia').value, nFecha=$('pg-fecha').value, todaLaMarca=$('pg-marca').checked;
+  const jor=PROG_JORNADAS.find(x=>String(x.numero)===String(nFecha));
+  if(!jor&&!dia){toast('⚠ Elige una fecha del torneo o indica el día de juego');return;}
   const filas=$('pg-txt').value.split(/\r?\n/).map(l=>l.trim()).filter(Boolean)
     .map(l=>l.split('\t').length>1?l.split('\t'):l.split(/\s{2,}|;|\|/))
     .map(a=>a.map(x=>x.trim()));
   if(!filas.length){toast('⚠ Pega al menos una fila');return;}
   const cats=(await sb.from('categoria').select('id,nombre_display,torneo:torneo_id(id,nombre,marca_id)')).data||[];
   const mios=cats.filter(c=>c.torneo&&c.torneo.marca_id===MARCA.id);
-  const pms=mios.length?(await sb.from('partido').select('id,categoria_id,local_id,visita_id,fecha,hora,sede,cancha,estado')
-    .in('categoria_id',mios.map(c=>c.id)).eq('fecha',dia)).data||[]:[];
-  if(!pms.length){toast(`⚠ No hay partidos programados para el ${dia} en ${MARCA.nombre}`);return;}
+  // alcance: la FECHA elegida de este torneo (lo más directo), o todos los
+  // partidos de ese día — en este torneo o en toda la marca si se pidió
+  const cAmbito=(todaLaMarca?mios:mios.filter(c=>c.torneo.id===TORNEO.id)).map(c=>c.id);
+  let q=sb.from('partido').select('id,categoria_id,local_id,visita_id,fecha,hora,sede,cancha,estado').in('categoria_id',cAmbito);
+  q = (jor&&!todaLaMarca) ? q.in('jornada_id',jor.ids) : q.eq('fecha',dia);
+  const pms=cAmbito.length?(await q).data||[]:[];
+  const donde=todaLaMarca?MARCA.nombre:TORNEO.nombre;
+  if(!pms.length){toast(`⚠ No hay partidos ${jor&&!todaLaMarca?`en la Fecha ${jor.numero}`:`programados para el ${dia}`} en ${donde}`);return;}
   const eqIds=[...new Set(pms.flatMap(m=>[m.local_id,m.visita_id]).filter(Boolean))];
   const eqs=(await sb.from('equipo').select('id,nombre,club_id').in('id',eqIds)).data||[];
   const cls=(await sb.from('club').select('id,nombre').in('id',[...new Set(eqs.map(e=>e.club_id))])).data||[];
@@ -981,7 +1014,7 @@ async function previsualizarProgramacion(){
       const filtra=cand.filter(m=>{const c=CT[m.categoria_id]||{};const ref=progNorm(c.cat+' '+c.torneo).split(' ');return toks.every(t=>ref.includes(t));});
       if(filtra.length) cand=filtra;
     }
-    if(!cand.length){f.err=`no encontrado el ${dia} en ${MARCA.nombre}`;res.push(f);return;}
+    if(!cand.length){f.err=`no encontrado en ${donde}${jor&&!todaLaMarca?` · Fecha ${jor.numero}`:` el ${dia}`}`;res.push(f);return;}
     if(cand.length>1){f.err=`ambiguo: coincide con ${cand.length} partidos (agrega la CATEGORÍA)`;res.push(f);return;}
     const m=cand[0], c=CT[m.categoria_id]||{};
     const upd={hora:hora, cancha:(canchaTxt||'').trim()||m.cancha||null, sede:(sedeTxt||'').trim()||m.sede||null};
@@ -1002,7 +1035,7 @@ async function previsualizarProgramacion(){
     ${errores.length?`<div class="max-h-40 overflow-y-auto border border-brand-100 bg-brand-50 rounded-xl mb-3">${errores.map(x=>`
       <div class="px-3 py-1.5 border-b border-brand-100 last:border-0 text-xs"><b>Fila ${x.n}:</b> ${x.txt}
         <span class="text-brand-600 block font-semibold">${x.err}</span></div>`).join('')}</div>`:''}
-    <button onclick="aplicarProgramacion('${dia}')" ${ok.length?'':'disabled'} class="w-full ${ok.length?'bg-brand-500 hover:bg-brand-600':'bg-ink-300 cursor-not-allowed'} text-white font-bold py-2.5 rounded-xl">APLICAR ${ok.length} CAMBIO(S)</button>
+    <button onclick="aplicarProgramacion('${jor&&!todaLaMarca?'Fecha '+jor.numero:dia}')" ${ok.length?'':'disabled'} class="w-full ${ok.length?'bg-brand-500 hover:bg-brand-600':'bg-ink-300 cursor-not-allowed'} text-white font-bold py-2.5 rounded-xl">APLICAR ${ok.length} CAMBIO(S)</button>
     <button onclick="modalProgramacion()" class="w-full border border-line font-bold py-2 rounded-xl mt-2 text-sm hover:bg-paper">← Volver a pegar</button>`, true);
 }
 async function aplicarProgramacion(dia){
@@ -1013,7 +1046,8 @@ async function aplicarProgramacion(dia){
     if(r.error){err++; msg=errNegocio(r.error);} else ok++;
   }
   cerrarModal();
-  toast(`📅 Programación del ${dia} aplicada ✔ — ${ok} partido(s) actualizados${err?` · ${err} con error: ${msg}`:''}. Publica cada fecha con 👁 cuando esté confirmada.`);
+  toast(`📅 Programación (${dia}) aplicada ✔ — ${ok} partido(s) actualizados${err?` · ${err} con error: ${msg}`:''}. Publica la fecha con 👁 cuando esté confirmada.`);
+  if(typeof renderFixture==='function'&&CAT&&CAT.id) await renderFixture();
 }
 /* 🔎 DUPLICADOS: se eligen los torneos a comparar. Con uno solo se ven los
    cruces entre categorías de ese torneo; con varios, los cruces entre ellos. */
