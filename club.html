@@ -233,6 +233,140 @@ async function cargarHub(){
 /* Hub: por defecto solo torneos EN CURSO (y en preparación); los FINALIZADOS
    quedan tras un botón. Los archivados no se muestran. */
 let HUB_GRUPOS=[], HUB_VER_FIN=false;
+/* ---- 🖨 DESCARGAR PROGRAMACIÓN (PDF por fecha, igual que en el admin) ----
+   Solo se ofrecen las fechas DISPONIBLES: publicadas por el organizador, por
+   jugar y con horarios cargados. El PDF sale agrupado por categoría y
+   ordenado por fecha, hora y club; los partidos del propio club van marcados. */
+let CP_FECHAS=[], CP_TORNEO=null;
+async function modalDescargarProgramacion(torneoId,torneoNom){
+  CP_TORNEO={id:torneoId,nombre:torneoNom};
+  const cats=(await sb.from('categoria').select('id,nombre_display,anio_nacimiento,modalidad').eq('torneo_id',torneoId)).data||[];
+  if(!cats.length){toast('⚠ Este torneo no tiene categorías');return;}
+  const js=(await sb.from('jornada').select('id,numero,fecha,categoria_id,horarios_publicados').in('categoria_id',cats.map(c=>c.id))).data||[];
+  if(!js.length){toast('⚠ Este torneo aún no tiene fechas programadas');return;}
+  const pms=(await sb.from('partido').select('jornada_id,hora').in('categoria_id',cats.map(c=>c.id))).data||[];
+  const conHora={}; pms.forEach(m=>{ if(m.hora) conHora[m.jornada_id]=(conHora[m.jornada_id]||0)+1; });
+  const d=new Date(); const hoy=new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+  const porNum={}; js.forEach(j=>{(porNum[j.numero]=porNum[j.numero]||[]).push(j);});
+  const todas=Object.keys(porNum).map(Number).sort((a,b)=>a-b).map(n=>{
+    const dias=[...new Set(porNum[n].map(j=>j.fecha).filter(Boolean))].sort();
+    return {numero:n, ids:porNum[n].map(j=>j.id), dia:dias[0]||'', varios:dias.length>1,
+      horas:porNum[n].reduce((a,j)=>a+(conHora[j.id]||0),0),
+      publicada:porNum[n].some(j=>j.horarios_publicados!==false)};
+  });
+  CP_FECHAS=todas.filter(f=>f.dia&&f.dia>=hoy&&f.horas>0&&f.publicada);
+  if(!CP_FECHAS.length){
+    const pend=todas.filter(f=>f.dia&&f.dia>=hoy&&(!f.horas||!f.publicada)).length;
+    toast(pend?`⚠ Aún no hay fechas publicadas con horarios en ${torneoNom} — el organizador las publica cuando confirma los horarios.`
+              :`⚠ No quedan fechas por jugar en ${torneoNom}.`);
+    return;
+  }
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">🖨 DESCARGAR PROGRAMACIÓN</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">PDF de <b>${torneoNom}</b> agrupado por <b>categoría</b> y ordenado por <b>fecha, hora y club</b>. Tus partidos salen marcados. Desde el diálogo de impresión eliges <b>Guardar como PDF</b>.</p>
+    <label class="block text-sm mb-4"><span class="text-ink-400 font-semibold text-xs">Fecha a descargar</span>
+      <select id="cp-f" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
+        ${CP_FECHAS.map((f,i)=>`<option value="${f.numero}" ${i===0?'selected':''}>Fecha ${f.numero}${f.dia?' · '+f.dia:''}${f.varios?' (días distintos)':''}</option>`).join('')}
+        ${CP_FECHAS.length>1?'<option value="__all__">Todas las fechas disponibles</option>':''}
+      </select></label>
+    <button onclick="imprimirProgramacionClub()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GENERAR PDF</button>`);
+}
+async function imprimirProgramacionClub(){
+  const sel=$('cp-f').value, todas=sel==='__all__';
+  const f=CP_FECHAS.find(x=>String(x.numero)===String(sel));
+  const jIds=todas?CP_FECHAS.flatMap(x=>x.ids):(f?f.ids:[]);
+  if(!jIds.length){toast('⚠ Sin fechas que descargar');return;}
+  const cats=(await sb.from('categoria').select('id,nombre_display,anio_nacimiento,modalidad').eq('torneo_id',CP_TORNEO.id)).data||[];
+  const js=(await sb.from('jornada').select('id,numero,fecha').in('id',jIds)).data||[];
+  const pms=(await sb.from('partido').select('*').in('jornada_id',jIds)).data||[];
+  if(!pms.length){toast('⚠ Esa fecha no tiene partidos');return;}
+  const eqs=(await sb.from('equipo').select('id,nombre,club_id').in('id',[...new Set(pms.flatMap(m=>[m.local_id,m.visita_id]).filter(Boolean))])).data||[];
+  const cls=(await sb.from('club').select('id,nombre,escudo_url,color').in('id',[...new Set(eqs.map(e=>e.club_id))])).data||[];
+  const CL=Object.fromEntries(cls.map(c=>[c.id,c]));
+  const EQ=Object.fromEntries(eqs.map(e=>[e.id,{nom:e.nombre||(CL[e.club_id]||{}).nombre||'—', club:(CL[e.club_id]||{}).nombre||'', cl:CL[e.club_id]||{}}]));
+  const JN=Object.fromEntries(js.map(j=>[j.id,j]));
+  const CT=Object.fromEntries(cats.map(c=>[c.id,c]));
+  const MIOS=new Set((MIS||[]).filter(m=>m.torneo_id===CP_TORNEO.id).map(m=>m.equipo_id));
+  const tq=await sb.from('torneo').select('logo_url,marca:marca_id(logo_url,nombre)').eq('id',CP_TORNEO.id).single();
+  const logoT=(tq.data&&(tq.data.logo_url||(tq.data.marca||{}).logo_url))||null;
+  const esc=t=>String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const diaTxt=d=>d?new Date(d+'T00:00:00').toLocaleDateString('es-PE',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'}):'día por confirmar';
+  const escudo=id=>{const e=EQ[id]; if(!e) return '';
+    return e.cl.escudo_url?`<img class="esc" src="${e.cl.escudo_url}"/>`
+      :`<span class="esc esc-ini" style="background:${e.cl.color||'#334155'}">${esc(iniciales(e.club||'?'))}</span>`;};
+  const nom=id=>id?esc((EQ[id]||{}).nom||'Por definir'):'Por definir';
+  const porCat={}; pms.forEach(m=>{(porCat[m.categoria_id]=porCat[m.categoria_id]||[]).push(m);});
+  const catsOrden=Object.keys(porCat).sort((a,b)=>((CT[b]||{}).anio_nacimiento||0)-((CT[a]||{}).anio_nacimiento||0));
+  const bloques=catsOrden.map(cid=>{
+    const lista=porCat[cid].sort((a,b)=>
+      ((JN[a.jornada_id]||{}).numero||0)-((JN[b.jornada_id]||{}).numero||0)
+      || (a.fecha||'9999').localeCompare(b.fecha||'9999')
+      || (a.hora||'99:99').localeCompare(b.hora||'99:99')
+      || ((EQ[a.local_id]||{}).club||'').localeCompare((EQ[b.local_id]||{}).club||'','es'));
+    const filas=lista.map(m=>{
+      const mio=MIOS.has(m.local_id)||MIOS.has(m.visita_id);
+      const fin=['finalizado','walkover'].includes(m.estado);
+      return `<div class="fila${mio?' mio':''}">
+        ${todas?`<span class="fnum">F${(JN[m.jornada_id]||{}).numero||''}</span>`:''}
+        <span class="hora">${m.hora?m.hora.slice(0,5):'--:--'}</span>
+        <span class="eq eq-l">${nom(m.local_id)} ${m.local_id?escudo(m.local_id):''}</span>
+        <span class="marc ${fin?'m-fin':''}">${fin?`${m.goles_local??0} : ${m.goles_visita??0}`:'vs'}</span>
+        <span class="eq">${m.visita_id?escudo(m.visita_id):''} ${nom(m.visita_id)}</span>
+        <span class="sede">${esc(m.cancha||'')}${m.cancha&&m.sede?' · ':''}${esc(m.sede||'')}</span>
+      </div>`;}).join('');
+    const c=CT[cid]||{};
+    return `<div class="cat-blq">
+      <div class="cat-cab"><span>${esc(c.nombre_display||('Categoría '+c.anio_nacimiento+' / '+c.modalidad))}</span><span class="cat-n">${lista.length} partido(s)</span></div>
+      ${filas}
+    </div>`;
+  }).join('');
+  const sub=todas?`Todas las fechas disponibles · ${CP_FECHAS.length} fecha(s)`:`Fecha ${f.numero} · ${diaTxt(f.dia)}`;
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Programación · ${esc(CP_TORNEO.nombre)} · ${esc(sub)}</title><style>
+    *{margin:0;padding:0;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    @page{size:A4 portrait;margin:10mm}
+    body{background:#eee}
+    .hoja{background:#fff;width:190mm;margin:6mm auto;padding:6mm}
+    @media print{body{background:#fff}.hoja{margin:0;padding:0;width:auto}.no-print{display:none}}
+    .cab{display:flex;align-items:center;gap:5mm;background:#0f172a;color:#fff;border-radius:4mm;padding:4.5mm 6mm;margin-bottom:5mm}
+    .cab img{width:15mm;height:15mm;object-fit:contain;background:#fff;border-radius:3mm;padding:1mm;flex:none}
+    .cab-t1{font-size:19px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;line-height:1.15}
+    .cab-t2{font-size:10px;color:#fbbf24;font-weight:800;text-transform:uppercase;letter-spacing:2.5px;margin-bottom:1mm}
+    .cab-t3{font-size:10px;color:#cbd5e1;font-weight:700;text-transform:uppercase;margin-top:.5mm}
+    .cat-blq{page-break-inside:avoid;margin-bottom:4.5mm;border:1px solid #e2e8f0;border-radius:3mm;overflow:hidden}
+    .cat-cab{display:flex;justify-content:space-between;align-items:center;background:#111827;color:#fff;padding:2.2mm 4mm;font-weight:900;font-size:12px;letter-spacing:1.5px;text-transform:uppercase}
+    .cat-n{font-size:8.5px;color:#fbbf24;font-weight:800;letter-spacing:1px}
+    .fila{display:flex;align-items:center;gap:2.5mm;padding:1.7mm 4mm;border-bottom:1px solid #eef1f5;font-size:9.5px}
+    .fila:last-child{border-bottom:0}
+    .fila:nth-of-type(odd){background:#f8fafc}
+    .fila.mio{background:#fff7ed;border-left:1.2mm solid #d9232e}
+    .fnum{width:7mm;font-weight:900;color:#64748b;flex:none;font-size:8px}
+    .hora{width:10mm;font-weight:900;color:#d9232e;flex:none}
+    .eq{flex:1;display:flex;align-items:center;gap:2mm;font-weight:800;text-transform:uppercase;min-width:0}
+    .eq-l{justify-content:flex-end;text-align:right}
+    .esc{width:6.5mm;height:6.5mm;object-fit:contain;border-radius:1.5mm;flex:none}
+    .esc-ini{display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:6.5px;font-weight:900}
+    .marc{width:15mm;text-align:center;font-weight:900;font-size:11px;color:#94a3b8;flex:none}
+    .m-fin{color:#111}
+    .sede{width:32mm;text-align:right;font-size:7.5px;color:#64748b;font-weight:700;flex:none}
+    .pie{text-align:center;font-size:8px;color:#94a3b8;font-weight:700;letter-spacing:1px;margin-top:3mm}
+    .barra{position:sticky;top:0;background:#111;color:#fff;padding:10px;text-align:center;font-size:13px;z-index:9}
+    .barra button{background:#d9232e;color:#fff;border:0;border-radius:8px;padding:8px 18px;font-weight:bold;font-size:13px;cursor:pointer;margin-right:10px}
+  </style></head><body>
+  <div class="no-print barra"><button onclick="print()">🖨 IMPRIMIR / GUARDAR PDF</button>${pms.length} partido(s) · ${catsOrden.length} categoría(s) — tus partidos van resaltados</div>
+  <div class="hoja">
+    <div class="cab">
+      ${logoT?`<img src="${logoT}"/>`:''}
+      <div><div class="cab-t2">Programación</div><div class="cab-t1">${esc(CP_TORNEO.nombre)}</div><div class="cab-t3">${esc(sub)}</div></div>
+    </div>
+    ${bloques}
+    <div class="pie">⚡ POWERED BY LIGUIFY · liguify.com</div>
+  </div>
+  <script>window.onload=function(){setTimeout(function(){window.print();},800);};<\/script>
+  </body></html>`;
+  const w=window.open('','_blank');
+  if(!w){toast('⚠ El navegador bloqueó la ventana — permite pop-ups para generar el PDF');return;}
+  w.document.write(html); w.document.close();
+  cerrarModal();
+}
 function renderHubLista(){
   const grupoHTML=grupo=>{
     const t=grupo[0];
@@ -241,7 +375,8 @@ function renderHubLista(){
       <div class="bg-ink-900 text-white rounded-2xl px-5 py-3 mb-2 flex items-center gap-3 flex-wrap">
         <span class="font-display text-2xl tracking-wide">${t.torneo.toUpperCase()}</span>
         <span class="text-xs text-white/50">${t.marca}${t.torneo_estado==='finalizado'?' · FINALIZADO':''}</span>
-        ${soyCoord?`<button onclick='modalSubcoordinador("${t.torneo_id}")' class="ml-auto bg-white/10 border border-white/20 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl hover:bg-white/20">➕ SUB-COORDINADOR</button>`:''}
+        <button onclick='modalDescargarProgramacion("${t.torneo_id}",${JSON.stringify(t.torneo).replace(/'/g,"&#39;")})' title="PDF de la programación de una fecha: agrupada por categoría y ordenada por hora" class="ml-auto bg-white/10 border border-white/20 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl hover:bg-white/20">🖨 PROGRAMACIÓN</button>
+        ${soyCoord?`<button onclick='modalSubcoordinador("${t.torneo_id}")' class="bg-white/10 border border-white/20 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl hover:bg-white/20">➕ SUB-COORDINADOR</button>`:''}
       </div>
       <div class="space-y-2">${grupo.map(m=>`
         <button onclick='abrirEquipo("${m.equipo_id}")' class="w-full bg-white border border-line rounded-2xl px-5 py-4 flex items-center gap-4 hover:shadow-md transition text-left ${m.equipo_estado==='inactivo'?'opacity-60':''}">
