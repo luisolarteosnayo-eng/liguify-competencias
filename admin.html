@@ -927,19 +927,30 @@ async function modalDescargarProgramacion(){
   if(!cats.length){toast('⚠ Este torneo no tiene categorías');return;}
   const js=(await sb.from('jornada').select('id,numero,fecha,categoria_id').in('categoria_id',cats.map(c=>c.id)).order('numero')).data||[];
   if(!js.length){toast('⚠ Este torneo aún no tiene fechas generadas');return;}
+  // solo se ofrecen las fechas DISPONIBLES: por jugar (hoy o después) y con
+  // horarios ya cargados — una fecha sin horas todavía no se puede publicar
+  const pms=(await sb.from('partido').select('jornada_id,hora').in('categoria_id',cats.map(c=>c.id))).data||[];
+  const conHora={}; pms.forEach(m=>{ if(m.hora) conHora[m.jornada_id]=(conHora[m.jornada_id]||0)+1; });
+  const d=new Date(); const hoy=new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
   const porNum={}; js.forEach(j=>{(porNum[j.numero]=porNum[j.numero]||[]).push(j);});
-  DESC_FECHAS=Object.keys(porNum).map(Number).sort((a,b)=>a-b).map(n=>{
+  const todas=Object.keys(porNum).map(Number).sort((a,b)=>a-b).map(n=>{
     const dias=[...new Set(porNum[n].map(j=>j.fecha).filter(Boolean))].sort();
-    return {numero:n, ids:porNum[n].map(j=>j.id), dia:dias[0]||'', varios:dias.length>1};
+    return {numero:n, ids:porNum[n].map(j=>j.id), dia:dias[0]||'', varios:dias.length>1,
+      horas:porNum[n].reduce((a,j)=>a+(conHora[j.id]||0),0)};
   });
-  const hoy=new Date().toISOString().slice(0,10);
-  const prox=DESC_FECHAS.find(f=>f.dia&&f.dia>=hoy)||DESC_FECHAS[DESC_FECHAS.length-1];
+  DESC_FECHAS=todas.filter(f=>f.dia&&f.dia>=hoy&&f.horas>0);
+  const fuera=todas.length-DESC_FECHAS.length;
+  if(!DESC_FECHAS.length){
+    const pasadas=todas.filter(f=>f.dia&&f.dia<hoy).length, sinHora=todas.filter(f=>!f.horas).length;
+    toast(`⚠ No hay fechas disponibles para descargar en ${TORNEO.nombre} — ${pasadas} ya se jugaron y ${sinHora} aún no tienen horarios cargados. Súbelos con 📤 SUBIR PROGRAMACIÓN.`);
+    return;
+  }
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">🖨 DESCARGAR PROGRAMACIÓN</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
-    <p class="text-xs text-ink-400 mb-4">PDF de <b>${TORNEO.nombre}</b> agrupado por <b>categoría</b> y ordenado por <b>fecha, hora y club</b>. Desde el diálogo de impresión eliges <b>Guardar como PDF</b>.</p>
+    <p class="text-xs text-ink-400 mb-4">PDF de <b>${TORNEO.nombre}</b> agrupado por <b>categoría</b> y ordenado por <b>fecha, hora y club</b>. Solo aparecen las fechas <b>por jugar y con horarios cargados</b>${fuera?` (${fuera} no disponible(s))`:''}. Desde el diálogo de impresión eliges <b>Guardar como PDF</b>.</p>
     <label class="block text-sm mb-4"><span class="text-ink-400 font-semibold text-xs">Fecha a descargar</span>
       <select id="dp-f" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
-        ${DESC_FECHAS.map(f=>`<option value="${f.numero}" ${prox&&f.numero===prox.numero?'selected':''}>Fecha ${f.numero}${f.dia?' · '+f.dia:''}${f.varios?' (días distintos)':''}</option>`).join('')}
-        <option value="__all__">Todas las fechas del torneo</option>
+        ${DESC_FECHAS.map((f,i)=>`<option value="${f.numero}" ${i===0?'selected':''}>Fecha ${f.numero}${f.dia?' · '+f.dia:''}${f.varios?' (días distintos)':''} — ${f.horas} con horario</option>`).join('')}
+        ${DESC_FECHAS.length>1?'<option value="__all__">Todas las fechas disponibles</option>':''}
       </select></label>
     <button onclick="imprimirProgramacionTorneo()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GENERAR PDF</button>`);
 }
@@ -948,7 +959,8 @@ async function imprimirProgramacionTorneo(){
   const f=DESC_FECHAS.find(x=>String(x.numero)===String(sel));
   const cats=(await sb.from('categoria').select('id,nombre_display,anio_nacimiento,modalidad').eq('torneo_id',TORNEO.id)).data||[];
   const js=(await sb.from('jornada').select('id,numero,fecha,categoria_id').in('categoria_id',cats.map(c=>c.id))).data||[];
-  const jIds=todas?js.map(j=>j.id):(f?f.ids:[]);
+  // "todas" = todas las DISPONIBLES del selector (nunca fechas pasadas o sin horario)
+  const jIds=todas?DESC_FECHAS.flatMap(x=>x.ids):(f?f.ids:[]);
   if(!jIds.length){toast('⚠ Sin fechas que descargar');return;}
   const pms=(await sb.from('partido').select('*').in('jornada_id',jIds)).data||[];
   if(!pms.length){toast('⚠ Esa fecha no tiene partidos');return;}
