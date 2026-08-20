@@ -323,6 +323,7 @@ function etiquetaCupo(o){
 
 /* ============ CATÁLOGO ============ */
 async function irCatalogo(){
+  if(location.pathname!=='/') history.replaceState(null,'','/');
   $('hdr-brand').textContent='LIGUIFY'; $('hdr-sub').textContent='Torneos en vivo';
   const {data,error}=await sb.from('marca').select('*').order('created_at');
   if(error){err(error.message);return;} err(null);
@@ -343,9 +344,21 @@ async function irMarcaId(id){
   if(error){err(error.message);return;}
   MARCA=data; irMarca();
 }
+/* liguify.com/<slug> abre esa marca directamente (es la dirección que se
+   publica en los flyers y en el catálogo). Vercel sirve index.html para
+   cualquier ruta de un segmento que no sea un archivo real. */
+async function abrirPorRuta(){
+  const slug=decodeURIComponent(location.pathname.replace(/^\/+|\/+$/g,'')).toLowerCase();
+  if(!slug) return irCatalogo();
+  const {data}=await sb.from('marca').select('*').ilike('slug',slug).limit(1);
+  if(data&&data.length){ MARCA=data[0]; return irMarca(); }
+  history.replaceState(null,'','/');    // slug inexistente: catálogo, sin 404
+  return irCatalogo();
+}
 async function irMarca(){
   if(!MARCA) return irCatalogo();
   err(null);
+  if(MARCA.slug&&location.pathname.replace(/\//g,'')!==MARCA.slug) history.replaceState(null,'','/'+MARCA.slug);
   $('hdr-brand').textContent=MARCA.nombre.toUpperCase(); $('hdr-sub').textContent='Powered by Liguify';
   $('m-wm').textContent=iniciales(MARCA.nombre);
   $('m-meta').textContent=`${MARCA.ciudad?MARCA.ciudad.toUpperCase()+' · ':''}TEMPORADA 2026`;
@@ -706,6 +719,6 @@ sb.channel('publico-live')
   })
   .subscribe(st=>{ if(st==='SUBSCRIBED') $('hdr-rt').innerHTML=''; });
 
-irCatalogo();
+abrirPorRuta();
 </script>
 </body>
