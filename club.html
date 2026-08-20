@@ -1098,11 +1098,20 @@ async function buscarJugador(){
   }
 }
 async function inscribir(jugadorId){
-  const {error}=await sb.from('inscripcion_lbf').insert({
+  const ins=await sb.from('inscripcion_lbf').insert({
     equipo_id:EQ.equipo_id, jugador_id:jugadorId, categoria_id:EQ.categoria_id,
-    dorsal:+($('bj-dorsal')?.value||0)||null, estado:'pendiente'});
-  if(error){$('bj-res').innerHTML=`<div class="bg-brand-50 border border-brand-100 rounded-xl p-4 text-sm font-semibold text-brand-700">${errNegocio(error)}</div>`;return;}
-  cerrarModal(); toast('Inscrito ✔ — queda PENDIENTE de validación del organizador'); renderPlantel();
+    dorsal:+($('bj-dorsal')?.value||0)||null, estado:'pendiente'}).select('id').single();
+  if(ins.error){$('bj-res').innerHTML=`<div class="bg-brand-50 border border-brand-100 rounded-xl p-4 text-sm font-semibold text-brand-700">${errNegocio(ins.error)}</div>`;return;}
+  // La autorización de Padre/Tutor es única por jugador: si ya la subió en otra
+  // categoría o torneo, esta inscripción nueva debe nacer ACTIVA, no pendiente.
+  let activado=false;
+  if(REQ_AUT){
+    const r=await sb.rpc('subir_autorizacion_jugador',{p_jugador:jugadorId,p_inscripcion:ins.data.id,p_ruta:null});
+    activado=!r.error&&r.data&&r.data.activado;
+  }
+  cerrarModal();
+  toast(activado?'Inscrito ✔ — ACTIVO (ya tenía autorización de Padre/Tutor subida)':'Inscrito ✔ — queda PENDIENTE de validación del organizador');
+  renderPlantel();
 }
 async function altaJugador(pais,doc){
   const n=$('al-n').value.trim(), a=$('al-a').value.trim(), f=$('al-f').value;
