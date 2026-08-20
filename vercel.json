@@ -5,6 +5,6 @@
     { "source": "/guia", "destination": "/guia.html" },
     { "source": "/guia-organizador", "destination": "/guia-organizador.html" },
     { "source": "/verificar", "destination": "/verificar.html" },
-    { "source": "/((?!.*\.).*)", "destination": "/index.html" }
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
