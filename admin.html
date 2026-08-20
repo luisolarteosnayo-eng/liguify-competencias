@@ -3555,11 +3555,16 @@ async function generarImagenJornada(jid,modo){
   if(error){toast(errNegocio(error));return;}
   if(!ms.length){toast('⚠ Esta fecha no tiene partidos');return;}
   if(resultados&&!ms.some(m=>['finalizado','walkover'].includes(m.estado))){toast('⚠ Esta fecha aún no tiene resultados cargados');return;}
-  // UNA IMAGEN POR SEDE: así la sede va en la cabecera y en cada fila solo
-  // queda la cancha (texto corto que no invade el nombre del visitante)
-  const porSede={}; ms.forEach(m=>{const s=(m.sede||'').trim(); (porSede[s]=porSede[s]||[]).push(m);});
-  const sedes=Object.keys(porSede).sort();
-  toast(sedes.length>1?`🖼 Generando ${sedes.length} imágenes (una por sede)…`:'🖼 Generando imagen…');
+  // UNA IMAGEN POR SEDE Y DÍA: la sede y el día van en la cabecera y en cada
+  // fila solo queda la cancha (texto corto que no invade el nombre visitante).
+  // Se agrupa también por día porque una fecha puede repartirse en dos jornadas
+  // de calendario (p. ej. sábado y domingo) y cada imagen debe decir su día real.
+  const porSede={}; ms.forEach(m=>{const k=(m.sede||'').trim()+'||'+(m.fecha||''); (porSede[k]=porSede[k]||[]).push(m);});
+  const sedes=Object.keys(porSede).sort((a,b)=>{
+    const [sa,da]=a.split('||'), [sb,db]=b.split('||');
+    return (da||'').localeCompare(db||'')||sa.localeCompare(sb,'es');
+  });
+  toast(sedes.length>1?`🖼 Generando ${sedes.length} imágenes (una por sede y día)…`:'🖼 Generando imagen…');
   await Promise.all([document.fonts.load('80px "Bebas Neue"'),document.fonts.load('700 30px Inter'),document.fonts.load('600 26px Inter')]);
   const logo=await cargarImg(TORNEO.logo_url||MARCA.logo_url);
   const escudos={};
@@ -3575,6 +3580,10 @@ async function generarImagenJornada(jid,modo){
     const canchas=[...new Set(lista.map(m=>(m.cancha||'').trim()).filter(Boolean))];
     const canchaComun=canchas.length===1&&canchas[0]&&lista.every(m=>(m.cancha||'').trim())?canchas[0]:null;
     const lugarCab=[sede,canchaComun].filter(Boolean).join('  ·  ');
+    // el día es el de ESTOS partidos (puede diferir del día de la jornada si
+    // la fecha se reparte en dos días); si faltara, se usa el de la jornada
+    const diaGrupo=[...new Set(lista.map(m=>m.fecha).filter(Boolean))][0]||dia;
+    const diaTxt=diaGrupo?new Date(diaGrupo+'T00:00:00').toLocaleDateString('es-PE',{weekday:'long',day:'numeric',month:'long'}).toUpperCase():'DÍA POR CONFIRMAR';
     const canchaEnFila=!canchaComun&&canchas.length>0;
     // TODAS las sedes de una misma fecha salen del MISMO tamaño (para redes):
     // se usa el alto de la sede con más partidos y las filas se centran.
@@ -3660,22 +3669,26 @@ async function generarImagenJornada(jid,modo){
 
   const slug=s=>String(s||'sin-sede').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'sin-sede';
   // tamaño común: la cabecera más alta y la sede con más partidos
-  const cabDe=s=>{const l=porSede[s], can=[...new Set(l.map(m=>(m.cancha||'').trim()).filter(Boolean))];
+  const cabDe=k=>{const l=porSede[k], can=[...new Set(l.map(m=>(m.cancha||'').trim()).filter(Boolean))];
     const comun=can.length===1&&l.every(m=>(m.cancha||'').trim())?can[0]:null;
-    return ([s,comun].filter(Boolean).join(' ')?352:300);};
+    return ([(l[0].sede||'').trim(),comun].filter(Boolean).join(' ')?352:300);};
   const headComun=Math.max(...sedes.map(cabDe));
   const maxFilas=Math.max(...sedes.map(s=>porSede[s].length));
   const altoComun=headComun+maxFilas*112+96;
   let n=0;
-  for(const sede of sedes){
-    const cv=lienzo(porSede[sede],sede,headComun,altoComun);
+  const variosDias=[...new Set(ms.map(m=>m.fecha).filter(Boolean))].length>1;
+  for(const clave of sedes){
+    const lista=porSede[clave];
+    const sedeNom=(lista[0].sede||'').trim();
+    const diaGrupo=lista[0].fecha||'';
+    const cv=lienzo(lista,sedeNom,headComun,altoComun);
     window.__CV=cv;   // referencia para vista previa / QA (última generada)
     await new Promise(res=>{
       try{
         cv.toBlob(b=>{
           const a=document.createElement('a');
           a.href=URL.createObjectURL(b);
-          a.download=`${resultados?'resultados':'programacion'}-fecha-${j.numero}${sedes.length>1||sede?'-'+slug(sede):''}.png`;
+          a.download=`${resultados?'resultados':'programacion'}-fecha-${j.numero}${sedeNom?'-'+slug(sedeNom):''}${variosDias&&diaGrupo?'-'+diaGrupo:''}.png`;
           a.click();
           setTimeout(()=>URL.revokeObjectURL(a.href),5000);
           n++; res();
