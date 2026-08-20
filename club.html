@@ -303,10 +303,16 @@ async function imprimirProgramacionClub(){
       || (a.fecha||'9999').localeCompare(b.fecha||'9999')
       || (a.hora||'99:99').localeCompare(b.hora||'99:99')
       || ((EQ[a.local_id]||{}).club||'').localeCompare((EQ[b.local_id]||{}).club||'','es'));
+    // Una fecha del torneo puede repartirse en varios días de calendario:
+    // se rotula el día REAL del partido, no el de la jornada.
+    const diasCat=[...new Set(lista.map(m=>m.fecha||''))];
+    let ultDia=null;
     const filas=lista.map(m=>{
       const mio=MIOS.has(m.local_id)||MIOS.has(m.visita_id);
       const fin=['finalizado','walkover'].includes(m.estado);
-      return `<div class="fila${mio?' mio':''}">
+      const sep=(diasCat.length>1&&(m.fecha||'')!==ultDia)?`<div class="dia-sep">${esc(diaTxt(m.fecha))}</div>`:'';
+      ultDia=m.fecha||'';
+      return sep+`<div class="fila${mio?' mio':''}">
         ${todas?`<span class="fnum">F${(JN[m.jornada_id]||{}).numero||''}</span>`:''}
         <span class="hora">${m.hora?m.hora.slice(0,5):'--:--'}</span>
         <span class="eq eq-l">${nom(m.local_id)} ${m.local_id?escudo(m.local_id):''}</span>
@@ -320,7 +326,9 @@ async function imprimirProgramacionClub(){
       ${filas}
     </div>`;
   }).join('');
-  const sub=todas?`Todas las fechas disponibles · ${CP_FECHAS.length} fecha(s)`:`Fecha ${f.numero} · ${diaTxt(f.dia)}`;
+  const diasTodos=[...new Set(pms.map(m=>m.fecha).filter(Boolean))].sort();
+  const diasSub=diasTodos.length?diasTodos.map(diaTxt).join(' · '):diaTxt(f&&f.dia);
+  const sub=todas?`Todas las fechas disponibles · ${CP_FECHAS.length} fecha(s)`:`Fecha ${f.numero} · ${diasSub}`;
   const html=`<!doctype html><html><head><meta charset="utf-8"><title>Programación · ${esc(CP_TORNEO.nombre)} · ${esc(sub)}</title><style>
     *{margin:0;padding:0;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     @page{size:A4 portrait;margin:10mm}
@@ -335,6 +343,7 @@ async function imprimirProgramacionClub(){
     .cat-blq{page-break-inside:avoid;margin-bottom:4.5mm;border:1px solid #e2e8f0;border-radius:3mm;overflow:hidden}
     .cat-cab{display:flex;justify-content:space-between;align-items:center;background:#111827;color:#fff;padding:2.2mm 4mm;font-weight:900;font-size:12px;letter-spacing:1.5px;text-transform:uppercase}
     .cat-n{font-size:8.5px;color:#fbbf24;font-weight:800;letter-spacing:1px}
+    .dia-sep{background:#e2e8f0;color:#334155;font-weight:900;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;padding:1.4mm 4mm;border-bottom:1px solid #cbd5e1}
     .fila{display:flex;align-items:center;gap:2.5mm;padding:1.7mm 4mm;border-bottom:1px solid #eef1f5;font-size:9.5px}
     .fila:last-child{border-bottom:0}
     .fila:nth-of-type(odd){background:#f8fafc}
@@ -1227,9 +1236,14 @@ async function imprimirFixtureClub(){
   const bloques=nums.map(n=>{
     const lista=porJ[n].sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')||(a.hora||'').localeCompare(b.hora||''));
     const j=lista[0].jornada||{};
+    // los partidos de una misma fecha pueden jugarse en días distintos
+    const diasJ=[...new Set(lista.map(m=>m.fecha||''))];
+    let ultDia=null;
     const filas=lista.map(m=>{
       const fin=['finalizado','walkover'].includes(m.estado), ver=pubClub(m), mio=MIOS.has(m.local_id)||MIOS.has(m.visita_id);
-      return `<div class="fila${mio?' mio':''}">
+      const sep=(diasJ.length>1&&(m.fecha||'')!==ultDia)?`<div class="dia-sep">${esc(diaTxt(m.fecha))}</div>`:'';
+      ultDia=m.fecha||'';
+      return sep+`<div class="fila${mio?' mio':''}">
         <span class="hora">${ver?(m.hora?m.hora.slice(0,5):'--:--'):'🕒'}</span>
         <span class="eq eq-l">${nom(m.local_id)} ${m.local_id?escudo(m.local_id):''}</span>
         <span class="marc ${fin?'m-fin':''}">${fin?`${m.goles_local??0} : ${m.goles_visita??0}`:'vs'}</span>
@@ -1237,7 +1251,7 @@ async function imprimirFixtureClub(){
         <span class="sede">${ver?esc([m.cancha,m.sede].filter(Boolean).join(' · ')):'por confirmar'}</span>
       </div>`;}).join('');
     return `<div class="fecha-blq">
-      <div class="fecha-cab"><span>FECHA ${n}</span><span class="fecha-dia">${diaTxt(j.fecha||lista[0].fecha)}</span></div>
+      <div class="fecha-cab"><span>FECHA ${n}</span><span class="fecha-dia">${esc(diasJ.filter(Boolean).sort().map(diaTxt).join(' · ')||diaTxt(j.fecha||null))}</span></div>
       ${filas}
     </div>`;
   }).join('');
@@ -1255,6 +1269,7 @@ async function imprimirFixtureClub(){
     .fecha-blq{page-break-inside:avoid;margin-bottom:4.5mm;border:1px solid #e2e8f0;border-radius:3mm;overflow:hidden}
     .fecha-cab{display:flex;justify-content:space-between;align-items:center;background:#111827;color:#fff;padding:2.2mm 4mm;font-weight:900;font-size:12px;letter-spacing:1.5px}
     .fecha-dia{font-size:8.5px;color:#fbbf24;text-transform:uppercase;font-weight:800;letter-spacing:1px}
+    .dia-sep{background:#e2e8f0;color:#334155;font-weight:900;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;padding:1.4mm 4mm;border-bottom:1px solid #cbd5e1}
     .fila{display:flex;align-items:center;gap:2.5mm;padding:1.7mm 4mm;border-bottom:1px solid #eef1f5;font-size:9.5px}
     .fila:last-child{border-bottom:0}
     .fila:nth-of-type(odd){background:#f8fafc}
