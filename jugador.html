@@ -306,7 +306,7 @@ async function subirDniPadre(inputId,lado){
   let f=$(inputId).files[0]; if(!f) return null;
   f=await redimensionar(f,1400,0.85);
   const ruta=`padres/${SESION.user.id}-${lado}-${Date.now()}.jpg`;
-  const up=await sb.storage.from('documentos').upload(ruta,f,{contentType:'image/jpeg',upsert:true});
+  const up=await sb.storage.from('documentos').upload(ruta,f,{contentType:'image/jpeg',upsert:false});   // sin upsert: solo necesita permiso de INSERT
   if(up.error) throw new Error('DNI '+lado+': '+up.error.message);
   return ruta;
 }
