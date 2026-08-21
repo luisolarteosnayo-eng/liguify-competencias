@@ -2223,7 +2223,7 @@ async function renderLBF(){
   if(error){$('lbf-lista').innerHTML='';msg(errNegocio(error),'err');return;}
   let jug={};
   if(ins.length){
-    const js=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,fecha_nacimiento,verificado,foto_url,doc_scan_frente_url,doc_scan_reverso_url,pie_habil,posicion,consentimiento_imagen,autorizacion_url').in('id',ins.map(i=>i.jugador_id));
+    const js=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,pais_documento,tipo_documento,fecha_nacimiento,verificado,foto_url,doc_scan_frente_url,doc_scan_reverso_url,pie_habil,posicion,consentimiento_imagen,autorizacion_url').in('id',ins.map(i=>i.jugador_id));
     await fotosDelTorneo(js.data||[]);
     jug=Object.fromEntries((js.data||[]).map(j=>[j.id,j]));
   }
@@ -2237,7 +2237,7 @@ async function renderLBF(){
       <span class="flex items-center gap-1.5 ml-auto flex-wrap">
         <span class="text-[10px] font-bold px-2 py-1 rounded-full ${i.inhabilitado?'bg-brand-100 text-brand-600':(i.estado==='activo'||!TORNEO.requiere_autorizacion)?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${i.inhabilitado?'INHABILITADO':i.estado==='activo'?'ACTIVO':(!TORNEO.requiere_autorizacion?'HABILITADO':'PENDIENTE')}</span>
         ${i.estado==='pendiente'&&TORNEO.requiere_autorizacion&&esAdmin()?`<button onclick="activarIns('${i.id}')" class="text-[10px] font-bold text-emerald-700 border border-emerald-300 rounded-lg px-2.5 py-1.5 hover:bg-emerald-50">ACTIVAR</button>`:''}
-        ${esAdmin()?`<button onclick='modalEditIns(${JSON.stringify({id:i.id,dorsal:i.dorsal,capitan:i.capitan,estado:i.estado,inhabilitado:i.inhabilitado,nombre:(j.nombres||'')+' '+(j.apellidos||''),nombres:j.nombres||'',apellidos:j.apellidos||'',fnac:j.fecha_nacimiento||'',jugador_id:i.jugador_id,foto_url:j.foto_url||null,dfr:j.doc_scan_frente_url||null,drv:j.doc_scan_reverso_url||null,pie:j.pie_habil||null,pos:j.posicion||null,con:j.consentimiento_imagen?1:0,aut:j.autorizacion_url||null}).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper" title="Editar foto, documento, dorsal, capitán, posición, pie hábil, consentimiento, estado e inhabilitación">✏️</button>
+        ${esAdmin()?`<button onclick='modalEditIns(${JSON.stringify({id:i.id,dorsal:i.dorsal,capitan:i.capitan,estado:i.estado,inhabilitado:i.inhabilitado,nombre:(j.nombres||'')+' '+(j.apellidos||''),nombres:j.nombres||'',apellidos:j.apellidos||'',fnac:j.fecha_nacimiento||'',jugador_id:i.jugador_id,foto_url:j.foto_url||null,dfr:j.doc_scan_frente_url||null,drv:j.doc_scan_reverso_url||null,pie:j.pie_habil||null,pos:j.posicion||null,con:j.consentimiento_imagen?1:0,aut:j.autorizacion_url||null,doc:j.nro_documento||'',dpais:j.pais_documento||'PE',dtipo:j.tipo_documento||'DNI'}).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper" title="Editar foto, documento, dorsal, capitán, posición, pie hábil, consentimiento, estado e inhabilitación">✏️</button>
         <button onclick='modalPerfilJugador("${i.jugador_id}","${((j.nombres||'')+' '+(j.apellidos||'')).replace(/'/g,'')}")' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-amber-50 hover:text-amber-600" title="Perfil público del jugador: habilitar, link para compartir y acceso del padre/madre">⭐</button>
         <button onclick='quitarIns("${i.id}","${((j.nombres||'')+' '+(j.apellidos||'')).replace(/'/g,'')}")' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-brand-50 hover:text-brand-600" title="Quitar de la LBF (bloqueado si tiene participaciones)">✕</button>`:''}
       </span>
@@ -2434,7 +2434,7 @@ async function quitarPadre(uid,jugadorId,nombre){
 }
 
 function modalEditIns(i){
-  window.__EI_ORIG={nombres:i.nombres||'',apellidos:i.apellidos||'',fnac:i.fnac||''};
+  window.__EI_ORIG={nombres:i.nombres||'',apellidos:i.apellidos||'',fnac:i.fnac||'',doc:i.doc||'',dpais:i.dpais||'PE',dtipo:i.dtipo||'DNI'};
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">✏️ EDITAR JUGADOR</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
     <p class="text-sm font-semibold mb-4">${i.nombre}</p>
     ${fotoUI(i.foto_url,i.nombre)}
@@ -2448,6 +2448,14 @@ function modalEditIns(i){
           <input id="ei-ape" value="${(i.apellidos||'').replace(/"/g,'&quot;')}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
         <label class="col-span-2 block"><span class="text-ink-400 font-semibold text-xs">Fecha de nacimiento (define la categoría — corrígela solo por error)</span>
           <input id="ei-fnac" type="date" value="${i.fnac||''}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+        <div class="col-span-2 grid grid-cols-[80px_60px_1fr] gap-2">
+          <label class="block"><span class="text-ink-400 font-semibold text-xs">Tipo</span>
+            <select id="ei-dtipo" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${['DNI','CE','Pasaporte'].map(x=>`<option ${i.dtipo===x?'selected':''}>${x}</option>`).join('')}</select></label>
+          <label class="block"><span class="text-ink-400 font-semibold text-xs">País</span>
+            <select id="ei-dpais" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${['PE','AR','BO','BR','CL','CO','EC','UY','VE'].map(x=>`<option ${i.dpais===x?'selected':''}>${x}</option>`).join('')}</select></label>
+          <label class="block"><span class="text-ink-400 font-semibold text-xs">N° de documento (corrígelo solo por error de tipeo)</span>
+            <input id="ei-doc" value="${(i.doc||'').replace(/"/g,'&quot;')}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+        </div>
       </div>
     </div>
     <div class="border-t border-line pt-2 mb-2">
@@ -2526,6 +2534,13 @@ async function guardarEditIns(insId,jugadorId){
   if(nom!==null&&(nom!==o.nombres||ape!==o.apellidos||fn!==o.fnac)){
     const ri=await sb.rpc('actualizar_identidad_jugador',{p_jugador:jugadorId,p_nombres:nom,p_apellidos:ape,p_fecha:fn||null});
     if(ri.error){toast(errNegocio(ri.error));return;}
+  }
+  // N° de documento: solo admin, vía RPC con auditoría (libera números mal digitados)
+  const doc=$('ei-doc')?$('ei-doc').value.trim():null;
+  if(doc!==null&&(doc!==o.doc||$('ei-dpais').value!==o.dpais||$('ei-dtipo').value!==o.dtipo)){
+    const rd=await sb.rpc('corregir_documento_jugador',{p_jugador:jugadorId,p_tipo:$('ei-dtipo').value,p_pais:$('ei-dpais').value,p_nro:doc});
+    if(rd.error){toast(errNegocio(rd.error));return;}
+    if(rd.data&&rd.data.startsWith('OCUPADO')){toast('⛔ '+rd.data+' — corrige primero esa ficha o verifica el número.');return;}
   }
   let autActivado=false;
   try{
