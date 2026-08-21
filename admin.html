@@ -228,9 +228,14 @@ async function iniciar(){
   if(!session){show('s-login');return;}
   $('hdr-user').textContent=session.user.email;
   $('hdr-out').classList.remove('hidden');
-  // mis membresías → mi marca
+  // mis membresías → mi marca (antes: invitaciones pendientes por aceptar)
   const um=await sb.from('usuario_marca').select('marca_id, rol');
-  if(um.error||!um.data.length){msg('Tu usuario no tiene roles asignados en ninguna marca.','err');show('s-login');return;}
+  const tieneRoles=!um.error&&um.data.length>0;
+  try{
+    const inv=await sb.rpc('mis_invitaciones_marca');
+    if(inv.data&&inv.data.length){ mostrarInvitacionesMarca(inv.data,tieneRoles); if(!tieneRoles){show('s-login');return;} }
+  }catch(e){}
+  if(!tieneRoles){msg('Tu usuario no tiene roles asignados en ninguna marca.','err');show('s-login');return;}
   ROLES=um.data;
   const perf=await sb.from('usuario_perfil').select('es_super').eq('id',session.user.id).single();
   ES_SUPER=!!(perf.data&&perf.data.es_super);
@@ -254,6 +259,24 @@ function actualizarHeaderRoles(email){
   $('hdr-user').textContent=`${email||$('hdr-user').textContent.split(' · ')[0]} · ${mios.join(' + ')||'sin rol en esta marca'}`;
 }
 const esAdmin=()=>ES_SUPER||ROLES.some(r=>r.rol==='admin_marca'&&r.marca_id===MARCA.id);
+/* Invitaciones de marca pendientes: se aceptan igual que las de coordinador */
+function mostrarInvitacionesMarca(lista,tieneRoles){
+  const nom={admin_marca:'ADMINISTRADOR',mesa_control:'MESA DE CONTROL'};
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">📨 INVITACIONES</h3>${tieneRoles?'<button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button>':''}</div>
+    <p class="text-xs text-ink-500 mb-3">Te han invitado a participar. Al aceptar, el rol queda activo para tu cuenta.</p>
+    ${lista.map(i=>`<div class="flex items-center gap-3 bg-paper border border-line rounded-xl px-4 py-3 mb-2">
+      <span class="flex-1 text-sm"><b>${i.marca}</b> te invita como <b>${nom[i.rol]||i.rol}</b></span>
+      <button onclick="aceptarInvMarca('${i.id}')" class="bg-emerald-600 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-emerald-700">ACEPTAR</button>
+    </div>`).join('')}
+    ${tieneRoles?'<button onclick="cerrarModal()" class="w-full border border-line text-ink-500 text-xs font-bold py-2 rounded-xl hover:bg-paper mt-1">MÁS TARDE</button>':''}`);
+}
+async function aceptarInvMarca(id){
+  const r=await sb.rpc('aceptar_invitacion_marca',{p_id:id});
+  if(r.error){toast(errNegocio(r.error));return;}
+  if(r.data&&r.data.ok===false){toast('⚠ '+r.data.msg);return;}
+  toast('Invitación aceptada ✔ — cargando tu acceso…');
+  setTimeout(()=>location.reload(),800);
+}
 // liguify.com/mesa: misma app, pero SIEMPRE en la vista de mesa (aunque el
 // usuario también sea admin — útil para el día de cancha y para probarla).
 const MODO_MESA_URL=location.pathname.replace(/\/+$/,'')==='/mesa';
@@ -616,26 +639,50 @@ function modalUsuariosMarca(){
         <option value="admin_marca">admin_marca</option><option value="mesa_control">mesa_control</option></select>
       <button onclick="agregarUsuarioMarca()" class="bg-brand-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-brand-600">AGREGAR</button>
     </div>
-    <p class="text-[11px] text-ink-400 mt-2">El usuario debe haber iniciado sesión al menos una vez en liguify.com/admin.</p>`);
+    <p class="text-[11px] text-ink-400 mt-2">Igual que un coordinador de club: recibe un <b>email con su enlace de acceso</b>, entra (Google o email+contraseña) y <b>acepta la invitación</b>; recién ahí queda activo su rol. Mesa entra por liguify.com/mesa.</p>`);
   refrescarUsuariosMarca();
 }
+const ROL_MARCA_TXT={admin_marca:'ADMINISTRADOR',mesa_control:'MESA DE CONTROL'};
 async function refrescarUsuariosMarca(){
-  const {data,error}=await sb.rpc('usuarios_de_marca',{p_marca:MARCA.id});
+  const [{data,error},inv]=await Promise.all([
+    sb.rpc('usuarios_de_marca',{p_marca:MARCA.id}),
+    sb.rpc('invitaciones_de_marca',{p_marca:MARCA.id})
+  ]);
   if(error){$('um-lista').innerHTML=`<p class="text-brand-600 text-xs font-bold">${errNegocio(error)}</p>`;return;}
-  $('um-lista').innerHTML=(data||[]).map(u=>`
+  const activos=(data||[]).map(u=>`
     <div class="flex items-center gap-2 py-1.5 border-b border-line last:border-0">
       <span class="flex-1 font-semibold">${u.email}</span>
       <span class="text-[10px] font-bold rounded-full px-2.5 py-1 ${u.rol==='admin_marca'?'bg-ink-900 text-white':'bg-amber-100 text-amber-700'}">${u.rol}</span>
       <button onclick="quitarRolMarca('${u.usuario_id}','${u.rol}','${u.email}')" class="text-ink-400 hover:text-brand-600 font-bold px-1" title="Quitar rol">✕</button>
     </div>`).join('')||'<p class="text-ink-400 text-xs">Sin usuarios asignados.</p>';
+  const pendientes=(inv.data||[]).filter(x=>x.estado!=='aceptada').map(x=>`
+    <div class="flex items-center gap-2 py-1.5 border-b border-line last:border-0">
+      <span class="flex-1 font-semibold ${x.estado==='revocada'?'line-through text-ink-400':''}">${x.email}</span>
+      <span class="text-[10px] font-bold rounded-full px-2.5 py-1 bg-paper text-ink-500">${x.rol}</span>
+      <span class="text-[9px] font-bold uppercase rounded-full px-2 py-0.5 ${x.estado==='pendiente'?'bg-amber-100 text-amber-700':'bg-paper text-ink-400'}">${x.estado}</span>
+      ${x.estado==='pendiente'?`<button onclick="revocarInvMarca('${x.id}','${x.email}')" class="text-ink-400 hover:text-brand-600 font-bold px-1" title="Revocar invitación">✕</button>`:''}
+    </div>`).join('');
+  $('um-lista').innerHTML=activos+(pendientes?`<p class="font-bold text-ink-400 uppercase tracking-wider text-[10px] mt-3 mb-1">Invitaciones</p>${pendientes}`:'');
 }
 async function agregarUsuarioMarca(){
   const e=$('um-e').value.trim();
   if(!e){toast('⚠ Escribe el email');return;}
-  const r=await sb.rpc('asignar_rol_marca',{p_email:e, p_marca:MARCA.id, p_rol:$('um-r').value});
+  const rol=$('um-r').value;
+  // Mismo flujo que el coordinador de club: invitación + email de acceso;
+  // el rol se asigna recién cuando la persona ACEPTA desde su sesión.
+  const r=await sb.rpc('invitar_usuario_marca',{p_marca:MARCA.id,p_email:e,p_rol:rol});
   if(r.error){toast(errNegocio(r.error));return;}
-  if(r.data==='NO_EXISTE'){toast('⚠ Ese email aún no tiene cuenta: pídele iniciar sesión una vez (Google o email) en liguify.com/admin y vuelve a intentar');return;}
-  toast('Rol asignado ✔'); $('um-e').value='';
+  const destino=rol==='mesa_control'?'https://www.liguify.com/mesa':'https://www.liguify.com/admin';
+  const em=await enviarAccesoEmail(e,null,destino);
+  toast(em?'Invitación creada, pero el email no pudo enviarse: '+em.message:'Invitación enviada 📨 — al abrir su email y aceptar, tendrá el rol');
+  $('um-e').value='';
+  refrescarUsuariosMarca();
+}
+async function revocarInvMarca(id,email){
+  if(!confirm(`¿Revocar la invitación de ${email}? El enlace de su email dejará de otorgar el rol.`))return;
+  const r=await sb.rpc('revocar_invitacion_marca',{p_id:id});
+  if(r.error){toast(errNegocio(r.error));return;}
+  toast('Invitación revocada');
   refrescarUsuariosMarca();
 }
 async function quitarRolMarca(uid,rol,email){
@@ -2107,10 +2154,11 @@ async function quitarCT(id,nombre){
 const sbMail=supabase.createClient('https://bpsczjjomgzhnjxnzmhj.supabase.co',
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwc2N6ampvbWd6aG5qeG56bWhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1MDg5MTgsImV4cCI6MjA5ODA4NDkxOH0.3O92Q-3xxdCmF1LStCQrlCtz1s_EfdlayXnL_mEElOw',
   {auth:{storageKey:'sb-competencias-mail', persistSession:false}});
-async function enviarAccesoEmail(email,ctx){
+async function enviarAccesoEmail(email,ctx,redirect){
   // ctx {torneo, club}: personaliza el email vía user_metadata (solo aplica a cuentas NUEVAS)
+  // redirect: a dónde vuelve el enlace del email (por defecto el módulo club)
   const {error}=await sbMail.auth.signInWithOtp({email, options:{
-    emailRedirectTo:'https://www.liguify.com/club', shouldCreateUser:true,
+    emailRedirectTo:redirect||'https://www.liguify.com/club', shouldCreateUser:true,
     data: ctx?{torneo_invitacion:ctx.torneo||null, club_invitacion:ctx.club||null}:undefined}});
   return error;
 }
