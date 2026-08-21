@@ -145,6 +145,7 @@ function render(){
         <p class="text-white/60 text-xs font-bold mt-2">${j.anio?`NACIDO EN ${j.anio}`:''}${j.posicion?` · ${esc(j.posicion).toUpperCase()}`:''}${j.pie?` · PIE ${esc(j.pie).toUpperCase()}`:''}</p>
         ${redes.length?`<div class="flex gap-2 mt-3">${redes.map(r=>`<a href="${esc(r.url)}" target="_blank" rel="noopener" class="bg-white/10 hover:bg-white/20 border border-white/20 rounded-full px-3 py-1.5 text-xs font-bold">${r.ic} ${r.lb}</a>`).join('')}</div>`:''}
       </div>
+      <button onclick="modalCompartir()" title="Compartir el perfil en redes" class="bg-white text-ink-900 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-paper">🔗 COMPARTIR</button>
       ${PUEDO_EDITAR?`<button onclick="modalEditar()" class="bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl">✏️ EDITAR PERFIL</button>${!ES_PADRE?` <button onclick="accesoPadres()" title="Como admin ya puedes editar; este botón lanza el registro de padres (para probarlo o asistir a un padre en persona)" class="bg-white/10 border border-white/20 text-white text-[11px] font-bold px-3 py-2 rounded-xl hover:bg-white/20 ml-1">👨‍👩‍👦 REGISTRO DE PADRES</button>`:``}`
         :`<button onclick="accesoPadres()" class="bg-white/10 border border-white/20 text-white text-[11px] font-bold px-4 py-2 rounded-xl hover:bg-white/20">ACCESO PADRES</button>`}
     </div>
@@ -217,6 +218,40 @@ function render(){
 function normRed(v,dom){v=String(v).trim();if(/^https?:\/\//i.test(v))return v;return 'https://www.'+dom.replace(/\/@$/,'/@')+(dom.endsWith('@')?'':'/')+v.replace(/^@/,dom.endsWith('@')?'':'@').replace(/^@/,'');}
 
 /* ============ LOGIN (padres) ============ */
+/* ============ COMPARTIR EL PERFIL ============ */
+function modalCompartir(){
+  const j=P.jugador||{};
+  const url=location.origin+'/jugador/'+TOKEN;
+  const titulo=`Perfil de ${j.nombres||''} ${j.apellidos||''} en Liguify`;
+  const texto=`⚽ Mira el perfil de jugador de ${j.nombres||''} ${j.apellidos||''}: estadísticas, fotos y videos.`;
+  const puedeNativo=!!navigator.share;
+  const btn=(ic,lb,on,cls)=>`<button onclick="${on}" class="flex items-center gap-3 w-full border border-line rounded-xl px-4 py-3 text-sm font-bold hover:bg-paper ${cls||''}"><span class="text-xl w-7 text-center">${ic}</span>${lb}</button>`;
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">🔗 COMPARTIR PERFIL</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-500 mb-3">Comparte el perfil de <b>${esc(j.nombres||'')} ${esc(j.apellidos||'')}</b> con familia, amigos o en tus redes.</p>
+    <div class="flex gap-2 items-center bg-paper border border-line rounded-xl px-3 py-2 mb-3">
+      <input readonly value="${esc(url)}" onclick="this.select()" class="flex-1 min-w-0 bg-transparent text-xs font-semibold"/>
+      <button onclick="copiarLinkPerfil()" class="bg-ink-900 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg hover:bg-ink-700">COPIAR</button>
+    </div>
+    <div class="space-y-2">
+      ${puedeNativo?btn('📲','Compartir… (Instagram, TikTok, WhatsApp y más)','compartirNativo()','bg-brand-50 border-brand-100'):''}
+      ${btn('📘','Facebook',`window.open('https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}','_blank','noopener,width=600,height=500')`)}
+      ${btn('💬','WhatsApp',`window.open('https://wa.me/?text=${encodeURIComponent(texto+' '+url)}','_blank','noopener')`)}
+      ${btn('📸','Instagram — copiar enlace para tu historia o bio',"copiarLinkPerfil('Instagram')")}
+      ${btn('🎵','TikTok — copiar enlace para tu perfil o video',"copiarLinkPerfil('TikTok')")}
+    </div>
+    <p class="text-[10px] text-ink-400 mt-3">Instagram y TikTok no reciben enlaces desde la web: en el celular usa <b>Compartir…</b> para elegirlos directamente; en computadora copia el enlace y pégalo en tu historia, bio o descripción.</p>`);
+  window.__SHARE={url,titulo,texto};
+}
+async function copiarLinkPerfil(red){
+  const s=window.__SHARE||{url:location.href};
+  try{await navigator.clipboard.writeText(s.url);}catch(e){const i=document.createElement('input');i.value=s.url;document.body.appendChild(i);i.select();document.execCommand('copy');i.remove();}
+  toast(red?`Enlace copiado ✔ — pégalo en ${red}`:'Enlace copiado ✔');
+}
+async function compartirNativo(){
+  const s=window.__SHARE; if(!s||!navigator.share) return;
+  try{await navigator.share({title:s.titulo,text:s.texto,url:s.url});}catch(e){}
+}
+
 function htmlLogin(){return `
   <button onclick="entrarGoogle()" class="w-full bg-white border-2 border-line rounded-xl py-2.5 text-sm font-bold hover:bg-paper mb-3">Entrar con Google</button>
   <div class="flex items-center gap-2 text-[10px] text-ink-400 font-bold mb-3"><span class="flex-1 border-t border-line"></span>O CON TU EMAIL<span class="flex-1 border-t border-line"></span></div>
