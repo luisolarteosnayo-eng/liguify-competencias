@@ -61,8 +61,8 @@ tailwind.config={theme:{extend:{
   <section id="s-torneos" class="screen">
     <div id="marca-card"></div>
     <div class="flex items-center justify-between mb-3 mt-6 flex-wrap gap-2">
-      <h2 class="font-display text-2xl tracking-wide">TORNEOS DE LA MARCA</h2>
-      <div class="flex gap-2">        <button onclick="modalDuplicados()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper" title="Jugadores con el mismo documento en más de un equipo de la marca">🔎 DUPLICADOS</button>
+      <h2 id="h2-torneos" class="font-display text-2xl tracking-wide">TORNEOS DE LA MARCA</h2>
+      <div class="flex gap-2">        <button onclick="modalDuplicados()" id="btn-duplicados" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper" title="Jugadores con el mismo documento en más de un equipo de la marca">🔎 DUPLICADOS</button>
         <button onclick="modalNuevoTorneo()" id="btn-nuevo-torneo" class="hidden bg-brand-500 text-white font-bold px-4 py-2 rounded-xl text-sm hover:bg-brand-600">+ NUEVO TORNEO</button>
       </div>
     </div>
@@ -252,7 +252,11 @@ function actualizarHeaderRoles(email){
   const mios=[...new Set(ROLES.filter(r=>r.marca_id===MARCA.id).map(r=>r.rol))];
   $('hdr-user').textContent=`${email||$('hdr-user').textContent.split(' · ')[0]} · ${mios.join(' + ')||'sin rol en esta marca'}`;
 }
-const esAdmin=()=>ROLES.some(r=>r.rol==='admin_marca'&&r.marca_id===MARCA.id);
+const esAdmin=()=>ES_SUPER||ROLES.some(r=>r.rol==='admin_marca'&&r.marca_id===MARCA.id);
+// liguify.com/mesa: misma app, pero SIEMPRE en la vista de mesa (aunque el
+// usuario también sea admin — útil para el día de cancha y para probarla).
+const MODO_MESA_URL=location.pathname.replace(/\/+$/,'')==='/mesa';
+const esMesa=()=>MODO_MESA_URL||(!esAdmin()&&ROLES.some(r=>r.rol==='mesa_control'&&r.marca_id===MARCA.id));
 function cambiarMarca(id){
   MARCA=MARCAS.find(m=>m.id===id);
   try{localStorage.setItem('liguify-marca-pref',id);}catch(e){}
@@ -279,15 +283,71 @@ async function cargarTorneos(){
     <p class="text-emerald-300 text-xs mt-1">🔗 ${MARCA.slug}.liguify.com</p></div>
     ${esAdmin()?`<button onclick="modalMarca()" class="bg-white/10 border border-white/20 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/20">✏️ EDITAR MARCA</button>
       <button onclick="modalUsuariosMarca()" class="bg-white/10 border border-white/20 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/20">👥 USUARIOS</button>`
-      :'<span class="text-[10px] font-bold bg-amber-500/20 text-amber-300 rounded-full px-3 py-1">MODO MESA: solo resultados</span>'}
+      :'<span class="text-[10px] font-bold bg-amber-500/20 text-amber-300 rounded-full px-3 py-1">🎛 MODO MESA: resultados y verificación</span>'}
   </div>`;
   $('btn-nuevo-torneo').classList.toggle('hidden', !esAdmin());
   const {data:ts,error}=await sb.from('torneo').select('*').eq('marca_id',MARCA.id).order('created_at');
   if(error){msg(errNegocio(error),'err');return;}
   TORNEOS_TODOS=ts||[]; VER_ARCHIVADOS=false;
-  renderListaTorneos();
+  if(esMesa()){
+    await renderMesa();
+  } else {
+    $('h2-torneos').textContent='TORNEOS DE LA MARCA';
+    $('btn-duplicados').classList.remove('hidden');
+    renderListaTorneos();
+  }
   show('s-torneos');
 }
+
+/* ---- 🎛 MODO MESA: solo los partidos de HOY + verificación por torneo.
+   El alcance duro vive en la BD (patch_perfil_mesa.sql): mesa únicamente
+   puede escribir resultado/planilla; esta vista es su pantalla de trabajo. ---- */
+let MESA_PARTIDOS={}, MESA_TORNEOS={};
+async function renderMesa(){
+  $('h2-torneos').textContent='🎛 MESA · PARTIDOS DE HOY';
+  $('btn-duplicados').classList.add('hidden');
+  const hoy=new Date().toLocaleDateString('en-CA');
+  const ts=TORNEOS_TODOS.filter(t=>t.estado==='en_curso'||t.estado==='borrador');
+  MESA_TORNEOS=Object.fromEntries(ts.map(t=>[t.id,t]));
+  const cats=ts.length?(await sb.from('categoria').select('id,nombre_display,anio_nacimiento,modalidad,torneo_id').in('torneo_id',ts.map(t=>t.id))).data||[]:[];
+  const CT=Object.fromEntries(cats.map(c=>[c.id,c]));
+  const pms=cats.length?(await sb.from('partido').select('*').in('categoria_id',cats.map(c=>c.id)).eq('fecha',hoy).order('hora')).data||[]:[];
+  const cls=(await sb.from('club').select('*').eq('marca_id',MARCA.id)).data||[];
+  CLUBES=Object.fromEntries(cls.map(x=>[x.id,x]));
+  const eqIds=[...new Set(pms.flatMap(m=>[m.local_id,m.visita_id]).filter(Boolean))];
+  const eqs=eqIds.length?(await sb.from('equipo').select('*').in('id',eqIds)).data||[]:[];
+  EQUIPOS=Object.fromEntries(eqs.map(x=>[x.id,x]));
+  MESA_PARTIDOS=Object.fromEntries(pms.map(m=>[m.id,m]));
+  const diaTxt=new Date(hoy+'T00:00:00').toLocaleDateString('es-PE',{weekday:'long',day:'numeric',month:'long'});
+  const fin=m=>['finalizado','walkover'].includes(m.estado);
+  const filas=pms.map(m=>{
+    const L=EQUIPOS[m.local_id],V=EQUIPOS[m.visita_id];
+    const c=CT[m.categoria_id]||{}, t=MESA_TORNEOS[c.torneo_id]||{};
+    return `<div class="bg-white border border-line rounded-2xl px-4 py-3 flex items-center gap-3 flex-wrap">
+      <span class="w-12 font-display text-xl text-brand-600 shrink-0">${m.hora?m.hora.slice(0,5):'--:--'}</span>
+      <div class="flex-1 min-w-56 flex items-center gap-2 justify-center">
+        <span class="flex-1 text-right font-bold text-sm">${L?nomEq(L):'Por definir'}</span>${L?badgeEq(L):''}
+        <span class="font-display text-lg px-2 ${fin(m)?'':'text-ink-400'}">${fin(m)?`${m.goles_local??0} : ${m.goles_visita??0}`:'vs'}</span>
+        ${V?badgeEq(V):''}<span class="flex-1 font-bold text-sm">${V?nomEq(V):'Por definir'}</span>
+      </div>
+      <div class="text-right shrink-0">
+        <p class="text-[10px] font-bold text-ink-400 uppercase">${t.nombre||''}</p>
+        <p class="text-[10px] font-bold text-ink-500">${c.nombre_display||('Cat. '+(c.anio_nacimiento||'')+' / '+(c.modalidad||''))}${m.sede?' · '+m.sede:''}${m.cancha?' · '+m.cancha:''}</p>
+      </div>
+      <button onclick="mesaCargar('${m.id}')" class="text-xs font-bold ${fin(m)?'text-ink-500 border border-line hover:bg-paper':'text-white bg-brand-500 hover:bg-brand-600'} rounded-lg px-3 py-2 shrink-0">${fin(m)?'✏️ EDITAR':'CARGAR'}</button>
+    </div>`;}).join('');
+  $('lista-torneos').innerHTML=`
+    <p class="text-xs font-bold text-ink-400 uppercase tracking-widest mb-2">${diaTxt}</p>
+    <div class="space-y-2">${filas||`<div class="bg-white border border-line rounded-2xl p-8 text-center text-ink-400 text-sm font-semibold">No hay partidos programados para hoy.</div>`}</div>
+    <div class="mt-6">
+      <p class="text-xs font-bold text-ink-400 uppercase tracking-widest mb-2">🪪 Verificar documentos por torneo</p>
+      <div class="flex gap-2 flex-wrap">
+        ${ts.map(t=>`<button onclick="mesaVerificar('${t.id}')" class="bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-emerald-800">🪪 ${(t.nombre||'').toUpperCase()}</button>`).join('')||'<p class="text-xs text-ink-400">Sin torneos en curso.</p>'}
+      </div>
+    </div>`;
+}
+function mesaCargar(id){modalResultado(MESA_PARTIDOS[id]);}
+function mesaVerificar(tid){TORNEO=MESA_TORNEOS[tid];modalVerificarPersona();}
 /* Lista de torneos: por defecto solo BORRADOR y EN CURSO; los finalizados y
    archivados quedan plegados tras un botón (siguen siendo editables ahí). */
 let TORNEOS_TODOS=[], VER_ARCHIVADOS=false;
@@ -4011,8 +4071,8 @@ async function modalResultado(m){
         <input id="rs-pv" type="number" min="0" value="${m.penales_visita??0}" class="w-12 border border-line rounded-lg text-center py-1 font-bold"/>
       </span>
     </div>
-    <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">📺 Video del partido (URL de YouTube u otro — visible en el público)</span>
-      <input id="rs-vid" type="url" value="${m.video_url||''}" placeholder="https://youtube.com/..." class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
+    ${esAdmin()?`<label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">📺 Video del partido (URL de YouTube u otro — visible en el público)</span>
+      <input id="rs-vid" type="url" value="${m.video_url||''}" placeholder="https://youtube.com/..." class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>`:''}
     ${RS_INS.length?`<div class="border-t border-line pt-2 mb-3">
       <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-2">Estadísticas por jugador (opcional)</p>
       <div class="grid sm:grid-cols-2 gap-x-6 gap-y-2">
@@ -4044,7 +4104,7 @@ async function guardarResultado(id){
     const pl=await sb.from('planilla_partido').update({jugo:false,goles:0,amarillas:0,rojas:0,minutos:0,asistencias:0}).eq('partido_id',id);
     if(pl.error) toast('Partido reprogramado, pero la planilla no se pudo limpiar: '+errNegocio(pl.error));
     cerrarModal(); toast('Partido devuelto a PROGRAMADO ✔ — resultado y estadísticas borrados, tabla recalculada');
-    await renderFixture(); await renderTabla();
+    if(esMesa()) await renderMesa(); else {await renderFixture(); await renderTabla();}
     return;
   }
   const gl=$('rs-l').value, gv=$('rs-v').value;
@@ -4065,18 +4125,22 @@ async function guardarResultado(id){
     if(!confirm(`⚠ La suma de goles por jugador (${sumL} : ${sumV}) no coincide con el marcador (${gl} : ${gv}).\n\nPuede ser válido (autogol) — ¿guardar de todos modos?`))return;
   }
   const pen=$('rs-pen').checked;
-  let vid=($('rs-vid')&&$('rs-vid').value.trim())||null;
-  if(vid&&!/^https?:\/\//i.test(vid)) vid='https://'+vid;
-  const {error}=await sb.from('partido').update({goles_local:+gl,goles_visita:+gv,estado:$('rs-e').value,
+  const upd={goles_local:+gl,goles_visita:+gv,estado:$('rs-e').value,
     penales:pen, penales_local:pen?+$('rs-pl').value||0:null, penales_visita:pen?+$('rs-pv').value||0:null,
-    figura_inscripcion_id:($('rs-fig')&&$('rs-fig').value)||null, video_url:vid}).eq('id',id);
+    figura_inscripcion_id:($('rs-fig')&&$('rs-fig').value)||null};
+  if($('rs-vid')){                       // el campo de video solo existe para admin
+    let vid=$('rs-vid').value.trim()||null;
+    if(vid&&!/^https?:\/\//i.test(vid)) vid='https://'+vid;
+    upd.video_url=vid;
+  }
+  const {error}=await sb.from('partido').update(upd).eq('id',id);
   if(error){toast(errNegocio(error));return;}
   if(cambios.length){
     const up=await sb.from('planilla_partido').upsert(cambios,{onConflict:'partido_id,inscripcion_id'});
     if(up.error){toast('Resultado guardado, pero las estadísticas fallaron: '+errNegocio(up.error));return;}
   }
   cerrarModal(); toast(`Resultado guardado ✔${cambios.length?` — estadísticas de ${cambios.length} jugador(es) registradas`:''} — tabla recalculada y publicada en vivo ⚡`);
-  await renderFixture(); await renderTabla();
+  if(esMesa()) await renderMesa(); else {await renderFixture(); await renderTabla();}
 }
 
 /* ---- ACREDITACIÓN EN CANCHA (QR real + planilla) ---- */
