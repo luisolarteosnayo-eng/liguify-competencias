@@ -6,6 +6,8 @@
     { "source": "/guia", "destination": "/guia.html" },
     { "source": "/guia-organizador", "destination": "/guia-organizador.html" },
     { "source": "/verificar", "destination": "/verificar.html" },
+    { "source": "/jugador", "destination": "/jugador.html" },
+    { "source": "/jugador/(.*)", "destination": "/jugador.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

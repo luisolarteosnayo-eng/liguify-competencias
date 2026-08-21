@@ -2238,6 +2238,7 @@ async function renderLBF(){
         <span class="text-[10px] font-bold px-2 py-1 rounded-full ${i.inhabilitado?'bg-brand-100 text-brand-600':(i.estado==='activo'||!TORNEO.requiere_autorizacion)?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${i.inhabilitado?'INHABILITADO':i.estado==='activo'?'ACTIVO':(!TORNEO.requiere_autorizacion?'HABILITADO':'PENDIENTE')}</span>
         ${i.estado==='pendiente'&&TORNEO.requiere_autorizacion&&esAdmin()?`<button onclick="activarIns('${i.id}')" class="text-[10px] font-bold text-emerald-700 border border-emerald-300 rounded-lg px-2.5 py-1.5 hover:bg-emerald-50">ACTIVAR</button>`:''}
         ${esAdmin()?`<button onclick='modalEditIns(${JSON.stringify({id:i.id,dorsal:i.dorsal,capitan:i.capitan,estado:i.estado,inhabilitado:i.inhabilitado,nombre:(j.nombres||'')+' '+(j.apellidos||''),nombres:j.nombres||'',apellidos:j.apellidos||'',fnac:j.fecha_nacimiento||'',jugador_id:i.jugador_id,foto_url:j.foto_url||null,dfr:j.doc_scan_frente_url||null,drv:j.doc_scan_reverso_url||null,pie:j.pie_habil||null,pos:j.posicion||null,con:j.consentimiento_imagen?1:0,aut:j.autorizacion_url||null}).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper" title="Editar foto, documento, dorsal, capitán, posición, pie hábil, consentimiento, estado e inhabilitación">✏️</button>
+        <button onclick='modalPerfilJugador("${i.jugador_id}","${((j.nombres||'')+' '+(j.apellidos||'')).replace(/'/g,'')}")' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-amber-50 hover:text-amber-600" title="Perfil público del jugador: habilitar, link para compartir y acceso del padre/madre">⭐</button>
         <button onclick='quitarIns("${i.id}","${((j.nombres||'')+' '+(j.apellidos||'')).replace(/'/g,'')}")' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-brand-50 hover:text-brand-600" title="Quitar de la LBF (bloqueado si tiene participaciones)">✕</button>`:''}
       </span>
     </div>`;}).join(''):'<p class="px-5 py-8 text-sm text-ink-400 text-center">Plantel vacío — agrega el primer jugador.</p>';
@@ -2370,6 +2371,68 @@ function autUI(i){
     <p class="text-[10px] text-ink-400 mb-2">Al subirla, el jugador pasa a <b>ACTIVO</b> en este torneo y su foto sale a <b>color</b> en el público.</p>
   </div>`;
 }
+/* ---- ⭐ PERFIL PÚBLICO DEL JUGADOR: habilitar, link y acceso del padre ---- */
+async function modalPerfilJugador(jugadorId,nombre){
+  const pf=await sb.from('perfil_jugador').select('*').eq('jugador_id',jugadorId).maybeSingle();
+  const p=pf.data;
+  let padresHtml='';
+  if(p){
+    const ps=await sb.rpc('padres_de_jugador',{p_jugador:jugadorId});
+    padresHtml=(ps.data||[]).map(x=>`<div class="flex items-center gap-2 py-1.5 border-b border-line last:border-0 text-sm">
+      <span class="flex-1 font-semibold">${x.email}</span>
+      <button onclick="quitarPadre('${x.usuario_id}','${jugadorId}','${nombre}')" class="text-ink-400 hover:text-brand-600 font-bold px-1" title="Quitar acceso">✕</button>
+    </div>`).join('')||'<p class="text-xs text-ink-400">Sin padres asignados aún.</p>';
+  }
+  const link=p?`${location.origin}/jugador/${p.token}`:null;
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⭐ PERFIL PÚBLICO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-sm font-semibold mb-3">${nombre}</p>
+    ${!p||!p.habilitado?`
+      <p class="text-xs text-ink-500 mb-3">El perfil público muestra sus estadísticas oficiales, historial de partidos y videos. El padre/madre podrá editarlo (fotos, videos, redes) con su email.</p>
+      <button onclick="habilitarPerfil('${jugadorId}','${nombre}')" class="w-full bg-brand-500 text-white text-sm font-bold py-2.5 rounded-xl hover:bg-brand-600">HABILITAR PERFIL</button>`
+    :`
+      <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 mb-3">
+        <p class="text-[10px] font-bold text-emerald-700 uppercase tracking-wider mb-1">🔗 Link del perfil (compartir con la familia)</p>
+        <div class="flex gap-2 items-center">
+          <input readonly value="${link}" class="flex-1 min-w-0 bg-white border border-emerald-200 rounded-lg px-2 py-1.5 text-xs font-semibold" onclick="this.select()"/>
+          <button onclick="navigator.clipboard.writeText('${link}');toast('Link copiado ✔')" class="bg-emerald-700 text-white text-xs font-bold px-3 py-2 rounded-lg hover:bg-emerald-800">COPIAR</button>
+          <a href="${link}" target="_blank" class="text-xs font-bold border border-emerald-300 text-emerald-700 rounded-lg px-3 py-2 hover:bg-emerald-100">VER</a>
+        </div>
+      </div>
+      <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1">👨‍👩‍👦 Acceso del padre/madre (por email)</p>
+      <div id="pj-padres" class="mb-2">${padresHtml}</div>
+      <div class="flex gap-2 items-end mb-4">
+        <input id="pj-email" type="email" placeholder="papa@correo.com" class="flex-1 border-b border-line py-1.5 text-sm font-semibold"/>
+        <button onclick="asignarPadre('${jugadorId}','${nombre}')" class="bg-ink-900 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-ink-700">DAR ACCESO</button>
+      </div>
+      <p class="text-[11px] text-ink-400 mb-3">El padre debe iniciar sesión una vez (Google o email) en <b>liguify.com/jugador</b> y luego lo agregas aquí.</p>
+      <button onclick="deshabilitarPerfil('${jugadorId}','${nombre}')" class="w-full border border-line text-ink-500 text-xs font-bold py-2 rounded-xl hover:bg-brand-50 hover:text-brand-600">DESHABILITAR PERFIL (el link deja de funcionar)</button>`}`);
+}
+async function habilitarPerfil(jugadorId,nombre){
+  const r=await sb.rpc('habilitar_perfil_jugador',{p_jugador:jugadorId});
+  if(r.error){toast(errNegocio(r.error));return;}
+  toast('Perfil habilitado ✔'); modalPerfilJugador(jugadorId,nombre);
+}
+async function deshabilitarPerfil(jugadorId,nombre){
+  if(!confirm('El link público dejará de funcionar (las fotos y videos quedan guardados).\n\n¿Deshabilitar el perfil?'))return;
+  const {error}=await sb.from('perfil_jugador').update({habilitado:false}).eq('jugador_id',jugadorId);
+  if(error){toast(errNegocio(error));return;}
+  toast('Perfil deshabilitado'); modalPerfilJugador(jugadorId,nombre);
+}
+async function asignarPadre(jugadorId,nombre){
+  const e=$('pj-email').value.trim();
+  if(!e){toast('⚠ Escribe el email');return;}
+  const r=await sb.rpc('asignar_padre_jugador',{p_email:e,p_jugador:jugadorId});
+  if(r.error){toast(errNegocio(r.error));return;}
+  if(r.data==='NO_EXISTE'){toast('⚠ Ese email aún no tiene cuenta: pídele iniciar sesión una vez (Google o email) en liguify.com/jugador y vuelve a intentar');return;}
+  toast('Acceso asignado ✔'); modalPerfilJugador(jugadorId,nombre);
+}
+async function quitarPadre(uid,jugadorId,nombre){
+  if(!confirm('¿Quitar el acceso de este padre/madre al perfil?'))return;
+  const r=await sb.rpc('quitar_padre_jugador',{p_usuario:uid,p_jugador:jugadorId});
+  if(r.error){toast(errNegocio(r.error));return;}
+  toast('Acceso quitado'); modalPerfilJugador(jugadorId,nombre);
+}
+
 function modalEditIns(i){
   window.__EI_ORIG={nombres:i.nombres||'',apellidos:i.apellidos||'',fnac:i.fnac||''};
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">✏️ EDITAR JUGADOR</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>

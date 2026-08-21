@@ -1,0 +1,310 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Liguify — Perfil de Jugador</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script>
+tailwind.config={theme:{extend:{
+  colors:{brand:{50:'#fef2f2',100:'#fde3e3',500:'#d9232e',600:'#c11d27'},ink:{900:'#171e2e',700:'#2b3550',500:'#5b6478',400:'#8b93a7'},paper:'#faf9f7',line:'#e9e6e0'},
+  fontFamily:{display:['"Bebas Neue"','sans-serif'],sans:['Inter','system-ui','sans-serif']}
+}}}
+</script>
+<style>
+  body{background:#faf9f7}
+  input,textarea{outline:none}
+  @media (max-width:640px){input,textarea{font-size:16px}}
+</style>
+<body class="text-ink-900 font-sans min-h-screen">
+
+<header class="bg-ink-900 text-white sticky top-0 z-40">
+  <div class="max-w-3xl mx-auto px-4 h-14 flex items-center gap-3">
+    <a href="/" class="w-8 h-8 bg-brand-500 rounded-lg grid place-items-center font-display text-lg">L</a>
+    <span class="font-display text-xl tracking-wide">LIGUIFY <span class="text-white/50">PERFIL DE JUGADOR</span></span>
+    <span class="flex-1"></span>
+    <span id="hdr-user" class="text-xs text-white/60 hidden sm:inline"></span>
+    <button id="hdr-out" onclick="salir()" class="hidden text-xs font-bold border border-white/30 rounded-full px-4 py-1.5 hover:bg-white/10">SALIR</button>
+  </div>
+</header>
+
+<main class="max-w-3xl mx-auto px-4 py-6" id="app">
+  <p class="text-center text-ink-400 text-sm py-20 font-semibold">Cargando…</p>
+</main>
+
+<div id="modal" class="fixed inset-0 bg-black/50 z-50 hidden items-start justify-center overflow-y-auto p-4">
+  <div id="modal-box" class="bg-white rounded-3xl p-6 w-full max-w-lg my-8"></div>
+</div>
+<div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 bg-ink-900 text-white text-sm font-semibold px-5 py-3 rounded-xl shadow-xl z-[60] hidden max-w-lg text-center"></div>
+
+<script>
+const sb = supabase.createClient(
+  'https://bpsczjjomgzhnjxnzmhj.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwc2N6ampvbWd6aG5qeG56bWhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1MDg5MTgsImV4cCI6MjA5ODA4NDkxOH0.3O92Q-3xxdCmF1LStCQrlCtz1s_EfdlayXnL_mEElOw',
+  { db:{schema:'competencias'}, auth:{storageKey:'sb-competencias-jugador'} }
+);
+const $=id=>document.getElementById(id);
+let TOKEN=null, P=null, JUGADOR_ID=null, PUEDO_EDITAR=false, SESION=null;
+
+function toast(t){const e=$('toast');e.textContent=t;e.classList.remove('hidden');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.add('hidden'),4200);}
+function abrirModal(html){$('modal-box').innerHTML=html;$('modal').classList.remove('hidden');$('modal').classList.add('flex');}
+function cerrarModal(){$('modal').classList.add('hidden');$('modal').classList.remove('flex');}
+const esc=t=>String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+const iniciales=n=>(n||'?').split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
+
+/* YouTube: miniatura + link */
+function ytId(u){const m=String(u||'').match(/(?:youtu\.be\/|v=|shorts\/|embed\/)([A-Za-z0-9_-]{6,})/);return m?m[1]:null;}
+function tarjetaVideo(url,titulo){
+  const id=ytId(url);
+  return `<a href="${esc(url)}" target="_blank" rel="noopener" class="block rounded-2xl overflow-hidden border border-line bg-white hover:shadow-md transition-shadow">
+    <div class="relative aspect-video bg-ink-900 grid place-items-center">
+      ${id?`<img src="https://i.ytimg.com/vi/${id}/hqdefault.jpg" class="absolute inset-0 w-full h-full object-cover"/>`:''}
+      <span class="relative z-10 w-12 h-12 bg-brand-500 rounded-full grid place-items-center shadow-lg"><span style="width:0;height:0;border-top:8px solid transparent;border-bottom:8px solid transparent;border-left:14px solid #fff;margin-left:3px"></span></span>
+    </div>
+    ${titulo?`<p class="px-3 py-2 text-xs font-bold truncate">${esc(titulo)}</p>`:''}
+  </a>`;
+}
+
+/* ============ ARRANQUE ============ */
+async function iniciar(){
+  TOKEN=(location.pathname.match(/\/jugador\/([a-z0-9]+)/i)||[])[1]||new URLSearchParams(location.search).get('p');
+  const {data:{session}}=await sb.auth.getSession();
+  SESION=session;
+  if(session){$('hdr-user').textContent=session.user.email;$('hdr-out').classList.remove('hidden');}
+  if(!TOKEN){ return vistaMisPerfiles(); }
+  const {data,error}=await sb.rpc('perfil_publico',{p_token:TOKEN});
+  if(error||!data){$('app').innerHTML=`<div class="bg-white border border-line rounded-3xl p-10 text-center">
+    <p class="font-display text-3xl tracking-wide mb-2">PERFIL NO DISPONIBLE</p>
+    <p class="text-sm text-ink-400">El enlace no es válido o el perfil fue deshabilitado.</p></div>`;return;}
+  P=data;
+  await detectarEdicion();
+  render();
+}
+
+/* Sin token: si es un padre logueado, sus hijos; si no, invitación a entrar */
+async function vistaMisPerfiles(){
+  if(!SESION){
+    $('app').innerHTML=`<div class="bg-white border border-line rounded-3xl p-8 text-center max-w-md mx-auto">
+      <p class="font-display text-3xl tracking-wide mb-2">PERFIL DE JUGADOR</p>
+      <p class="text-sm text-ink-500 mb-5">Si el organizador te dio acceso como padre/madre, entra con tu email para ver y administrar el perfil de tu hijo.</p>
+      ${htmlLogin()}</div>`;
+    return;
+  }
+  const {data,error}=await sb.rpc('mis_perfiles');
+  if(error){$('app').innerHTML=`<p class="text-center text-brand-600 font-bold text-sm py-16">${esc(error.message)}</p>`;return;}
+  if(!data||!data.length){
+    $('app').innerHTML=`<div class="bg-white border border-line rounded-3xl p-10 text-center">
+      <p class="font-display text-3xl tracking-wide mb-2">SIN PERFILES ASIGNADOS</p>
+      <p class="text-sm text-ink-400">Tu cuenta (${esc(SESION.user.email)}) aún no tiene jugadores asignados.<br/>Pide al organizador que registre tu email en el perfil de tu hijo.</p></div>`;
+    return;
+  }
+  if(data.length===1){ location.href='/jugador/'+data[0].token; return; }
+  $('app').innerHTML=`<h2 class="font-display text-3xl tracking-wide mb-4">MIS JUGADORES</h2>
+    <div class="space-y-2">${data.map(j=>`
+      <a href="/jugador/${j.token}" class="flex items-center gap-3 bg-white border border-line rounded-2xl px-4 py-3 hover:shadow-md transition-shadow">
+        <span class="w-12 h-12 rounded-xl bg-ink-900 text-white grid place-items-center font-display overflow-hidden relative">${j.foto_url?`<img src="${j.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(j.nombres+' '+j.apellidos)}</span>
+        <span class="font-bold">${esc(j.nombres)} ${esc(j.apellidos)}</span>
+        <span class="flex-1"></span><span class="text-brand-600 font-bold text-sm">VER PERFIL →</span></a>`).join('')}</div>`;
+}
+
+async function detectarEdicion(){
+  PUEDO_EDITAR=false; JUGADOR_ID=null;
+  if(!SESION) return;
+  const {data}=await sb.rpc('mis_perfiles');
+  const mio=(data||[]).find(x=>x.token===TOKEN);
+  if(mio){PUEDO_EDITAR=true;JUGADOR_ID=mio.jugador_id;return;}
+  // admin de la marca: puede editar cualquier perfil habilitado que gestione
+  const pj=await sb.from('perfil_jugador').select('jugador_id').eq('token',TOKEN).maybeSingle();
+  if(pj.data){PUEDO_EDITAR=true;JUGADOR_ID=pj.data.jugador_id;}
+}
+
+/* ============ RENDER ============ */
+function render(){
+  const j=P.jugador||{}, pf=P.perfil||{}, media=P.media||[], ts=P.torneos||[], pms=P.partidos||[];
+  const fotos=media.filter(m=>m.tipo==='foto'), videos=media.filter(m=>m.tipo==='video');
+  const tot=(k)=>ts.reduce((s,t)=>s+(+t[k]||0),0);
+  const redes=[
+    pf.instagram?{ic:'📸',lb:'Instagram',url:normRed(pf.instagram,'instagram.com')}:null,
+    pf.facebook?{ic:'📘',lb:'Facebook',url:normRed(pf.facebook,'facebook.com')}:null,
+    pf.tiktok?{ic:'🎵',lb:'TikTok',url:normRed(pf.tiktok,'tiktok.com/@')}:null
+  ].filter(Boolean);
+  const videosPartido=pms.filter(m=>m.video);
+  const statTot=(v,l,cls)=>`<div class="bg-white border border-line rounded-2xl px-3 py-3 text-center">
+    <p class="font-display text-3xl ${cls||''}">${v}</p><p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider">${l}</p></div>`;
+
+  $('app').innerHTML=`
+  <!-- HERO -->
+  <div class="bg-ink-900 text-white rounded-3xl p-6 mb-4 relative overflow-hidden">
+    <div class="flex items-center gap-5 flex-wrap relative z-10">
+      <span class="w-28 h-28 rounded-2xl bg-white/10 grid place-items-center font-display text-4xl overflow-hidden relative shrink-0 border-2 border-white/20">
+        ${j.foto_url?`<img src="${j.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales((j.nombres||'')+' '+(j.apellidos||''))}</span>
+      <div class="flex-1 min-w-48">
+        <p class="text-[10px] uppercase tracking-widest text-white/40 font-bold">Perfil de jugador</p>
+        <h1 class="font-display text-5xl tracking-wide leading-none">${esc(j.nombres)}<br/>${esc(j.apellidos)}</h1>
+        <p class="text-white/60 text-xs font-bold mt-2">${j.anio?`NACIDO EN ${j.anio}`:''}${j.posicion?` · ${esc(j.posicion).toUpperCase()}`:''}${j.pie?` · PIE ${esc(j.pie).toUpperCase()}`:''}</p>
+        ${redes.length?`<div class="flex gap-2 mt-3">${redes.map(r=>`<a href="${esc(r.url)}" target="_blank" rel="noopener" class="bg-white/10 hover:bg-white/20 border border-white/20 rounded-full px-3 py-1.5 text-xs font-bold">${r.ic} ${r.lb}</a>`).join('')}</div>`:''}
+      </div>
+      ${PUEDO_EDITAR?`<button onclick="modalEditar()" class="bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl">✏️ EDITAR PERFIL</button>`
+        :SESION?'':`<button onclick="modalLogin()" class="bg-white/10 border border-white/20 text-white text-[11px] font-bold px-4 py-2 rounded-xl hover:bg-white/20">ACCESO PADRES</button>`}
+    </div>
+    ${pf.bio?`<p class="relative z-10 text-sm text-white/80 mt-4 border-t border-white/10 pt-3">${esc(pf.bio)}</p>`:''}
+  </div>
+
+  <!-- TOTALES OFICIALES -->
+  <div class="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-5">
+    ${statTot(tot('pj'),'Partidos')}
+    ${statTot(tot('goles'),'Goles','text-brand-600')}
+    ${statTot(tot('asistencias'),'Asistencias')}
+    ${statTot(tot('minutos'),'Minutos')}
+    ${statTot(tot('amarillas'),'🟨','text-yellow-500')}
+    ${statTot(tot('rojas'),'🟥','text-brand-600')}
+  </div>
+
+  ${fotos.length?`<h2 class="font-display text-2xl tracking-wide mb-2">📸 GALERÍA</h2>
+  <div class="grid grid-cols-3 gap-2 mb-5">${fotos.map(f=>`
+    <a href="${esc(f.url)}" target="_blank" class="block aspect-square rounded-2xl overflow-hidden border border-line bg-white"><img src="${esc(f.url)}" class="w-full h-full object-cover"/></a>`).join('')}</div>`:''}
+
+  ${videos.length?`<h2 class="font-display text-2xl tracking-wide mb-2">🎬 MIS VIDEOS</h2>
+  <div class="grid sm:grid-cols-2 gap-3 mb-5">${videos.map(v=>tarjetaVideo(v.url,v.titulo)).join('')}</div>`:''}
+
+  <h2 class="font-display text-2xl tracking-wide mb-2">🏆 TORNEOS</h2>
+  <div class="space-y-2 mb-5">${ts.map(t=>`
+    <div class="bg-white border border-line rounded-2xl px-4 py-3">
+      <div class="flex items-center gap-3 flex-wrap">
+        <span class="w-10 h-10 rounded-lg grid place-items-center text-white text-xs font-bold overflow-hidden relative shrink-0" style="background:${t.escudo?'#fff':(t.color||'#334155')}">${t.escudo?`<img src="${t.escudo}" class="absolute inset-0 w-full h-full object-contain"/>`:iniciales(t.club)}</span>
+        <div class="flex-1 min-w-40">
+          <p class="font-bold text-sm">${esc(t.torneo)}</p>
+          <p class="text-[11px] text-ink-400 font-semibold">${esc(t.club)} · ${esc(t.categoria)} · ${esc(t.marca)}</p>
+        </div>
+        <div class="flex gap-3 text-center text-xs font-bold">
+          <span title="Partidos jugados">${t.pj} <span class="text-ink-400 font-semibold">PJ</span></span>
+          <span title="Goles" class="text-brand-600">${t.goles} ⚽</span>
+          ${+t.asistencias?`<span title="Asistencias">${t.asistencias} 🅰</span>`:''}
+          ${+t.amarillas?`<span>${t.amarillas} 🟨</span>`:''}
+          ${+t.rojas?`<span>${t.rojas} 🟥</span>`:''}
+        </div>
+      </div>
+    </div>`).join('')||'<p class="text-sm text-ink-400">Aún sin torneos registrados.</p>'}</div>
+
+  ${videosPartido.length?`<h2 class="font-display text-2xl tracking-wide mb-2">📺 VIDEOS DE SUS PARTIDOS</h2>
+  <div class="grid sm:grid-cols-2 gap-3 mb-5">${videosPartido.slice(0,6).map(m=>tarjetaVideo(m.video,`${m.mi_club} ${m.local?m.gl+' : '+m.gv:m.gv+' : '+m.gl} ${m.rival} · ${m.torneo}`)).join('')}</div>`:''}
+
+  <h2 class="font-display text-2xl tracking-wide mb-2">📅 HISTORIAL DE PARTIDOS</h2>
+  <div class="bg-white border border-line rounded-2xl overflow-hidden mb-8">${pms.slice(0,60).map(m=>{
+    const marc=m.local?`${m.gl??0} : ${m.gv??0}`:`${m.gv??0} : ${m.gl??0}`;
+    const gano=m.local?(m.gl>m.gv):(m.gv>m.gl), emp=m.gl===m.gv;
+    return `<div class="flex items-center gap-2 px-4 py-2.5 border-b border-line last:border-0 text-sm flex-wrap">
+      <span class="text-[10px] text-ink-400 font-bold w-16 shrink-0">${m.fecha?m.fecha.split('-').reverse().slice(0,2).join('/')+'/'+m.fecha.slice(2,4):''}</span>
+      <span class="w-9 text-center font-display text-base rounded-lg px-1 ${emp?'bg-paper text-ink-500':gano?'bg-emerald-100 text-emerald-700':'bg-brand-50 text-brand-600'}">${marc}</span>
+      <span class="flex-1 min-w-32 font-bold text-xs truncate">vs ${esc(m.rival)}</span>
+      <span class="text-[10px] text-ink-400 font-semibold hidden sm:inline truncate max-w-32">${esc(m.torneo)}</span>
+      <span class="flex gap-1.5 text-[11px] font-bold shrink-0">
+        ${m.goles?`<span class="text-brand-600">⚽${m.goles>1?'×'+m.goles:''}</span>`:''}
+        ${m.amarillas?'<span>🟨</span>':''}${m.rojas?'<span>🟥</span>':''}
+        ${m.jugo&&!m.goles&&!m.amarillas&&!m.rojas?'<span class="text-emerald-600" title="Jugó">✓</span>':''}
+      </span>
+      ${m.video?`<a href="${esc(m.video)}" target="_blank" rel="noopener" class="bg-brand-500 text-white text-[10px] font-bold rounded-full px-2.5 py-1 hover:bg-brand-600 shrink-0">▶ VIDEO</a>`:''}
+    </div>`;}).join('')||'<p class="text-sm text-ink-400 p-5">Aún sin partidos finalizados.</p>'}</div>
+
+  <p class="text-center text-[10px] text-ink-400 font-bold tracking-widest pb-8">⚡ POWERED BY LIGUIFY · liguify.com</p>`;
+}
+function normRed(v,dom){v=String(v).trim();if(/^https?:\/\//i.test(v))return v;return 'https://www.'+dom.replace(/\/@$/,'/@')+(dom.endsWith('@')?'':'/')+v.replace(/^@/,dom.endsWith('@')?'':'@').replace(/^@/,'');}
+
+/* ============ LOGIN (padres) ============ */
+function htmlLogin(){return `
+  <button onclick="entrarGoogle()" class="w-full bg-white border-2 border-line rounded-xl py-2.5 text-sm font-bold hover:bg-paper mb-3">Entrar con Google</button>
+  <div class="flex items-center gap-2 text-[10px] text-ink-400 font-bold mb-3"><span class="flex-1 border-t border-line"></span>O CON TU EMAIL<span class="flex-1 border-t border-line"></span></div>
+  <input id="lg-e" type="email" placeholder="tu@correo.com" class="w-full border-b border-line py-2 text-sm font-semibold mb-2 bg-transparent"/>
+  <input id="lg-p" type="password" placeholder="Contraseña" class="w-full border-b border-line py-2 text-sm font-semibold mb-3 bg-transparent"/>
+  <div class="flex gap-2">
+    <button onclick="entrar()" class="flex-1 bg-ink-900 text-white rounded-xl py-2.5 text-sm font-bold hover:bg-ink-700">ENTRAR</button>
+    <button onclick="crearCuenta()" class="flex-1 bg-white border border-line rounded-xl py-2.5 text-sm font-bold hover:bg-paper">CREAR CUENTA</button>
+  </div>
+  <p id="lg-msg" class="text-xs text-brand-600 font-bold mt-2"></p>`;}
+function modalLogin(){abrirModal(`<div class="flex items-center justify-between mb-3"><h3 class="font-display text-2xl tracking-wide">ACCESO PADRES</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+  <p class="text-xs text-ink-500 mb-4">Entra con el email que registró el organizador. Podrás editar el perfil, subir fotos y agregar videos.</p>${htmlLogin()}`);}
+async function entrar(){const {error}=await sb.auth.signInWithPassword({email:$('lg-e').value.trim(),password:$('lg-p').value});
+  if(error){$('lg-msg').textContent='No se pudo entrar: '+error.message;return;} location.reload();}
+async function crearCuenta(){const email=$('lg-e').value.trim(),pass=$('lg-p').value;
+  if(!email||pass.length<6){$('lg-msg').textContent='Escribe tu email y una contraseña de al menos 6 caracteres.';return;}
+  const {error}=await sb.auth.signUp({email,password:pass});
+  if(error){$('lg-msg').textContent='No se pudo crear la cuenta: '+error.message;return;} location.reload();}
+async function entrarGoogle(){const {error}=await sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+location.pathname}});
+  if(error)$('lg-msg').textContent='Google: '+error.message;}
+async function salir(){await sb.auth.signOut({scope:'local'});location.reload();}
+
+/* ============ EDICIÓN (padre o admin) ============ */
+function modalEditar(){
+  const pf=P.perfil||{}, media=P.media||[], fotos=media.filter(m=>m.tipo==='foto'), videos=media.filter(m=>m.tipo==='video');
+  abrirModal(`<div class="flex items-center justify-between mb-3"><h3 class="font-display text-2xl tracking-wide">✏️ EDITAR PERFIL</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+  <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Presentación (bio corta)</span>
+    <textarea id="ed-bio" rows="2" maxlength="280" class="w-full border border-line rounded-xl p-2.5 text-sm font-semibold">${esc(pf.bio||'')}</textarea></label>
+  <div class="grid grid-cols-3 gap-2 mb-4">
+    <label class="text-sm"><span class="text-ink-400 font-semibold text-[10px]">📸 Instagram</span><input id="ed-ig" value="${esc(pf.instagram||'')}" placeholder="@usuario" class="w-full border-b border-line py-1.5 text-xs font-semibold bg-transparent"/></label>
+    <label class="text-sm"><span class="text-ink-400 font-semibold text-[10px]">📘 Facebook</span><input id="ed-fb" value="${esc(pf.facebook||'')}" placeholder="usuario o link" class="w-full border-b border-line py-1.5 text-xs font-semibold bg-transparent"/></label>
+    <label class="text-sm"><span class="text-ink-400 font-semibold text-[10px]">🎵 TikTok</span><input id="ed-tk" value="${esc(pf.tiktok||'')}" placeholder="@usuario" class="w-full border-b border-line py-1.5 text-xs font-semibold bg-transparent"/></label>
+  </div>
+  <button onclick="guardarPerfil()" class="w-full bg-brand-500 text-white text-sm font-bold py-2.5 rounded-xl hover:bg-brand-600 mb-5">GUARDAR DATOS</button>
+
+  <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-2">📸 Fotos (${fotos.length}/3)</p>
+  <div class="flex gap-2 mb-2">${fotos.map(f=>`
+    <span class="relative w-20 h-20 rounded-xl overflow-hidden border border-line"><img src="${esc(f.url)}" class="w-full h-full object-cover"/>
+      <button onclick="quitarMedia('${f.id}')" class="absolute top-0.5 right-0.5 bg-black/60 text-white w-5 h-5 rounded-full text-[10px] font-bold">✕</button></span>`).join('')}</div>
+  ${fotos.length<3?`<input id="ed-foto" type="file" accept="image/*" class="text-xs mb-1"/>
+  <button onclick="subirFoto()" class="w-full bg-ink-900 text-white text-xs font-bold py-2 rounded-xl hover:bg-ink-700 mb-4">SUBIR FOTO</button>`:'<p class="text-[10px] text-ink-400 mb-4">Límite alcanzado: elimina una para subir otra.</p>'}
+
+  <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-2">🎬 Videos (${videos.length}/8)</p>
+  ${videos.map(v=>`<div class="flex items-center gap-2 text-xs font-semibold py-1 border-b border-line">
+    <span class="flex-1 truncate">${esc(v.titulo||v.url)}</span>
+    <button onclick="quitarMedia('${v.id}')" class="text-ink-400 hover:text-brand-600 font-bold">✕</button></div>`).join('')}
+  ${videos.length<8?`<input id="ed-vurl" placeholder="Link del video (YouTube, TikTok…)" class="w-full border-b border-line py-1.5 text-xs font-semibold bg-transparent mt-2"/>
+  <input id="ed-vtit" placeholder="Título (ej. Golazo vs River)" class="w-full border-b border-line py-1.5 text-xs font-semibold bg-transparent mb-2"/>
+  <button onclick="agregarVideo()" class="w-full bg-ink-900 text-white text-xs font-bold py-2 rounded-xl hover:bg-ink-700">AGREGAR VIDEO</button>`:''}
+  <p class="text-[10px] text-ink-400 mt-3">Las estadísticas y el historial de partidos son oficiales del torneo y se actualizan solos.</p>`);
+}
+async function guardarPerfil(){
+  const {error}=await sb.from('perfil_jugador').update({
+    bio:$('ed-bio').value.trim()||null, instagram:$('ed-ig').value.trim()||null,
+    facebook:$('ed-fb').value.trim()||null, tiktok:$('ed-tk').value.trim()||null,
+    updated_at:new Date().toISOString()}).eq('jugador_id',JUGADOR_ID);
+  if(error){toast('⚠ '+error.message);return;}
+  toast('Perfil guardado ✔'); cerrarModal(); recargar();
+}
+async function redimensionar(file,max,calidad){
+  return new Promise(res=>{const img=new Image();img.onload=()=>{const s=Math.min(1,max/Math.max(img.width,img.height));
+    const c=document.createElement('canvas');c.width=Math.round(img.width*s);c.height=Math.round(img.height*s);
+    c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+    c.toBlob(b=>res(new File([b],file.name.replace(/\.\w+$/,'')+'.jpg',{type:'image/jpeg'})),'image/jpeg',calidad);};
+    img.src=URL.createObjectURL(file);});
+}
+async function subirFoto(){
+  let f=$('ed-foto').files[0]; if(!f){toast('Elige una imagen');return;}
+  f=await redimensionar(f,1200,0.85);
+  const ruta=`perfil/${JUGADOR_ID}-${Date.now()}.jpg`;
+  const up=await sb.storage.from('publico').upload(ruta,f,{contentType:'image/jpeg'});
+  if(up.error){toast('⚠ '+up.error.message);return;}
+  const url=sb.storage.from('publico').getPublicUrl(ruta).data.publicUrl;
+  const ins=await sb.from('perfil_media').insert({jugador_id:JUGADOR_ID,tipo:'foto',url});
+  if(ins.error){toast('⚠ '+ins.error.message);return;}
+  toast('Foto agregada ✔'); recargar(true);
+}
+async function agregarVideo(){
+  let u=$('ed-vurl').value.trim(); if(!u){toast('Pega el link del video');return;}
+  if(!/^https?:\/\//i.test(u)) u='https://'+u;
+  const {error}=await sb.from('perfil_media').insert({jugador_id:JUGADOR_ID,tipo:'video',url:u,titulo:$('ed-vtit').value.trim()||null});
+  if(error){toast('⚠ '+error.message);return;}
+  toast('Video agregado ✔'); recargar(true);
+}
+async function quitarMedia(id){
+  if(!confirm('¿Eliminar este elemento del perfil?'))return;
+  const {error}=await sb.from('perfil_media').delete().eq('id',id);
+  if(error){toast('⚠ '+error.message);return;}
+  recargar(true);
+}
+async function recargar(reabrirEditor){
+  const {data}=await sb.rpc('perfil_publico',{p_token:TOKEN});
+  if(data){P=data;render();if(reabrirEditor)modalEditar();}
+}
+
+iniciar();
+</script>
+</body>
