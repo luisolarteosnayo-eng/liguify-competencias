@@ -2497,6 +2497,12 @@ async function cargarEquiposDeJugador(jugadorId,insActualId){
   ]);
   const E=Object.fromEntries((eqs.data||[]).map(x=>[x.id,x])), C=Object.fromEntries((cats.data||[]).map(x=>[x.id,x]));
   const CL=Object.fromEntries((cls.data||[]).map(x=>[x.id,x])), T=Object.fromEntries((tns.data||[]).map(x=>[x.id,x]));
+  // trazabilidad: quién creó la ficha y cada inscripción (RPC solo staff)
+  let REG={}, fichaReg=null;
+  try{const qr=await sb.rpc('quien_registro',{p_jugador:jugadorId});
+    (qr.data||[]).forEach(r=>{ if(r.tipo==='ficha') fichaReg=r; else REG[r.ref_id]=r; });
+  }catch(e){}
+  const fmtReg=r=>r?`${(r.fecha||'').slice(0,10)}${r.email?' · por '+r.email:' · (antes de la trazabilidad)'}`:'';
   // duplicidad = más de una inscripción en la MISMA categoría
   const porCat={}; ins.forEach(x=>{porCat[x.categoria_id]=(porCat[x.categoria_id]||0)+1;});
   const el=$('ei-equipos'); if(!el) return;
@@ -2506,10 +2512,12 @@ async function cargarEquiposDeJugador(jugadorId,insActualId){
     return `<div class="flex items-center gap-2 py-1.5 border-b border-line last:border-0 text-ink-900 ${x.id===insActualId?'font-bold':''}">
       <span class="flex-1 min-w-0"><span class="text-[11px]">${(e.nombre||(CL[e.club_id]||{}).nombre||'—')}${x.id===insActualId?' (este equipo)':''}</span>
         <span class="block text-[10px] text-ink-400 font-normal">${t.nombre||''} · ${c.nombre_display||('Cat. '+(c.anio_nacimiento||'')+' / '+(c.modalidad||''))}</span></span>
+      ${REG[x.id]?`<span class="text-[9px] text-ink-400 shrink-0" title="Quién inscribió">📝 ${fmtReg(REG[x.id])}</span>`:''}
       ${dup?'<span class="text-[9px] font-bold bg-brand-100 text-brand-600 rounded-full px-2 py-0.5" title="Más de una inscripción en la misma categoría">🚨 DUPLICADO</span>':''}
       ${e.estado==='inactivo'?'<span class="text-[9px] font-bold bg-paper text-ink-400 rounded-full px-2 py-0.5">EQUIPO RETIRADO</span>':''}
       <span class="text-[9px] font-bold rounded-full px-2 py-0.5 ${x.inhabilitado?'bg-brand-100 text-brand-600':x.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${x.inhabilitado?'INHAB.':x.estado.toUpperCase()}</span>
-    </div>`;}).join('');
+    </div>`;}).join('')
+    +(fichaReg?`<p class="pt-1.5 text-[10px] text-ink-400">🪪 Ficha maestra creada: ${fmtReg(fichaReg)}</p>`:'');
 }
 async function guardarEditIns(insId,jugadorId){
   // identidad: solo si cambió (nombres/apellidos/fecha — errores de tipeo)
