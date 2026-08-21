@@ -146,7 +146,7 @@ function render(){
         ${redes.length?`<div class="flex gap-2 mt-3">${redes.map(r=>`<a href="${esc(r.url)}" target="_blank" rel="noopener" class="bg-white/10 hover:bg-white/20 border border-white/20 rounded-full px-3 py-1.5 text-xs font-bold">${r.ic} ${r.lb}</a>`).join('')}</div>`:''}
       </div>
       ${PUEDO_EDITAR?`<button onclick="modalEditar()" class="bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl">✏️ EDITAR PERFIL</button>`
-        :SESION?'':`<button onclick="modalLogin()" class="bg-white/10 border border-white/20 text-white text-[11px] font-bold px-4 py-2 rounded-xl hover:bg-white/20">ACCESO PADRES</button>`}
+        :`<button onclick="accesoPadres()" class="bg-white/10 border border-white/20 text-white text-[11px] font-bold px-4 py-2 rounded-xl hover:bg-white/20">ACCESO PADRES</button>`}
     </div>
     ${pf.bio?`<p class="relative z-10 text-sm text-white/80 mt-4 border-t border-white/10 pt-3">${esc(pf.bio)}</p>`:''}
   </div>
@@ -238,6 +238,106 @@ async function crearCuenta(){const email=$('lg-e').value.trim(),pass=$('lg-p').v
 async function entrarGoogle(){const {error}=await sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+location.pathname}});
   if(error)$('lg-msg').textContent='Google: '+error.message;}
 async function salir(){await sb.auth.signOut({scope:'local'});location.reload();}
+
+/* ============ REGISTRO DE PADRES (autoservicio · piloto) ============ */
+let W={doc:'',fnac:''};   // datos validados del paso 1, se reenvían al final
+function accesoPadres(){
+  if(!SESION){ modalLogin(); return; }
+  pasoValidarJugador();
+}
+function pasoValidarJugador(){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">👨‍👩‍👦 ACCESO PADRES <span class="text-ink-400 text-sm font-sans font-bold">· paso 1 de 3</span></h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-500 mb-4">Para registrarte como padre/madre de <b>${esc((P.jugador||{}).nombres||'')} ${esc((P.jugador||{}).apellidos||'')}</b>, primero valida sus datos. Deben coincidir exactamente con los registrados por su club.</p>
+    <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">N° de documento del jugador (DNI)</span>
+      <input id="vp-doc" value="${esc(W.doc)}" inputmode="numeric" autocomplete="off" class="w-full border-b border-line py-2 font-semibold bg-transparent"/></label>
+    <label class="block text-sm mb-4"><span class="text-ink-400 font-semibold text-xs">Fecha de nacimiento del jugador</span>
+      <input id="vp-fnac" type="date" value="${esc(W.fnac)}" class="w-full border-b border-line py-2 font-semibold bg-transparent"/></label>
+    <button onclick="validarJugadorPadre()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">VALIDAR</button>
+    <p id="vp-msg" class="text-xs text-brand-600 font-bold mt-2"></p>`);
+}
+async function validarJugadorPadre(){
+  const doc=$('vp-doc').value.trim(), fnac=$('vp-fnac').value;
+  if(!doc||!fnac){$('vp-msg').textContent='Completa el documento y la fecha de nacimiento.';return;}
+  const r=await sb.rpc('validar_jugador_padre',{p_token:TOKEN,p_doc:doc,p_fnac:fnac});
+  if(r.error){$('vp-msg').textContent=r.error.message;return;}
+  if(!r.data||!r.data.ok){$('vp-msg').textContent=r.data?r.data.msg:'No se pudo validar.';return;}
+  W={doc,fnac};
+  pasoTerminos();
+}
+function pasoTerminos(){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">📄 TÉRMINOS Y CONDICIONES <span class="text-ink-400 text-sm font-sans font-bold">· paso 2 de 3</span></h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <div class="bg-paper border border-line rounded-xl p-4 text-xs text-ink-700 leading-relaxed max-h-64 overflow-y-auto mb-3">
+      <p class="font-bold mb-2">Perfil público de jugador — condiciones de uso (padres/tutores)</p>
+      <p class="mb-2"><b>1. Declaración.</b> Declaro ser padre, madre o tutor legal del jugador menor de edad y contar con la facultad para administrar su perfil.</p>
+      <p class="mb-2"><b>2. Contenido del perfil.</b> El perfil muestra información deportiva oficial (estadísticas y resultados de los torneos) junto con el contenido que yo agregue: fotos, enlaces de video, presentación y redes sociales. Soy responsable de que ese contenido sea apropiado y pertenezca al jugador.</p>
+      <p class="mb-2"><b>3. Uso de imagen.</b> Autorizo la publicación de las fotos y videos que yo suba al perfil, que será visible para quien tenga el enlace. Puedo eliminarlos en cualquier momento desde el propio perfil.</p>
+      <p class="mb-2"><b>4. Datos personales.</b> Mis datos de contacto (nombre, teléfono, email) y la imagen de mi documento se usan únicamente para verificar mi identidad como responsable del menor; se guardan en almacenamiento privado y no se publican.</p>
+      <p class="mb-2"><b>5. Veracidad.</b> La información que registro es verdadera. El organizador puede suspender el acceso ante uso indebido o suplantación.</p>
+      <p><b>6. Revocación.</b> Puedo solicitar al organizador la desactivación del perfil o de mi acceso en cualquier momento.</p>
+    </div>
+    <label class="flex items-start gap-2 text-sm font-semibold mb-4">
+      <input id="tc-ok" type="checkbox" class="w-4 h-4 mt-0.5 accent-[#d9232e]"/>
+      <span>He leído y <b>acepto</b> los términos y condiciones.</span></label>
+    <div class="flex gap-2">
+      <button onclick="pasoValidarJugador()" class="flex-1 border border-line text-ink-500 text-sm font-bold py-2.5 rounded-xl hover:bg-paper">← VOLVER</button>
+      <button onclick="if(!$('tc-ok').checked){toast('Debes aceptar los términos para continuar');return;} pasoRegistroPadre()" class="flex-1 bg-brand-500 text-white text-sm font-bold py-2.5 rounded-xl hover:bg-brand-600">CONTINUAR</button>
+    </div>`);
+}
+function pasoRegistroPadre(){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">📝 TUS DATOS <span class="text-ink-400 text-sm font-sans font-bold">· paso 3 de 3</span></h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-500 mb-4">Datos del padre/madre responsable. La foto de tu DNI se guarda en almacenamiento <b>privado</b> (no se publica) y sirve para verificar tu identidad.</p>
+    <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Nombre y apellido *</span>
+      <input id="rp-nom" class="w-full border-b border-line py-2 font-semibold bg-transparent"/></label>
+    <div class="grid grid-cols-2 gap-3 mb-3">
+      <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Teléfono *</span>
+        <input id="rp-tel" inputmode="tel" class="w-full border-b border-line py-2 font-semibold bg-transparent"/></label>
+      <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Email</span>
+        <input value="${esc(SESION.user.email)}" readonly class="w-full border-b border-line py-2 font-semibold bg-transparent text-ink-400"/></label>
+    </div>
+    <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1">Foto de TU DNI (ambos lados) *</p>
+    <label class="block text-sm mb-2"><span class="text-ink-400 font-semibold text-xs">Frontal</span>
+      <input id="rp-dfr" type="file" accept="image/*" class="w-full text-xs mt-1"/></label>
+    <label class="block text-sm mb-4"><span class="text-ink-400 font-semibold text-xs">Reverso</span>
+      <input id="rp-drv" type="file" accept="image/*" class="w-full text-xs mt-1"/></label>
+    <button id="rp-btn" onclick="enviarRegistroPadre()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">COMPLETAR REGISTRO</button>
+    <p id="rp-msg" class="text-xs text-brand-600 font-bold mt-2"></p>`);
+}
+async function subirDniPadre(inputId,lado){
+  let f=$(inputId).files[0]; if(!f) return null;
+  f=await redimensionar(f,1400,0.85);
+  const ruta=`padres/${SESION.user.id}-${lado}-${Date.now()}.jpg`;
+  const up=await sb.storage.from('documentos').upload(ruta,f,{contentType:'image/jpeg',upsert:true});
+  if(up.error) throw new Error('DNI '+lado+': '+up.error.message);
+  return ruta;
+}
+async function enviarRegistroPadre(){
+  const nom=$('rp-nom').value.trim(), tel=$('rp-tel').value.trim();
+  if(!nom){$('rp-msg').textContent='Tu nombre y apellido son obligatorios.';return;}
+  if(!tel){$('rp-msg').textContent='El teléfono es obligatorio.';return;}
+  if(!$('rp-dfr').files[0]||!$('rp-drv').files[0]){$('rp-msg').textContent='Sube la foto de tu DNI por ambos lados.';return;}
+  $('rp-btn').disabled=true; $('rp-btn').textContent='Registrando…'; $('rp-msg').textContent='';
+  try{
+    const fr=await subirDniPadre('rp-dfr','frente');
+    const rv=await subirDniPadre('rp-drv','reverso');
+    const r=await sb.rpc('registrar_acceso_padre',{p_token:TOKEN,p_doc:W.doc,p_fnac:W.fnac,
+      p_nombre:nom,p_telefono:tel,p_dni_frente:fr,p_dni_reverso:rv});
+    if(r.error) throw new Error(r.error.message);
+    if(!r.data||!r.data.ok) throw new Error(r.data?r.data.msg:'No se pudo completar el registro');
+    // email de confirmación (no bloquea si la función aún no está desplegada)
+    let mail=false;
+    try{const em=await sb.functions.invoke('enviar-confirmacion-padre',{body:{jugador_id:r.data.jugador_id}}); mail=!em.error&&em.data&&em.data.ok;}catch(e){}
+    abrirModal(`<div class="text-center py-4">
+      <p class="text-5xl mb-3">✅</p>
+      <h3 class="font-display text-3xl tracking-wide mb-2">ACCESO APROBADO</h3>
+      <p class="text-sm text-ink-500 mb-1">Ya puedes administrar el perfil de <b>${esc(r.data.jugador)}</b>.</p>
+      <p class="text-xs text-ink-400 mb-5">${mail?'Te enviamos un email de confirmación a '+esc(r.data.email)+'.':'Entra siempre con este mismo correo: '+esc(r.data.email)+'.'}</p>
+      <button onclick="location.reload()" class="bg-brand-500 text-white font-bold px-8 py-2.5 rounded-xl hover:bg-brand-600">IR AL PERFIL</button>
+    </div>`);
+  }catch(e){
+    $('rp-msg').textContent='⚠ '+(e.message||e);
+    $('rp-btn').disabled=false; $('rp-btn').textContent='COMPLETAR REGISTRO';
+  }
+}
 
 /* ============ EDICIÓN (padre o admin) ============ */
 function modalEditar(){
