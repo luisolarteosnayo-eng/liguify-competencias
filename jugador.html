@@ -78,6 +78,8 @@ async function iniciar(){
   P=data;
   await detectarEdicion();
   render();
+  // Si quien mira es un SCOUT, su visita queda registrada (no-op para el resto)
+  if(SESION){try{const r=await sb.rpc('registrar_vista_scout',{p_token:TOKEN});if(r.data===true)recargar();}catch(e){}}
 }
 
 /* Sin token: si es un padre logueado, sus hijos; si no, invitación a entrar */
@@ -148,6 +150,11 @@ function render(){
     </div>
     ${pf.bio?`<p class="relative z-10 text-sm text-white/80 mt-4 border-t border-white/10 pt-3">${esc(pf.bio)}</p>`:''}
   </div>
+
+  ${+P.scout_vistas?`<div class="bg-gradient-to-r from-amber-400 to-amber-300 text-ink-900 rounded-2xl px-5 py-3.5 mb-4 flex items-center gap-3 shadow-sm">
+    <span class="text-2xl">🔭</span>
+    <p class="font-bold text-sm">${P.scout_vistas===1?'1 scout de equipo profesional vio este perfil':P.scout_vistas+' scouts de equipos profesionales vieron este perfil'}</p>
+  </div>`:''}
 
   <!-- TOTALES OFICIALES -->
   <div class="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-5">
