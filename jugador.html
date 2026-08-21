@@ -43,7 +43,7 @@ const sb = supabase.createClient(
   { db:{schema:'competencias'}, auth:{storageKey:'sb-competencias-jugador'} }
 );
 const $=id=>document.getElementById(id);
-let TOKEN=null, P=null, JUGADOR_ID=null, PUEDO_EDITAR=false, SESION=null;
+let TOKEN=null, P=null, JUGADOR_ID=null, PUEDO_EDITAR=false, ES_PADRE=false, SESION=null;
 
 function toast(t){const e=$('toast');e.textContent=t;e.classList.remove('hidden');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.add('hidden'),4200);}
 function abrirModal(html){$('modal-box').innerHTML=html;$('modal').classList.remove('hidden');$('modal').classList.add('flex');}
@@ -113,7 +113,7 @@ async function detectarEdicion(){
   if(!SESION) return;
   const {data}=await sb.rpc('mis_perfiles');
   const mio=(data||[]).find(x=>x.token===TOKEN);
-  if(mio){PUEDO_EDITAR=true;JUGADOR_ID=mio.jugador_id;return;}
+  if(mio){PUEDO_EDITAR=true;ES_PADRE=true;JUGADOR_ID=mio.jugador_id;return;}
   // admin de la marca: puede editar cualquier perfil habilitado que gestione
   const pj=await sb.from('perfil_jugador').select('jugador_id').eq('token',TOKEN).maybeSingle();
   if(pj.data){PUEDO_EDITAR=true;JUGADOR_ID=pj.data.jugador_id;}
@@ -145,7 +145,7 @@ function render(){
         <p class="text-white/60 text-xs font-bold mt-2">${j.anio?`NACIDO EN ${j.anio}`:''}${j.posicion?` · ${esc(j.posicion).toUpperCase()}`:''}${j.pie?` · PIE ${esc(j.pie).toUpperCase()}`:''}</p>
         ${redes.length?`<div class="flex gap-2 mt-3">${redes.map(r=>`<a href="${esc(r.url)}" target="_blank" rel="noopener" class="bg-white/10 hover:bg-white/20 border border-white/20 rounded-full px-3 py-1.5 text-xs font-bold">${r.ic} ${r.lb}</a>`).join('')}</div>`:''}
       </div>
-      ${PUEDO_EDITAR?`<button onclick="modalEditar()" class="bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl">✏️ EDITAR PERFIL</button>`
+      ${PUEDO_EDITAR?`<button onclick="modalEditar()" class="bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl">✏️ EDITAR PERFIL</button>${!ES_PADRE?` <button onclick="accesoPadres()" title="Como admin ya puedes editar; este botón lanza el registro de padres (para probarlo o asistir a un padre en persona)" class="bg-white/10 border border-white/20 text-white text-[11px] font-bold px-3 py-2 rounded-xl hover:bg-white/20 ml-1">👨‍👩‍👦 REGISTRO DE PADRES</button>`:``}`
         :`<button onclick="accesoPadres()" class="bg-white/10 border border-white/20 text-white text-[11px] font-bold px-4 py-2 rounded-xl hover:bg-white/20">ACCESO PADRES</button>`}
     </div>
     ${pf.bio?`<p class="relative z-10 text-sm text-white/80 mt-4 border-t border-white/10 pt-3">${esc(pf.bio)}</p>`:''}
