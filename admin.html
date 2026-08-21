@@ -2476,7 +2476,40 @@ function modalEditIns(i){
         <span>Consentimiento de imagen<br><span class="text-[10px] text-ink-400 font-normal">Con consentimiento la foto sale a COLOR en el público; sin él, en blanco y negro.</span></span>
         <input id="ei-con" type="checkbox" ${i.con?'checked':''} class="w-4 h-4 accent-[#d9232e]"/></label>
     </div>
-    <button onclick='guardarEditIns("${i.id}","${i.jugador_id}")' class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR</button>`);
+    <button onclick='guardarEditIns("${i.id}","${i.jugador_id}")' class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR</button>
+    <div class="border-t border-line mt-4 pt-2">
+      <p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-1.5">Equipos en que está inscrito (toda la marca)</p>
+      <div id="ei-equipos" class="text-xs text-ink-400">Cargando…</div>
+    </div>`);
+  cargarEquiposDeJugador(i.jugador_id,i.id);
+}
+/* Todas las inscripciones del jugador (para detectar duplicados y traspasos) */
+async function cargarEquiposDeJugador(jugadorId,insActualId){
+  const ins=(await sb.from('inscripcion_lbf').select('id,equipo_id,categoria_id,estado,en_lbf,inhabilitado').eq('jugador_id',jugadorId)).data||[];
+  if(!ins.length){$('ei-equipos').innerHTML='<p>Sin inscripciones.</p>';return;}
+  const [eqs,cats]=await Promise.all([
+    sb.from('equipo').select('id,nombre,club_id,estado').in('id',[...new Set(ins.map(x=>x.equipo_id))]),
+    sb.from('categoria').select('id,nombre_display,anio_nacimiento,modalidad,torneo_id').in('id',[...new Set(ins.map(x=>x.categoria_id))])
+  ]);
+  const [cls,tns]=await Promise.all([
+    sb.from('club').select('id,nombre').in('id',[...new Set((eqs.data||[]).map(x=>x.club_id))]),
+    sb.from('torneo').select('id,nombre').in('id',[...new Set((cats.data||[]).map(x=>x.torneo_id))])
+  ]);
+  const E=Object.fromEntries((eqs.data||[]).map(x=>[x.id,x])), C=Object.fromEntries((cats.data||[]).map(x=>[x.id,x]));
+  const CL=Object.fromEntries((cls.data||[]).map(x=>[x.id,x])), T=Object.fromEntries((tns.data||[]).map(x=>[x.id,x]));
+  // duplicidad = más de una inscripción en la MISMA categoría
+  const porCat={}; ins.forEach(x=>{porCat[x.categoria_id]=(porCat[x.categoria_id]||0)+1;});
+  const el=$('ei-equipos'); if(!el) return;
+  el.innerHTML=ins.map(x=>{
+    const e=E[x.equipo_id]||{}, c=C[x.categoria_id]||{}, t=T[c.torneo_id]||{};
+    const dup=porCat[x.categoria_id]>1;
+    return `<div class="flex items-center gap-2 py-1.5 border-b border-line last:border-0 text-ink-900 ${x.id===insActualId?'font-bold':''}">
+      <span class="flex-1 min-w-0"><span class="text-[11px]">${(e.nombre||(CL[e.club_id]||{}).nombre||'—')}${x.id===insActualId?' (este equipo)':''}</span>
+        <span class="block text-[10px] text-ink-400 font-normal">${t.nombre||''} · ${c.nombre_display||('Cat. '+(c.anio_nacimiento||'')+' / '+(c.modalidad||''))}</span></span>
+      ${dup?'<span class="text-[9px] font-bold bg-brand-100 text-brand-600 rounded-full px-2 py-0.5" title="Más de una inscripción en la misma categoría">🚨 DUPLICADO</span>':''}
+      ${e.estado==='inactivo'?'<span class="text-[9px] font-bold bg-paper text-ink-400 rounded-full px-2 py-0.5">EQUIPO RETIRADO</span>':''}
+      <span class="text-[9px] font-bold rounded-full px-2 py-0.5 ${x.inhabilitado?'bg-brand-100 text-brand-600':x.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${x.inhabilitado?'INHAB.':x.estado.toUpperCase()}</span>
+    </div>`;}).join('');
 }
 async function guardarEditIns(insId,jugadorId){
   // identidad: solo si cambió (nombres/apellidos/fecha — errores de tipeo)
