@@ -200,7 +200,7 @@ const nomEq=e=>e.nombre||(CLUBES[e.club_id]||{}).nombre||'—';
 // errores de BD → mensajes de negocio
 function errNegocio(error){
   const m=error.message||'';
-  if(error.code==='23505'&&m.includes('inscripcion_lbf')) return '⛔ ANTI-SUPLANTACIÓN (constraint de la BD): este documento ya está inscrito en otro equipo de esta categoría.';
+  if(error.code==='23505'&&m.includes('inscripcion_lbf')) return '⚠ Ese jugador YA está en la LBF de este equipo.';
   if(error.code==='23505'&&m.includes('jugador_maestro')) return '⚠ Este documento ya existe en la base maestra global.';
   if(error.code==='23505'&&m.includes('categoria')) return '⚠ Ya existe esa categoría (año + modalidad) en este torneo.';
   if(error.code==='23505'&&m.includes('club')) return '⚠ Ya existe un club con ese nombre en tu marca (el club es único por marca).';
@@ -2628,7 +2628,14 @@ async function inscribir(jugadorId){
     activado=!r.error&&r.data&&r.data.activado;
   }
   cerrarModal();
-  toast(activado?'Inscrito en la LBF — ACTIVO (ya tenía autorización de Padre/Tutor subida) ✔':'Inscrito en la LBF — datos completos revelados, queda PENDIENTE de validación ✔');
+  // Duplicidad (decisión 2026-08-21): ya no se bloquea; se inscribe CON ALERTA
+  // y el caso queda visible en 🔎 DUPLICADOS para verificarlo con ambos equipos.
+  const dup=await sb.from('inscripcion_lbf').select('equipo_id').eq('jugador_id',jugadorId).eq('categoria_id',CAT.id).neq('equipo_id',EQUIPO.id);
+  if(dup.data&&dup.data.length){
+    const otros=dup.data.map(d=>EQUIPOS[d.equipo_id]?nomEq(EQUIPOS[d.equipo_id]):'otro equipo').join(', ');
+    toast(`🚨 ALERTA DE DUPLICIDAD: este documento también está inscrito en ${otros} (misma categoría). Verifícalo en 🔎 DUPLICADOS y comunícate con ambos equipos (posible suplantación).`);
+  } else
+    toast(activado?'Inscrito en la LBF — ACTIVO (ya tenía autorización de Padre/Tutor subida) ✔':'Inscrito en la LBF — datos completos revelados, queda PENDIENTE de validación ✔');
   renderLBF();
 }
 async function altaJugador(pais,doc){

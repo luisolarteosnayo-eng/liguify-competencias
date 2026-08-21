@@ -125,7 +125,7 @@ const videoPill=u=>`<div class="flex justify-center mt-1.5"><a href="${u}" targe
   <span class="grid place-items-center w-4 h-4 bg-white rounded-full shrink-0"><span style="width:0;height:0;border-top:3.5px solid transparent;border-bottom:3.5px solid transparent;border-left:6px solid #b91c1c;margin-left:1.5px"></span></span>VER VIDEO</a></div>`;
 function errNegocio(e){
   const m=e.message||String(e);
-  if(e.code==='23505'&&m.includes('inscripcion_lbf')) return '⚠ Ese jugador YA está inscrito en otro equipo de esta categoría (anti-suplantación). Coordina con el organizador.';
+  if(e.code==='23505'&&m.includes('inscripcion_lbf')) return '⚠ Ese jugador YA está en la LBF de este equipo.';
   if(e.code==='23505') return '⚠ Registro duplicado: '+m;
   if(e.code==='42501') return '⚠ Sin permiso: tu acceso de delegado no alcanza para esta acción.';
   return '⚠ '+m;
@@ -1110,7 +1110,13 @@ async function inscribir(jugadorId){
     activado=!r.error&&r.data&&r.data.activado;
   }
   cerrarModal();
-  toast(activado?'Inscrito ✔ — ACTIVO (ya tenía autorización de Padre/Tutor subida)':'Inscrito ✔ — queda PENDIENTE de validación del organizador');
+  // Duplicidad (decisión 2026-08-21): ya no se bloquea; se inscribe CON ALERTA
+  // y el organizador lo revisa en su reporte de DUPLICADOS.
+  const dup=await sb.from('inscripcion_lbf').select('id',{count:'exact',head:true}).eq('jugador_id',jugadorId).eq('categoria_id',EQ.categoria_id);
+  if((dup.count||0)>1)
+    toast('🚨 ALERTA DE DUPLICIDAD: este documento también figura inscrito en OTRO equipo de esta categoría. El organizador verificará el caso (posible suplantación) y se comunicará con ambos equipos.');
+  else
+    toast(activado?'Inscrito ✔ — ACTIVO (ya tenía autorización de Padre/Tutor subida)':'Inscrito ✔ — queda PENDIENTE de validación del organizador');
   renderPlantel();
 }
 async function altaJugador(pais,doc){
