@@ -306,7 +306,8 @@ async function cargarTorneos(){
     <h1 class="font-display text-4xl tracking-wide leading-none">${MARCA.nombre.toUpperCase()}</h1>
     <p class="text-emerald-300 text-xs mt-1">🔗 ${MARCA.slug}.liguify.com</p></div>
     ${esAdmin()?`<button onclick="modalMarca()" class="bg-white/10 border border-white/20 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/20">✏️ EDITAR MARCA</button>
-      <button onclick="modalUsuariosMarca()" class="bg-white/10 border border-white/20 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/20">👥 USUARIOS</button>`
+      <button onclick="modalUsuariosMarca()" class="bg-white/10 border border-white/20 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/20">👥 USUARIOS</button>
+      <button onclick="modalPadresMarca()" title="Padres de familia registrados en los perfiles de jugadores de la marca" class="bg-white/10 border border-white/20 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-white/20">👨‍👩‍👦 PADRES</button>`
       :'<span class="text-[10px] font-bold bg-amber-500/20 text-amber-300 rounded-full px-3 py-1">🎛 MODO MESA: resultados y verificación</span>'}
   </div>`;
   $('btn-nuevo-torneo').classList.toggle('hidden', !esAdmin());
@@ -628,6 +629,58 @@ async function crearMarca(){
   cerrarModal(); toast(`Marca "${nombre}" creada ✔ — ${slug}.liguify.com${extra}`);
   cargarTorneos();
 }
+/* ---- 👨‍👩‍👦 PADRES DE FAMILIA registrados en perfiles de la marca ---- */
+let PADRES_MARCA=[];
+async function modalPadresMarca(){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">👨‍👩‍👦 PADRES · ${MARCA.nombre.toUpperCase()}</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-3">Padres/madres con acceso a perfiles de jugadores de la marca: contacto, origen del registro (autoservicio o asignado), aceptación de términos y su DNI (privado). Desde aquí puedes revisar y quitar accesos.</p>
+    <input id="pm-q" placeholder="Buscar por padre, email, teléfono, jugador, documento o club…" oninput="renderPadresMarca()" class="w-full border border-line rounded-xl px-3 py-2 text-sm font-semibold mb-3"/>
+    <div id="pm-lista" class="text-sm">Cargando…</div>`);
+  const {data,error}=await sb.rpc('reporte_padres',{p_marca:MARCA.id});
+  if(error){$('pm-lista').innerHTML=`<p class="text-brand-600 text-xs font-bold">${errNegocio(error)}</p>`;return;}
+  PADRES_MARCA=data||[];
+  renderPadresMarca();
+}
+function renderPadresMarca(){
+  const q=($('pm-q')?.value||'').toLowerCase().trim();
+  const norm=s=>String(s||'').toLowerCase();
+  const lista=PADRES_MARCA.filter(p=>!q||[p.nombre,p.email,p.telefono,p.jugador,p.documento,p.clubes].some(v=>norm(v).includes(q)));
+  const f=d=>d?new Date(d).toLocaleDateString('es-PE',{day:'2-digit',month:'2-digit',year:'numeric'}):'—';
+  $('pm-lista').innerHTML=`<p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-2">${lista.length} de ${PADRES_MARCA.length} registro(s)</p>`+
+    (lista.map(p=>`<div class="border border-line rounded-xl px-4 py-3 mb-2">
+      <div class="flex items-start gap-3 flex-wrap">
+        <div class="flex-1 min-w-48">
+          <p class="font-bold">${p.nombre||'<span class="text-ink-400">(sin nombre)</span>'} <span class="text-[9px] font-bold rounded-full px-2 py-0.5 ml-1 ${p.origen==='auto'?'bg-emerald-100 text-emerald-700':'bg-paper text-ink-500'}">${p.origen==='auto'?'AUTOSERVICIO':'ASIGNADO'}</span></p>
+          <p class="text-xs text-ink-500">${p.email||''}${p.telefono?' · 📞 '+p.telefono:''}</p>
+          <p class="text-[11px] text-ink-400 mt-1">Registrado ${f(p.registrado_at)} · Términos ${p.terminos_at?'✔ '+f(p.terminos_at):'<span class="text-amber-600 font-bold">sin aceptar</span>'}</p>
+        </div>
+        <div class="flex-1 min-w-48">
+          <p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Jugador</p>
+          <p class="font-semibold text-sm">${p.jugador} <span class="text-[11px] text-ink-400 font-normal">${p.documento||''}</span></p>
+          <p class="text-[11px] text-ink-400">${p.clubes||''}</p>
+          ${p.perfil_token?`<a href="/jugador/${p.perfil_token}" target="_blank" class="text-[11px] font-bold text-brand-600">Ver perfil →</a>`:''}
+        </div>
+        <div class="flex flex-col gap-1 shrink-0">
+          ${p.dni_frente_url?`<button onclick="verDniPadre('${p.dni_frente_url}')" class="text-[10px] font-bold border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper">🪪 DNI frente</button>`:'<span class="text-[10px] text-ink-400">sin DNI</span>'}
+          ${p.dni_reverso_url?`<button onclick="verDniPadre('${p.dni_reverso_url}')" class="text-[10px] font-bold border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper">🪪 DNI reverso</button>`:''}
+          <button onclick="quitarPadreMarca('${p.usuario_id}','${p.jugador_id}','${(p.email||'').replace(/'/g,'')}','${(p.jugador||'').replace(/'/g,'')}')" class="text-[10px] font-bold border border-line rounded-lg px-2.5 py-1.5 text-ink-400 hover:bg-brand-50 hover:text-brand-600">✕ Quitar acceso</button>
+        </div>
+      </div>
+    </div>`).join('')||'<p class="text-xs text-ink-400 py-4 text-center">Sin padres registrados.</p>');
+}
+async function verDniPadre(ruta){
+  const {data,error}=await sb.storage.from('documentos').createSignedUrl(ruta,300);
+  if(error||!data){toast('⚠ No se pudo abrir el documento: '+(error?.message||''));return;}
+  window.open(data.signedUrl,'_blank');
+}
+async function quitarPadreMarca(uid,jid,email,jugador){
+  if(!confirm(`¿Quitar el acceso de ${email} al perfil de ${jugador}?`))return;
+  const r=await sb.rpc('quitar_padre_jugador',{p_usuario:uid,p_jugador:jid});
+  if(r.error){toast(errNegocio(r.error));return;}
+  PADRES_MARCA=PADRES_MARCA.filter(p=>!(p.usuario_id===uid&&p.jugador_id===jid));
+  toast('Acceso quitado'); renderPadresMarca();
+}
+
 function modalUsuariosMarca(){
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">👥 USUARIOS · ${MARCA.nombre.toUpperCase()}</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
     <p class="text-xs text-ink-400 mb-3">admin_marca configura torneos y aprueba; mesa_control solo carga resultados y acredita.</p>
