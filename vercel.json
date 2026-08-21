@@ -7,7 +7,7 @@
     { "source": "/guia-organizador", "destination": "/guia-organizador.html" },
     { "source": "/verificar", "destination": "/verificar.html" },
     { "source": "/jugador", "destination": "/jugador.html" },
-    { "source": "/jugador/(.*)", "destination": "/jugador.html" },
+    { "source": "/jugador/:token", "destination": "/api/jugador?token=:token" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
