@@ -43,7 +43,7 @@ const sb = supabase.createClient(
   { db:{schema:'competencias'}, auth:{storageKey:'sb-competencias-jugador'} }
 );
 const $=id=>document.getElementById(id);
-let TOKEN=null, P=null, JUGADOR_ID=null, PUEDO_EDITAR=false, ES_PADRE=false, SESION=null;
+let TOKEN=null, P=null, JUGADOR_ID=null, PUEDO_EDITAR=false, ES_PADRE=false, SOLICITUD_PENDIENTE=false, SESION=null;
 
 function toast(t){const e=$('toast');e.textContent=t;e.classList.remove('hidden');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.add('hidden'),4200);}
 function abrirModal(html){$('modal-box').innerHTML=html;$('modal').classList.remove('hidden');$('modal').classList.add('flex');}
@@ -113,6 +113,7 @@ async function detectarEdicion(){
   if(!SESION) return;
   const {data}=await sb.rpc('mis_perfiles');
   const mio=(data||[]).find(x=>x.token===TOKEN);
+  if(mio&&mio.estado==='pendiente'){SOLICITUD_PENDIENTE=true;JUGADOR_ID=mio.jugador_id;return;}
   if(mio){PUEDO_EDITAR=true;ES_PADRE=true;JUGADOR_ID=mio.jugador_id;return;}
   // admin de la marca: puede editar cualquier perfil habilitado que gestione
   const pj=await sb.from('perfil_jugador').select('jugador_id').eq('token',TOKEN).maybeSingle();
@@ -147,6 +148,7 @@ function render(){
       </div>
       <button onclick="modalCompartir()" title="Compartir el perfil en redes" class="bg-white text-ink-900 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-paper">🔗 COMPARTIR</button>
       ${PUEDO_EDITAR?`<button onclick="modalEditar()" class="bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold px-4 py-2.5 rounded-xl">✏️ EDITAR PERFIL</button>${!ES_PADRE?` <button onclick="accesoPadres()" title="Como admin ya puedes editar; este botón lanza el registro de padres (para probarlo o asistir a un padre en persona)" class="bg-white/10 border border-white/20 text-white text-[11px] font-bold px-3 py-2 rounded-xl hover:bg-white/20 ml-1">👨‍👩‍👦 REGISTRO DE PADRES</button>`:``}`
+        :SOLICITUD_PENDIENTE?`<span class="bg-amber-400/20 border border-amber-300/40 text-amber-200 text-[11px] font-bold px-4 py-2 rounded-xl" title="Este perfil ya tiene un padre/madre registrado: tu acceso se activa cuando esa persona o el organizador lo aprueben">⏳ SOLICITUD PENDIENTE DE APROBACIÓN</span>`
         :`<button onclick="accesoPadres()" class="bg-white/10 border border-white/20 text-white text-[11px] font-bold px-4 py-2 rounded-xl hover:bg-white/20">ACCESO PADRES</button>`}
     </div>
     ${pf.bio?`<p class="relative z-10 text-sm text-white/80 mt-4 border-t border-white/10 pt-3">${esc(pf.bio)}</p>`:''}
@@ -268,8 +270,20 @@ async function entrar(){const {error}=await sb.auth.signInWithPassword({email:$(
   if(error){$('lg-msg').textContent='No se pudo entrar: '+error.message;return;} location.reload();}
 async function crearCuenta(){const email=$('lg-e').value.trim(),pass=$('lg-p').value;
   if(!email||pass.length<6){$('lg-msg').textContent='Escribe tu email y una contraseña de al menos 6 caracteres.';return;}
-  const {error}=await sb.auth.signUp({email,password:pass});
-  if(error){$('lg-msg').textContent='No se pudo crear la cuenta: '+error.message;return;} location.reload();}
+  const {data,error}=await sb.auth.signUp({email,password:pass,options:{emailRedirectTo:location.origin+location.pathname}});
+  if(error){$('lg-msg').textContent='No se pudo crear la cuenta: '+error.message;return;}
+  // Con "Confirm email" activo no hay sesión hasta abrir el enlace del correo
+  if(!data||!data.session){
+    $('lg-msg').className='text-xs text-emerald-700 font-bold mt-2';
+    $('lg-msg').textContent='📨 Te enviamos un correo de confirmación a '+email+'. Ábrelo, pulsa el enlace y vuelve a esta página para continuar.';
+    return;
+  }
+  location.reload();}
+async function reenviarConfirmacion(){
+  const email=SESION&&SESION.user?SESION.user.email:null; if(!email) return;
+  const {error}=await sb.auth.resend({type:'signup',email,options:{emailRedirectTo:location.origin+location.pathname}});
+  toast(error?'⚠ '+error.message:'📨 Correo de confirmación reenviado a '+email);
+}
 async function entrarGoogle(){const {error}=await sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+location.pathname}});
   if(error)$('lg-msg').textContent='Google: '+error.message;}
 async function salir(){await sb.auth.signOut({scope:'local'});location.reload();}
@@ -357,15 +371,23 @@ async function enviarRegistroPadre(){
     const r=await sb.rpc('registrar_acceso_padre',{p_token:TOKEN,p_doc:W.doc,p_fnac:W.fnac,
       p_nombre:nom,p_telefono:tel,p_dni_frente:fr,p_dni_reverso:rv});
     if(r.error) throw new Error(r.error.message);
+    if(r.data&&r.data.codigo==='EMAIL_NO_CONFIRMADO'){
+      $('rp-btn').disabled=false; $('rp-btn').textContent='COMPLETAR REGISTRO';
+      $('rp-msg').innerHTML='⚠ '+esc(r.data.msg)+' <button onclick="reenviarConfirmacion()" class="underline font-bold">Reenviar correo</button>';
+      return;
+    }
     if(!r.data||!r.data.ok) throw new Error(r.data?r.data.msg:'No se pudo completar el registro');
-    // email de confirmación (no bloquea si la función aún no está desplegada)
+    // email de confirmación + avisos (no bloquea si la función aún no está desplegada)
     let mail=false;
     try{const em=await sb.functions.invoke('enviar-confirmacion-padre',{body:{jugador_id:r.data.jugador_id}}); mail=!em.error&&em.data&&em.data.ok;}catch(e){}
+    const pend=r.data.estado==='pendiente';
     abrirModal(`<div class="text-center py-4">
-      <p class="text-5xl mb-3">✅</p>
-      <h3 class="font-display text-3xl tracking-wide mb-2">ACCESO APROBADO</h3>
-      <p class="text-sm text-ink-500 mb-1">Ya puedes administrar el perfil de <b>${esc(r.data.jugador)}</b>.</p>
-      <p class="text-xs text-ink-400 mb-5">${mail?'Te enviamos un email de confirmación a '+esc(r.data.email)+'.':'Entra siempre con este mismo correo: '+esc(r.data.email)+'.'}</p>
+      <p class="text-5xl mb-3">${pend?'⏳':'✅'}</p>
+      <h3 class="font-display text-3xl tracking-wide mb-2">${pend?'SOLICITUD ENVIADA':'ACCESO APROBADO'}</h3>
+      <p class="text-sm text-ink-500 mb-1">${pend
+        ?`Este perfil ya tiene un padre/madre registrado. Tu acceso a <b>${esc(r.data.jugador)}</b> se activará cuando esa persona o el organizador lo aprueben.`
+        :`Ya puedes administrar el perfil de <b>${esc(r.data.jugador)}</b>.`}</p>
+      <p class="text-xs text-ink-400 mb-5">${mail?'Te enviamos un email a '+esc(r.data.email)+(pend?' y avisamos al padre registrado y al organizador.':'.'):'Entra siempre con este mismo correo: '+esc(r.data.email)+'.'}</p>
       <button onclick="location.reload()" class="bg-brand-500 text-white font-bold px-8 py-2.5 rounded-xl hover:bg-brand-600">IR AL PERFIL</button>
     </div>`);
   }catch(e){
@@ -387,6 +409,7 @@ function modalEditar(){
   </div>
   <button onclick="guardarPerfil()" class="w-full bg-brand-500 text-white text-sm font-bold py-2.5 rounded-xl hover:bg-brand-600 mb-5">GUARDAR DATOS</button>
 
+  <div id="ed-pend" class="mb-4"></div>
   <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-2">📸 Fotos (${fotos.length}/3)</p>
   <div class="flex gap-2 mb-2">${fotos.map(f=>`
     <span class="relative w-20 h-20 rounded-xl overflow-hidden border border-line"><img src="${esc(f.url)}" class="w-full h-full object-cover"/>
@@ -402,6 +425,29 @@ function modalEditar(){
   <input id="ed-vtit" placeholder="Título (ej. Golazo vs River)" class="w-full border-b border-line py-1.5 text-xs font-semibold bg-transparent mb-2"/>
   <button onclick="agregarVideo()" class="w-full bg-ink-900 text-white text-xs font-bold py-2 rounded-xl hover:bg-ink-700">AGREGAR VIDEO</button>`:''}
   <p class="text-[10px] text-ink-400 mt-3">Las estadísticas y el historial de partidos son oficiales del torneo y se actualizan solos.</p>`);
+  cargarPendientes();
+}
+/* Solicitudes de acceso pendientes (2º padre): las resuelve un padre aprobado o el organizador */
+async function cargarPendientes(){
+  const el=$('ed-pend'); if(!el) return;
+  const {data}=await sb.rpc('padres_pendientes',{p_jugador:JUGADOR_ID});
+  if(!data||!data.length){el.innerHTML='';return;}
+  el.innerHTML=`<p class="font-bold text-amber-700 uppercase tracking-wider text-[10px] mb-1">⏳ Solicitudes de acceso pendientes</p>
+    ${data.map(p=>`<div class="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-2 text-xs">
+      <p class="font-bold">${esc(p.nombre||'(sin nombre)')}</p>
+      <p class="text-ink-500">${esc(p.email||'')}${p.telefono?' · 📞 '+esc(p.telefono):''} · ${new Date(p.created_at).toLocaleDateString('es-PE')}</p>
+      <div class="flex gap-2 mt-2">
+        <button onclick="resolverPendiente('${p.usuario_id}',true)" class="flex-1 bg-emerald-600 text-white font-bold py-1.5 rounded-lg hover:bg-emerald-700">APROBAR</button>
+        <button onclick="resolverPendiente('${p.usuario_id}',false)" class="flex-1 border border-line text-ink-500 font-bold py-1.5 rounded-lg hover:bg-brand-50 hover:text-brand-600">RECHAZAR</button>
+      </div></div>`).join('')}
+    <p class="text-[10px] text-ink-400">Aprueba solo a quien reconozcas como padre/madre o tutor del jugador.</p>`;
+}
+async function resolverPendiente(uid,aprobar){
+  if(!confirm(aprobar?'¿Aprobar el acceso de esta persona al perfil?':'¿Rechazar esta solicitud?'))return;
+  const r=await sb.rpc('resolver_padre_pendiente',{p_usuario:uid,p_jugador:JUGADOR_ID,p_aprobar:aprobar});
+  if(r.error){toast('⚠ '+r.error.message);return;}
+  toast(aprobar?'Acceso aprobado ✔':'Solicitud rechazada');
+  cargarPendientes();
 }
 async function guardarPerfil(){
   const {error}=await sb.from('perfil_jugador').update({
