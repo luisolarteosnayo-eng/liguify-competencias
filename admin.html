@@ -362,14 +362,14 @@ async function renderMesa(){
       <button onclick="mesaCargar('${m.id}')" class="text-xs font-bold ${fin(m)?'text-ink-500 border border-line hover:bg-paper':'text-white bg-brand-500 hover:bg-brand-600'} rounded-lg px-3 py-2 shrink-0">${fin(m)?'✏️ EDITAR':'CARGAR'}</button>
     </div>`;}).join('');
   $('lista-torneos').innerHTML=`
-    <p class="text-xs font-bold text-ink-400 uppercase tracking-widest mb-2">${diaTxt}</p>
-    <div class="space-y-2">${filas||`<div class="bg-white border border-line rounded-2xl p-8 text-center text-ink-400 text-sm font-semibold">No hay partidos programados para hoy.</div>`}</div>
-    <div class="mt-6">
+    <div class="mb-5">
       <p class="text-xs font-bold text-ink-400 uppercase tracking-widest mb-2">🪪 Verificar documentos por torneo</p>
       <div class="flex gap-2 flex-wrap">
         ${ts.map(t=>`<button onclick="mesaVerificar('${t.id}')" class="bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-emerald-800">🪪 ${(t.nombre||'').toUpperCase()}</button>`).join('')||'<p class="text-xs text-ink-400">Sin torneos en curso.</p>'}
       </div>
-    </div>`;
+    </div>
+    <p class="text-xs font-bold text-ink-400 uppercase tracking-widest mb-2">⚽ Partidos de hoy · ${diaTxt}</p>
+    <div class="space-y-2">${filas||`<div class="bg-white border border-line rounded-2xl p-8 text-center text-ink-400 text-sm font-semibold">No hay partidos programados para hoy.</div>`}</div>`;
 }
 function mesaCargar(id){modalResultado(MESA_PARTIDOS[id]);}
 function mesaVerificar(tid){TORNEO=MESA_TORNEOS[tid];modalVerificarPersona();}
