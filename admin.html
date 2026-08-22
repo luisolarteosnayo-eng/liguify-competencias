@@ -861,7 +861,10 @@ function modalVerificarPersona(){
     <button onclick="escanearCamara()" class="w-full bg-ink-900 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-ink-700 mb-3">📷 ESCANEAR CON LA CÁMARA (QR o código de barras del DNI)</button>
     <div id="vf-cam" class="hidden mb-3"></div>
     <div id="vf-res"></div>`);
-  setTimeout(()=>{const i=$('vf-in'); if(i) i.focus();},50);
+  // Celular: abrir la cámara de una vez y NO enfocar el campo (evita que salte el
+  // teclado). Escritorio/pistola lectora: enfocar el campo para "tipear" el código.
+  if(esMovil()){ setTimeout(()=>escanearCamara(),150); }
+  else { setTimeout(()=>{const i=$('vf-in'); if(i) i.focus();},50); }
 }
 /* Escaneo con la cámara del dispositivo (móvil o laptop con webcam):
    lee el QR del carnet o el código de barras del DNI (PDF417) y llena el
@@ -897,6 +900,9 @@ async function escanearCamara(){
         cerrarCamara();
         toast('📷 Código leído ✔');
         verificarPersona();
+        // en celular, la cámara vuelve a abrirse sola para el siguiente jugador
+        // (el resultado queda visible debajo del visor)
+        if(esMovil()) setTimeout(()=>{ if($('vf-cam')) escanearCamara(); },2500);
         return;
       }
     }catch(e){}
