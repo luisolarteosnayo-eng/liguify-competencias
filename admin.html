@@ -4410,6 +4410,57 @@ function compartirTablaZona(z){
     archivo:`tabla-${catTxt.toLowerCase().replace(/[^a-z0-9]+/g,'-')}${Object.keys(TZ_DATA).length>1?'-zona-'+String(z).toLowerCase():''}.png`});
 }
 
+/* ============ 🖼 IMAGEN DE GOLEADORES (para redes) ============ */
+async function compartirGoleadores(){
+  const {data,error}=await sb.from('vista_goleadores').select('*').eq('categoria_id',CAT.id)
+    .gt('goles',0).order('goles',{ascending:false}).order('apellidos').limit(10);
+  if(error||!data||!data.length){toast('⚠ Aún no hay goleadores en esta categoría');return;}
+  toast('🖼 Generando imagen de goleadores…');
+  await Promise.all([document.fonts.load('80px "Bebas Neue"'),document.fonts.load('700 30px Inter'),document.fonts.load('600 26px Inter')]);
+  const logo=await cargarImg(TORNEO.logo_url||MARCA.logo_url);
+  const fotos=[]; for(const g of data){ fotos.push(await cargarImg(g.foto_url)); }
+  const escudos={}; for(const g of data){ const e=EQUIPOS[g.equipo_id]||{}, cl=CLUBES[e.club_id]||{}; if(cl.escudo_url&&!escudos[cl.id]) escudos[cl.id]=await cargarImg(cl.escudo_url); }
+  const W=1080, RH=96, top=262, H=top+data.length*RH+120;
+  const cv=document.createElement('canvas'); cv.width=W; cv.height=H; const x=cv.getContext('2d');
+  const g=x.createLinearGradient(0,0,0,H); g.addColorStop(0,'#0b1630'); g.addColorStop(1,'#171e2e'); x.fillStyle=g; x.fillRect(0,0,W,H);
+  x.fillStyle='rgba(217,35,46,0.10)'; x.beginPath(); x.arc(W-120,140,260,0,Math.PI*2); x.fill();
+  const fit=(t,font,max,min)=>{let s=parseInt(font.match(/(\d+)px/)[1]);for(;s>=(min||14);s--){x.font=font.replace(/\d+px/,s+'px');if(x.measureText(t).width<=max)break;}return x.font;};
+  const circ=(img,cx,cy,r,color,ini,cover)=>{x.save();x.beginPath();x.arc(cx,cy,r,0,Math.PI*2);x.closePath();x.fillStyle=img&&!cover?'#fff':(color||'#2b3550');x.fill();x.clip();
+    if(img){ if(cover){const s=Math.max(r*2/img.width,r*2/img.height);x.drawImage(img,cx-img.width*s/2,cy-img.height*s/2,img.width*s,img.height*s);} else {const s=r*1.7;x.drawImage(img,cx-s/2,cy-s/2,s,s);} }
+    else{x.fillStyle='#fff';x.font='700 '+Math.round(r*0.8)+'px Inter';x.textAlign='center';x.textBaseline='middle';x.fillText(ini||'?',cx,cy+2);}x.restore();};
+  const catTxt=(CAT.nombre_display||('CATEGORÍA '+CAT.anio_nacimiento+' / '+CAT.modalidad)).toUpperCase();
+  // cabecera
+  circ(logo,96,122,58,'#d9232e',iniciales(TORNEO.nombre));
+  x.textAlign='left'; x.textBaseline='alphabetic';
+  x.save(); x.shadowColor='rgba(0,0,0,0.55)'; x.shadowBlur=14; x.shadowOffsetY=4;
+  x.fillStyle='#fbbf24'; x.font='62px "Bebas Neue"'; x.fillText('⚽ GOLEADORES',176,108); x.restore();
+  x.fillStyle='#fff'; x.font=fit(TORNEO.nombre.toUpperCase(),'42px "Bebas Neue"',820,28); x.fillText(TORNEO.nombre.toUpperCase(),176,156);
+  x.fillStyle='#cbd5e1'; x.font=fit(catTxt,'600 22px Inter',820,16); x.fillText(catTxt,176,192);
+  // tarjeta
+  x.fillStyle='rgba(255,255,255,0.06)'; x.beginPath(); x.roundRect(40,top-10,W-80,data.length*RH+20,24); x.fill();
+  data.forEach((gl,i)=>{
+    const y=top+i*RH, cy=y+RH/2;
+    if(i<3){ x.fillStyle='rgba(251,191,36,0.10)'; x.beginPath(); x.roundRect(56,y+5,W-112,RH-10,16); x.fill(); }
+    else if(i%2){ x.fillStyle='rgba(255,255,255,0.035)'; x.fillRect(56,y+5,W-112,RH-10); }
+    x.textBaseline='middle';
+    x.textAlign='center'; x.fillStyle=i<3?'#fbbf24':'#94a3b8'; x.font='40px "Bebas Neue"'; x.fillText(String(i+1),88,cy+2);
+    // foto del jugador (recorte circular) + aro
+    x.save(); x.shadowColor='rgba(0,0,0,0.4)'; x.shadowBlur=10; x.fillStyle='#fff'; x.beginPath(); x.arc(160,cy,36,0,Math.PI*2); x.fill(); x.restore();
+    circ(fotos[i],160,cy,33,'#2b3550',iniciales((gl.nombres||'')+' '+(gl.apellidos||'')),true);
+    const nombre=((gl.nombres||'')+' '+(gl.apellidos||'')).trim().toUpperCase();
+    x.textAlign='left'; x.fillStyle='#fff'; x.font=fit(nombre,'34px "Bebas Neue"',560,20); x.fillText(nombre+(i===0?'  👑':''),214,cy-12);
+    const e=EQUIPOS[gl.equipo_id]||{}, cl=CLUBES[e.club_id]||{};
+    if(cl.id) circ(escudos[cl.id]||null,226,cy+20,12,cl.color,iniciales(cl.nombre||'?'));
+    x.fillStyle='#cbd5e1'; x.font=fit(String(gl.equipo||'').toUpperCase(),'600 18px Inter',520,12); x.fillText(String(gl.equipo||'').toUpperCase(),cl.id?246:214,cy+21);
+    x.textAlign='right'; x.fillStyle='#fff'; x.font='52px "Bebas Neue"'; x.fillText(String(gl.goles),985,cy+4);
+    x.fillStyle='#94a3b8'; x.font='700 12px Inter'; x.fillText(gl.goles===1?'GOL':'GOLES',985,cy+30);
+  });
+  x.textAlign='center'; x.textBaseline='alphabetic'; x.fillStyle='#94a3b8'; x.font='600 20px Inter';
+  x.fillText('⚡ POWERED BY LIGUIFY · liguify.com',W/2,H-40);
+  const a=document.createElement('a'); a.download=`goleadores-${catTxt.toLowerCase().replace(/[^a-z0-9]+/g,'-')}.png`; a.href=cv.toDataURL('image/png'); a.click();
+  toast('🖼 Imagen de goleadores descargada ✔');
+}
+
 function cargarImg(url){
   return new Promise(res=>{
     if(!url){res(null);return;}
@@ -5244,7 +5295,7 @@ async function goleadoresHTML(categoriaId){
     .gt('goles',0).order('goles',{ascending:false}).order('apellidos').limit(6);
   if(error||!data||!data.length) return '';
   return `<div class="bg-white rounded-2xl border border-line mb-4 overflow-hidden">
-    <div class="px-4 py-3 border-b border-line font-display text-xl tracking-wide">⚽ GOLEADORES</div>
+    <div class="px-4 py-3 border-b border-line flex items-center justify-between"><span class="font-display text-xl tracking-wide">⚽ GOLEADORES</span><button onclick="compartirGoleadores()" title="Descargar imagen de goleadores (top 10) para redes" class="text-[10px] font-bold text-ink-500 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper">🖼 COMPARTIR</button></div>
     ${data.map((g,i)=>`<div class="flex items-center gap-3 px-4 py-2 border-b border-line last:border-0 ${i===0?'bg-amber-50/60':''}">
       <span class="w-5 text-ink-400 font-bold text-sm text-center shrink-0">${i+1}</span>
       <span class="w-9 h-9 rounded-full grid place-items-center text-[10px] font-bold text-white overflow-hidden relative shrink-0" style="background:#2b3550">${g.foto_url?`<img src="${g.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(g.nombres+' '+g.apellidos)}</span>
