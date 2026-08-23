@@ -1142,6 +1142,30 @@ async function altaJugador(pais,doc){
 }
 
 /* ---- PARTIDOS (formato fixture) ---- */
+/* Goles y tarjetas por partido (planilla pública) para mostrarlos bajo el marcador
+   sin entrar al detalle: ⚽ Nombre Apellido ×2 · 🟨 · 🟥, alineados con su equipo */
+let PLAN_IDX={};
+async function cargarPlanillas(ids){
+  ids=(ids||[]).filter(id=>id&&!(id in PLAN_IDX));
+  if(!ids.length) return;
+  const {data}=await sb.from('vista_planilla_publica').select('partido_id,equipo_id,nombres,apellidos,goles,amarillas,rojas')
+    .in('partido_id',ids).or('goles.gt.0,amarillas.gt.0,rojas.gt.0');
+  ids.forEach(id=>{PLAN_IDX[id]=[];});
+  (data||[]).forEach(r=>{(PLAN_IDX[r.partido_id]=PLAN_IDX[r.partido_id]||[]).push(r);});
+}
+function eventosHTML(m){
+  const rows=PLAN_IDX[m.id]; if(!rows||!rows.length) return '';
+  const nom=r=>(((r.nombres||'').trim().split(/\s+/)[0]||'')+' '+((r.apellidos||'').trim().split(/\s+/)[0]||'')).trim();
+  const lado=eqId=>rows.filter(r=>r.equipo_id===eqId).flatMap(r=>{const o=[];
+    if(r.goles>0) o.push(`<span class="block whitespace-nowrap">⚽ ${nom(r)}${r.goles>1?' <b>×'+r.goles+'</b>':''}</span>`);
+    if(r.amarillas>0) o.push(`<span class="block whitespace-nowrap">🟨 ${nom(r)}${r.amarillas>1?' ×'+r.amarillas:''}</span>`);
+    if(r.rojas>0) o.push(`<span class="block whitespace-nowrap">🟥 ${nom(r)}</span>`);
+    return o;}).join('');
+  const L=lado(m.local_id), V=lado(m.visita_id);
+  if(!L&&!V) return '';
+  return `<div class="flex gap-1 sm:gap-2 mt-1 text-[10px] text-ink-500 font-semibold">
+    <div class="flex-1 min-w-0 text-right">${L}</div><div class="w-24 sm:w-28 shrink-0"></div><div class="flex-1 min-w-0 text-left">${V}</div></div>`;
+}
 async function renderPartidos(){
   const {data:pms,error}=await sb.from('partido')
     .select('*, jornada:jornada_id(numero,horarios_publicados)')
@@ -1158,6 +1182,7 @@ async function renderPartidos(){
     eqs=Object.fromEntries((es.data||[]).map(e=>[e.id,{nombre:e.nombre||(cl[e.club_id]||{}).nombre||'—', club:cl[e.club_id]||{}}]));
   }
   CLUB_PIDX={}; (pms||[]).forEach(m=>CLUB_PIDX[m.id]=m); CLUB_EQNOM=eqs;
+  await cargarPlanillas((pms||[]).filter(m=>['finalizado','walkover'].includes(m.estado)).map(m=>m.id));   // goles y tarjetas bajo el marcador
   const lado=(id,der)=>{const e=eqs[id];if(!e)return '<span class="italic text-ink-400">Por definir</span>';
     const b=`<span class="relative inline-grid place-items-center w-7 h-7 rounded-lg text-white text-[10px] font-bold shrink-0 overflow-hidden" style="background:${e.club.escudo_url?'#fff':(e.club.color||'#334155')}">${e.club.escudo_url?`<img src="${e.club.escudo_url}" class="absolute inset-0 w-full h-full object-contain"/>`:iniciales(e.club.nombre)}</span>`;
     return der?`${b} ${e.nombre}`:`${e.nombre} ${b}`;};
@@ -1177,6 +1202,7 @@ async function renderPartidos(){
         </div>
         <div class="flex-1 min-w-0 flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm ${gV?'font-bold':''}">${lado(m.visita_id,true)}</div>
       </div>
+      ${eventosHTML(m)}
       <p class="text-[10px] text-ink-400 text-center ${m.video_url?'':'pb-2'}">${ctx}${(m.jornada&&m.jornada.horarios_publicados===false)?' · 🕒 horario por confirmar':`${m.fecha?' · '+m.fecha:''}${m.hora?' '+m.hora.slice(0,5):''}${m.sede?' · '+m.sede:''}`}</p>
       ${m.video_url?`<div class="pb-2">${videoPill(m.video_url)}</div>`:''}
     </div>`;
