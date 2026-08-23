@@ -85,9 +85,9 @@ tailwind.config={theme:{extend:{
     <button onclick="show('s-hub')" class="text-sm text-ink-500 mb-3 font-semibold">← Mis equipos</button>
     <div id="eq-head" class="mb-4"></div>
     <div class="flex gap-1.5 mb-5" id="eq-tabs"></div>
-    <div id="tab-plantel" class="ctab"></div>
+    <div id="tab-tabla" class="ctab"></div>
+    <div id="tab-plantel" class="ctab hidden"></div>
     <div id="tab-partidos" class="ctab hidden"></div>
-    <div id="tab-tabla" class="ctab hidden"></div>
   </section>
 </main>
 
@@ -510,9 +510,9 @@ async function canjearCodigo(){
 
 /* ============ EQUIPO ============ */
 function tabs(act){
-  $('eq-tabs').innerHTML=[['plantel','Plantel (LBF)'],['partidos','Partidos'],['tabla','Tabla']].map(([t,l])=>
+  $('eq-tabs').innerHTML=[['tabla','Resultados y estadísticas'],['plantel','Plantel (LBF)'],['partidos','Programación']].map(([t,l])=>
     `<button onclick="tabs('${t}')" class="tabbtn ${t===act?'active':''} text-sm font-bold px-4 py-2 rounded-xl border border-line bg-white">${l}</button>`).join('');
-  ['plantel','partidos','tabla'].forEach(t=>$('tab-'+t).classList.toggle('hidden',t!==act));
+  ['tabla','plantel','partidos'].forEach(t=>$('tab-'+t).classList.toggle('hidden',t!==act));
 }
 async function abrirEquipo(id){
   EQ=MIS.find(m=>m.equipo_id===id); if(!EQ) return;
@@ -524,13 +524,17 @@ async function abrirEquipo(id){
     </div>
     <span class="text-[10px] font-bold bg-white/10 border border-white/20 rounded-full px-3 py-1 uppercase">${EQ.rol}</span>
   </div>`;
-  tabs('plantel');
-  await Promise.all([renderPlantel(),renderPartidos(),renderTablaEq()]);
+  tabs('tabla');
+  EQ_LISTO=false;
+  await Promise.all([renderPlantel(),renderPartidos()]);   // dejan listas las secciones de resultados y estadísticas
+  await renderTablaEq();
+  EQ_LISTO=true;
+  show('s-equipo');
   show('s-equipo');
 }
 
 /* ---- PLANTEL (LBF) ---- */
-let N_LBF=0;
+let N_LBF=0, STATS_HTML='', RESULTADOS_HTML='', EQ_LISTO=false;   // STATS/RESULTADOS se muestran en la pestaña Resultados y estadísticas
 async function renderPlantel(){
   const [insQ,tq,cq]=await Promise.all([
     sb.from('inscripcion_lbf').select('*').eq('equipo_id',EQ.equipo_id).order('dorsal'),
@@ -592,7 +596,7 @@ async function renderPlantel(){
         ?'Los jugadores que agregues quedan <b>PENDIENTES</b> hasta subir su <b>autorización de Padre/Tutor</b> (o hasta que el organizador los active).'
         :'Este torneo no exige autorización de Padre/Tutor: tus jugadores quedan <b>habilitados</b> sin validación adicional.'} Un jugador solo puede estar en un equipo por categoría (anti-suplantación).</p>
     </div>
-    ${ins.length?(()=>{
+    ${(STATS_HTML=(ins.length?(()=>{
       const filas=ins.map(i=>{
         const j=jug[i.jugador_id]||{}, s=stats[i.id]||{pj:0,min:0,g:0,as:0};
         const part=s.pj>0?Math.round(100*s.min/(s.pj*DUR)):0;
@@ -632,9 +636,10 @@ async function renderPlantel(){
         </tr>`).join('')}</tbody>
       </table></div>
       <p class="text-[10px] text-ink-400 px-5 py-2 bg-paper">PJ y minutos provienen de la planilla que carga el organizador en cada resultado. %Part = minutos ÷ (PJ × ${DUR}').</p>
-    </div>`;})():''}
+    </div>`;})():''),'')}
     <div id="ct-card" class="mt-4"></div>`;
   renderCT(puedeEditar);
+  if(EQ_LISTO) renderTablaEq();   // las estadísticas viven en la pestaña Resultados y estadísticas
 }
 /* ---- Carnet del comando técnico: tarjeta NFC (85.6×54mm) con QR de seguridad
    → liguify.com/verificar?ct=<token> valida EN VIVO contra la BD ---- */
@@ -1183,9 +1188,12 @@ async function renderPartidos(){
       <button onclick="exportarExcelFixtureClub()" title="Excel con todas las fechas de tu categoría" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">⬇ EXCEL FIXTURE</button>
       <button onclick="imprimirFixtureClub()" title="PDF del fixture completo de tu categoría, con escudos" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">🖨 PDF FIXTURE</button>
     </div>
-    ${prox.length?`<div class="bg-white rounded-2xl border border-line mb-4 overflow-hidden"><p class="px-5 py-3 border-b border-line font-display text-xl tracking-wide">PRÓXIMOS PARTIDOS</p>${prox.map(fila).join('')}</div>`:''}
-    ${jugados.length?`<div class="bg-white rounded-2xl border border-line overflow-hidden"><p class="px-5 py-3 border-b border-line font-display text-xl tracking-wide">RESULTADOS</p>${jugados.map(fila).join('')}</div>`:''}`
+    ${prox.length?`<div class="bg-white rounded-2xl border border-line mb-4 overflow-hidden"><p class="px-5 py-3 border-b border-line font-display text-xl tracking-wide">PRÓXIMOS PARTIDOS</p>${prox.map(fila).join('')}</div>`
+      :'<p class="text-ink-400 text-sm bg-white border border-line rounded-2xl p-6 text-center">Sin próximos partidos programados.</p>'}`
     :'<p class="text-ink-400 text-sm bg-white border border-line rounded-2xl p-6 text-center">Sin partidos programados todavía.</p>';
+  // Los RESULTADOS (partidos jugados) se muestran en la pestaña Resultados y estadísticas
+  RESULTADOS_HTML=jugados.length?`<div class="bg-white rounded-2xl border border-line mb-4 overflow-hidden"><p class="px-5 py-3 border-b border-line font-display text-xl tracking-wide">⚽ RESULTADOS <span class="text-xs font-sans text-ink-400 font-semibold">${jugados.length} partido(s) jugado(s)</span></p>${jugados.slice().reverse().map(fila).join('')}</div>`:'';
+  if(EQ_LISTO) renderTablaEq();
 }
 
 /* ---- FIXTURE COMPLETO DE LA CATEGORÍA (Excel y PDF), igual que en el admin.
@@ -1410,7 +1418,7 @@ async function renderTablaEq(){
   const {data,error}=await sb.from('vista_tabla_zona').select('*').eq('categoria_id',EQ.categoria_id);
   if(error){$('tab-tabla').innerHTML='';return;}
   const zonas=[...new Set((data||[]).map(r=>r.zona))].sort();
-  $('tab-tabla').innerHTML=zonas.map(z=>{
+  const tablaHTML=zonas.map(z=>{
     const rows=(data||[]).filter(r=>r.zona===z).sort((a,b)=>b.pts-a.pts||b.dg-a.dg||b.gf-a.gf);
     if(!rows.some(r=>r.equipo_id===EQ.equipo_id)&&zonas.length>1) return '';
     return `<div class="bg-white rounded-2xl border border-line mb-4 overflow-x-auto">
@@ -1424,7 +1432,9 @@ async function renderTablaEq(){
         <td class="text-center text-sm font-semibold ${r.dg>0?'text-emerald-600':r.dg<0?'text-brand-600':'text-ink-400'}">${r.dg>0?'+':''}${r.dg}</td>
         <td class="text-center text-sm text-ink-400">${r.gf}</td>
         <td class="text-center text-sm text-ink-400">${r.gc}</td></tr>`).join('')}</tbody></table></div>`;
-  }).join('')+await goleadoresHTML(EQ.categoria_id)||'<p class="text-ink-400 text-sm bg-white border border-line rounded-2xl p-6 text-center">Tu equipo aún no está asignado a una zona.</p>';
+  }).join('')||'<p class="text-ink-400 text-sm bg-white border border-line rounded-2xl p-6 text-center mb-4">Tu equipo aún no está asignado a una zona.</p>';
+  // Orden de la pestaña: RESULTADOS (partidos jugados) · TABLA DE POSICIONES · ESTADÍSTICAS DEL TORNEO · GOLEADORES
+  $('tab-tabla').innerHTML=RESULTADOS_HTML+tablaHTML+(STATS_HTML?STATS_HTML.replace('rounded-2xl overflow-hidden mt-4','rounded-2xl overflow-hidden mb-4'):'')+await goleadoresHTML(EQ.categoria_id);
 }
 
 iniciar();
