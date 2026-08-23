@@ -84,6 +84,7 @@ tailwind.config={theme:{extend:{
       </div>
     </div>
     <div id="t-docs" class="mb-4"></div>
+    <div id="t-general"></div>
     <h2 class="font-display text-2xl tracking-wide mb-3">CATEGORÍAS</h2>
     <div class="space-y-2" id="categorias"></div>
   </section>
@@ -427,7 +428,54 @@ async function irTorneo(){
         <span class="text-xs text-ink-400">Modalidad ${c.modalidad}</span>
       </span><span class="text-ink-400">→</span>
     </button>`).join('') || '<p class="text-ink-400 text-sm">Sin categorías aún.</p>';
+  renderTablaGeneral('t-general',TORNEO,cs);
   show('s-categorias');
+}
+
+/* ---- 🏆 TABLA GENERAL del torneo (config "Mostrar tabla general") ----
+   Acumulado por EQUIPO de la suma de TODAS sus categorías (PJ/PG/PE/PP/GF/GC/PTS).
+   Llave del acumulado: club + nombre de equipo normalizado (Alianza A ≠ Alianza B).
+   Definición 2026-07-19 (ANALISIS_PUBLICO_ADMIN.md · I1). ---- */
+async function renderTablaGeneral(contId,torneo,cats){
+  const el=document.getElementById(contId); if(!el) return;
+  if(!torneo||!torneo.mostrar_tabla_general||!cats||!cats.length){el.innerHTML='';return;}
+  const catIds=cats.map(c=>c.id);
+  const {data:filas,error}=await sb.from('vista_tabla_zona').select('*').in('categoria_id',catIds);
+  if(error||!filas||!filas.length){el.innerHTML='';return;}
+  const eqIds=[...new Set(filas.map(f=>f.equipo_id))];
+  const {data:eqs}=await sb.from('equipo').select('id,nombre,club_id').in('id',eqIds);
+  const EQ=Object.fromEntries((eqs||[]).map(e=>[e.id,e]));
+  const clubIds=[...new Set((eqs||[]).map(e=>e.club_id))];
+  const {data:cls}=clubIds.length?await sb.from('club').select('id,nombre,escudo_url,color').in('id',clubIds):{data:[]};
+  const CL=Object.fromEntries((cls||[]).map(c=>[c.id,c]));
+  const norm=s=>String(s||'').toLowerCase().trim().replace(/\s+/g,' ');
+  const acc={};
+  filas.forEach(f=>{
+    const e=EQ[f.equipo_id]||{}, cl=CL[e.club_id]||{};
+    const key=(e.club_id||'?')+'|'+norm(e.nombre);
+    const a=acc[key]=acc[key]||{nombre:e.nombre||cl.nombre||f.equipo,club:cl,pj:0,pg:0,pe:0,pp:0,gf:0,gc:0,pts:0,cats:new Set()};
+    a.pj+=f.pj||0;a.pg+=f.pg||0;a.pe+=f.pe||0;a.pp+=f.pp||0;a.gf+=f.gf||0;a.gc+=f.gc||0;a.pts+=f.pts||0;a.cats.add(f.categoria_id);
+  });
+  const lista=Object.values(acc).map(a=>({...a,dg:a.gf-a.gc,ncat:a.cats.size}))
+    .sort((a,b)=>b.pts-a.pts||b.dg-a.dg||b.gf-a.gf||a.pj-b.pj||a.nombre.localeCompare(b.nombre,'es'));
+  const escudo=cl=>`<span class="inline-grid place-items-center w-7 h-7 rounded-lg text-white text-[10px] font-bold overflow-hidden relative shrink-0" style="background:${cl.escudo_url?'#fff':(cl.color||'#334155')}">${cl.escudo_url?`<img src="${cl.escudo_url}" class="absolute inset-0 w-full h-full object-contain"/>`:(cl.nombre||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</span>`;
+  const th=t=>`<th class="px-2 py-2 text-[10px] font-bold text-ink-400 text-center">${t}</th>`;
+  el.innerHTML=`<div class="bg-white border border-line rounded-2xl overflow-hidden mb-6">
+    <div class="px-5 py-3 border-b border-line flex items-center justify-between flex-wrap gap-2">
+      <span class="font-display text-xl tracking-wide">🏆 TABLA GENERAL</span>
+      <span class="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Acumulado de todas las categorías · ${lista.length} equipos</span>
+    </div>
+    <div class="overflow-x-auto"><table class="w-full text-sm">
+      <thead><tr class="bg-paper"><th class="px-3 py-2 text-[10px] font-bold text-ink-400 text-left">#</th><th class="px-2 py-2 text-[10px] font-bold text-ink-400 text-left">EQUIPO</th>${th('PJ')}${th('PG')}${th('PE')}${th('PP')}${th('GF')}${th('GC')}${th('DG')}${th('PTS')}</tr></thead>
+      <tbody>${lista.map((a,i)=>`<tr class="border-t border-line ${i<3?'bg-amber-50/40':''}">
+        <td class="px-3 py-2 font-display text-base ${i<3?'text-brand-600':'text-ink-400'}">${i+1}</td>
+        <td class="px-2 py-2"><span class="inline-flex items-center gap-2 font-bold">${escudo(a.club)}<span>${a.nombre}<span class="block text-[10px] text-ink-400 font-semibold">${a.ncat} categoría${a.ncat!==1?'s':''}</span></span></span></td>
+        <td class="px-2 py-2 text-center">${a.pj}</td><td class="px-2 py-2 text-center">${a.pg}</td><td class="px-2 py-2 text-center">${a.pe}</td><td class="px-2 py-2 text-center">${a.pp}</td>
+        <td class="px-2 py-2 text-center">${a.gf}</td><td class="px-2 py-2 text-center">${a.gc}</td><td class="px-2 py-2 text-center font-semibold">${a.dg>0?'+':''}${a.dg}</td>
+        <td class="px-2 py-2 text-center font-display text-lg">${a.pts}</td></tr>`).join('')}</tbody>
+    </table></div>
+    <p class="px-5 py-2 text-[10px] text-ink-400 border-t border-line">Suma de los resultados de cada equipo en todas las categorías del torneo. Orden: puntos, diferencia de gol, goles a favor.</p>
+  </div>`;
 }
 
 /* ============ CATEGORÍA ============ */
