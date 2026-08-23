@@ -4253,13 +4253,15 @@ async function generarImagenEquipoIdeal(ctx){
   const circulo=(img,cx,cy,r,color,ini)=>{x.save();x.beginPath();x.arc(cx,cy,r,0,Math.PI*2);x.closePath();x.fillStyle=img?'#fff':(color||'#334155');x.fill();x.clip();
     if(img){const s=r*1.7;x.drawImage(img,cx-s/2,cy-s/2,s,s);}else{x.fillStyle='#fff';x.font='700 '+Math.round(r*0.9)+'px Inter';x.textAlign='center';x.textBaseline='middle';x.fillText(ini||'?',cx,cy+2);}
     x.restore();};
-  // cabecera
-  circulo(logo,96,120,58,'#d9232e',iniciales(TORNEO.nombre));
+  // cabecera: el TÍTULO es el protagonista (grande, dorado, con sombra)
+  circulo(logo,96,122,58,'#d9232e',iniciales(TORNEO.nombre));
   x.textAlign='left'; x.textBaseline='alphabetic';
-  x.fillStyle='#fbbf24'; x.font='700 22px Inter'; x.fillText('EQUIPO IDEAL DE LA FECHA',176,90);
-  x.fillStyle='#fff'; x.font=fitText(TORNEO.nombre.toUpperCase(),'64px "Bebas Neue"',700,40); x.fillText(TORNEO.nombre.toUpperCase(),176,150);
-  x.fillStyle='#cbd5e1'; x.font='600 24px Inter';
-  x.fillText(`${(CATX.nombre_display||('CATEGORÍA '+CATX.anio_nacimiento+' / '+CATX.modalidad)).toUpperCase()}  ·  FECHA ${numero??''}  ·  ${Object.values(f).join('-')}`,176,190);
+  x.save(); x.shadowColor='rgba(0,0,0,0.55)'; x.shadowBlur=14; x.shadowOffsetY=4;
+  x.fillStyle='#fbbf24'; x.font=fitText('EQUIPO IDEAL DE LA FECHA','62px "Bebas Neue"',800,44); x.fillText('EQUIPO IDEAL DE LA FECHA',176,108);
+  x.restore();
+  x.fillStyle='#fff'; x.font=fitText(TORNEO.nombre.toUpperCase(),'42px "Bebas Neue"',800,28); x.fillText(TORNEO.nombre.toUpperCase(),176,156);
+  x.fillStyle='#cbd5e1'; x.font='600 22px Inter';
+  x.fillText(`${(CATX.nombre_display||('CATEGORÍA '+CATX.anio_nacimiento+' / '+CATX.modalidad)).toUpperCase()}  ·  FECHA ${numero??''}  ·  ${Object.values(f).join('-')}`,176,192);
   // cancha
   const PX=80,PY=250,PW=W-160,PH=980;
   x.save(); x.beginPath(); x.roundRect(PX,PY,PW,PH,28); x.clip();
@@ -4276,7 +4278,17 @@ async function generarImagenEquipoIdeal(ctx){
     x.beginPath(); x.arc(PX+PW/2,top?y0+118:y0-118,5,0,Math.PI*2); x.fillStyle='#fff'; x.fill();};
   area(true); area(false);
   // jugadores por línea (DEL arriba, ARQ abajo): FOTO del jugador + insignia del club + solo NOMBRE
-  const Y={DEL:0.20,MED:0.43,DEF:0.66,ARQ:0.86};
+  // Posición vertical CALCULADA: las líneas con jugadores se reparten en toda la
+  // altura de la cancha; la ficha (foto + nombre [+ categoría]) queda siempre
+  // dentro de las líneas y sin pisarse con la siguiente.
+  const lineasConJug=EI_LINEAS.filter(l=>DATA.some(p=>p.linea===l));   // ARQ,DEF,MED,DEL (las presentes)
+  const ordenVisual=['DEL','MED','DEF','ARQ'].filter(l=>lineasConJug.includes(l));
+  const tieneCat=!!(ctx.conCategoria&&DATA.some(p=>p.cat||p.catCorta));
+  const r0=62, altoFicha=r0*2+12+(tieneCat?68:46)+6;    // desde el borde superior de la foto hasta el final de la franja
+  const topIn=PY+18+14, botIn=PY+PH-18-14;               // dentro de las líneas de la cancha
+  const nL=ordenVisual.length;
+  const paso=nL>1?(botIn-topIn-altoFicha)/(nL-1):0;
+  const Y={}; ordenVisual.forEach((l,i)=>{ Y[l]=(nL>1?topIn+i*paso:(topIn+botIn)/2-altoFicha/2)+r0+6; });   // Y = centro de la foto
   const r=62;                       // radio de la foto
   const fotos={};
   for(const p of DATA){ fotos[p.inscripcion_id]=await cargarImg(p.foto); }
@@ -4294,7 +4306,7 @@ async function generarImagenEquipoIdeal(ctx){
     x.restore(); };
   EI_LINEAS.forEach(l=>{
     const lista=DATA.filter(p=>p.linea===l); if(!lista.length) return;
-    const cy=PY+PH*Y[l];
+    const cy=Y[l];
     lista.forEach((p,i)=>{
       const cx=PX+PW*(i+1)/(lista.length+1);
       const nom=primerNombre(p).toUpperCase();
