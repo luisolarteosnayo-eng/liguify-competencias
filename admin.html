@@ -3351,7 +3351,8 @@ async function renderFixture(){
       <div class="flex gap-1">
         ${esAdmin()?`<button onclick='modalEditPartido(${J})' class="text-xs font-bold text-ink-500 border border-line rounded-lg px-2 py-1.5 hover:bg-paper" title="Editar fecha, hora, sede, cancha, árbitro">✏️</button>`:''}
         ${ph?'':`<button onclick='abrirAcred(${J})' class="text-xs font-bold text-ink-500 border border-line rounded-lg px-2 py-1.5 hover:bg-paper" title="Acreditación en cancha">🪪</button>
-        <button onclick='abrirLive(${J})' class="text-xs font-bold text-white bg-brand-500 rounded-lg px-2 py-1.5 hover:bg-brand-600" title="Match Center en vivo">▶</button>
+        ${fin?`<button disabled class="text-xs font-bold text-white bg-ink-400/40 rounded-lg px-2 py-1.5 cursor-not-allowed" title="Partido finalizado: el Match Center en vivo queda deshabilitado para no alterar el resultado cargado (corrígelo con CARGAR)">▶</button>`
+             :`<button onclick='abrirLive(${J})' class="text-xs font-bold text-white bg-brand-500 rounded-lg px-2 py-1.5 hover:bg-brand-600" title="Match Center en vivo">▶</button>`}
         <button onclick='modalResultado(${J})' class="text-xs font-bold text-brand-600 border border-brand-100 rounded-lg px-2 py-1.5 hover:bg-brand-50">CARGAR</button>
         ${esAdmin()?`<button onclick='modalVideoPartido(${J})' class="text-xs font-bold rounded-lg px-2 py-1.5 border ${m.video_url?'text-emerald-700 border-emerald-300 bg-emerald-50 hover:bg-emerald-100':'text-ink-500 border-line hover:bg-paper'}" title="${m.video_url?'Video cargado — editar o quitar':'Cargar el video del partido (no toca el resultado)'}">📺</button>`:''}`}
         ${esAdmin()?`<button onclick='eliminarPartido(${J})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-brand-50 hover:text-brand-600" title="Eliminar partido">🗑</button>`:''}
