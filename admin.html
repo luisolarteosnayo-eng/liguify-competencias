@@ -3364,6 +3364,7 @@ async function renderFixture(){
     const j=JORNADAS.find(x=>x.id===jid);
     const btnHor=j?`<button onclick="imprimirFixturePDF('${jid}')" title="PDF de la programación de esta fecha (con escudos, horarios y canchas) — para compartir o imprimir" class="text-[10px] font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 mr-1 hover:bg-paper">🖨 PDF</button>
       <button onclick="imprimirPlanillasJornada('${jid}')" title="Imprimir las planillas de juego de todos los partidos de esta fecha (para apuntar en campo)" class="text-[10px] font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 mr-1 hover:bg-paper">🖨 PLANILLAS</button>
+      <button onclick="modalEquipoIdeal('${jid}')" title="Equipo ideal de la fecha: revisa los jugadores marcados en cada partido y genera la imagen para redes" class="text-[10px] font-bold text-amber-700 border border-amber-300 rounded-lg px-2.5 py-1.5 mr-1 hover:bg-amber-50">⭐ EQUIPO IDEAL</button>
       <button onclick="modalJornada('${jid}')" title="Gestión de la jornada: cambiar día, intercambiar con otra fecha, Excel, eliminar" class="text-[10px] font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 mr-1 hover:bg-paper">⚙ FECHA</button>
       <button onclick="toggleHorarios('${jid}',${j.horarios_publicados===false?'true':'false'})" title="Controla si esta jornada completa se muestra en el módulo público" class="text-[10px] font-bold rounded-lg px-3 py-1.5 mr-1 ${j.horarios_publicados===false?'bg-amber-100 text-amber-700 border border-amber-300':'text-ink-400 border border-line hover:bg-paper'}">${j.horarios_publicados===false?'🚫 OCULTA EN PÚBLICO':'👁 VISIBLE EN PÚBLICO'}</button>`:'';
     return `<div class="bg-white border border-line rounded-2xl mb-4">
@@ -4054,6 +4055,159 @@ async function modalJornada(jid){
     </div>`);
 }
 /* ---- Imagen de la programación (flyer PNG para compartir) ---- */
+/* ============ ⭐ EQUIPO IDEAL DE LA FECHA ============ */
+let RS_EI={};
+const EI_LINEAS=['ARQ','DEF','MED','DEL'];
+const EI_NOMBRE={ARQ:'ARQUERO',DEF:'DEFENSAS',MED:'MEDIOCAMPISTAS',DEL:'DELANTEROS'};
+// Formación por modalidad (definida por Luis 2026-08-22): F7 1-2-2-2 · F9 1-3-3-2 · F11 1-4-3-3
+function formacionEI(modalidad){
+  return modalidad==='F11'?{ARQ:1,DEF:4,MED:3,DEL:3}:modalidad==='F9'?{ARQ:1,DEF:3,MED:3,DEL:2}:{ARQ:1,DEF:2,MED:2,DEL:2};
+}
+// Línea sugerida a partir de la posición registrada del jugador
+function sugerirLinea(pos){
+  const p=String(pos||'').toLowerCase();
+  if(/arquer|porter|golero/.test(p)) return 'ARQ';
+  if(/defens|lateral|central|back|zaguer|líber|liber|stopper/.test(p)) return 'DEF';
+  if(/delant|extremo|punta|atacant|golead|wing|ariete|9/.test(p)) return 'DEL';
+  if(/medio|volante|mediocamp|enganche|pivot|contenci|interior|creativo/.test(p)) return 'MED';
+  return '';
+}
+let EI_JID=null, EI_DATA=[];
+async function modalEquipoIdeal(jid){
+  EI_JID=jid;
+  const j=JORNADAS.find(x=>x.id===jid)||{};
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⭐ EQUIPO IDEAL · FECHA ${j.numero??''}</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-500 mb-3">${CAT.nombre_display||('Categoría '+CAT.anio_nacimiento+' / '+CAT.modalidad)} · formación <b>${Object.values(formacionEI(CAT.modalidad)).join('-')}</b>. Los jugadores se marcan en <b>CARGAR</b> de cada partido (columna ⭐); aquí ajustas la línea, quitas y generas la imagen.</p>
+    <div id="ei-body" class="text-sm">Cargando…</div>`, true);
+  await cargarEquipoIdeal();
+}
+async function cargarEquipoIdeal(){
+  const {data:rows,error}=await sb.from('equipo_ideal').select('inscripcion_id,linea').eq('jornada_id',EI_JID);
+  if(error){$('ei-body').innerHTML=`<p class="text-brand-600 text-xs font-bold">${errNegocio(error)}</p>`;return;}
+  const insIds=(rows||[]).map(r=>r.inscripcion_id);
+  const ins=insIds.length?(await sb.from('inscripcion_lbf').select('id,equipo_id,jugador_id,dorsal').in('id',insIds)).data||[]:[];
+  const jids=[...new Set(ins.map(i=>i.jugador_id))];
+  const js=jids.length?(await sb.from('jugador_maestro').select('id,nombres,apellidos,posicion,foto_url').in('id',jids)).data||[]:[];
+  const J=Object.fromEntries(js.map(x=>[x.id,x])), I=Object.fromEntries(ins.map(x=>[x.id,x]));
+  EI_DATA=(rows||[]).map(r=>{const i=I[r.inscripcion_id]||{}, jg=J[i.jugador_id]||{}; const e=EQUIPOS[i.equipo_id]||{}, cl=CLUBES[e.club_id]||{};
+    return {inscripcion_id:r.inscripcion_id,linea:r.linea,nombre:((jg.nombres||'')+' '+(jg.apellidos||'')).trim(),posicion:jg.posicion||'',foto:jg.foto_url||null,
+            equipo:nomEq(e)||cl.nombre||'—',club:cl,equipo_id:i.equipo_id};});
+  renderEquipoIdeal();
+}
+function renderEquipoIdeal(){
+  const f=formacionEI(CAT.modalidad);
+  const porL=Object.fromEntries(EI_LINEAS.map(l=>[l,EI_DATA.filter(x=>x.linea===l)]));
+  const total=EI_DATA.length, meta=Object.values(f).reduce((a,b)=>a+b,0);
+  const ok=EI_LINEAS.every(l=>porL[l].length===f[l]);
+  $('ei-body').innerHTML=`
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+      <span class="text-xs font-bold ${ok?'text-emerald-700':'text-amber-700'}">${ok?'✔ Formación completa':'⚠ Formación incompleta o con excedentes'} · ${total}/${meta} jugadores</span>
+      <button onclick="generarImagenEquipoIdeal()" ${total?'':'disabled'} class="bg-brand-500 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-brand-600 disabled:opacity-40">🖼 GENERAR IMAGEN</button>
+    </div>
+    ${EI_LINEAS.map(l=>`<div class="border border-line rounded-xl mb-2 overflow-hidden">
+      <div class="flex items-center justify-between px-3 py-1.5 ${porL[l].length===f[l]?'bg-emerald-50':porL[l].length>f[l]?'bg-brand-50':'bg-paper'}">
+        <span class="font-display text-lg tracking-wide">${EI_NOMBRE[l]}</span>
+        <span class="text-[10px] font-bold ${porL[l].length===f[l]?'text-emerald-700':porL[l].length>f[l]?'text-brand-600':'text-ink-400'}">${porL[l].length} / ${f[l]}</span>
+      </div>
+      ${porL[l].map(p=>`<div class="flex items-center gap-2 px-3 py-1.5 border-t border-line text-xs">
+        ${p.club.escudo_url?`<img src="${p.club.escudo_url}" class="w-6 h-6 object-contain shrink-0"/>`:`<span class="w-6 h-6 rounded-md grid place-items-center text-white text-[9px] font-bold shrink-0" style="background:${p.club.color||'#334155'}">${iniciales(p.club.nombre||'?')}</span>`}
+        <span class="flex-1 min-w-0 truncate"><b>${p.nombre}</b> <span class="text-ink-400">· ${p.equipo}${p.posicion?' · '+p.posicion:''}</span></span>
+        <select onchange="cambiarLineaEI('${p.inscripcion_id}',this.value)" class="border border-line rounded-lg py-1 text-[10px] font-bold bg-white">${EI_LINEAS.map(x=>`<option ${x===p.linea?'selected':''}>${x}</option>`).join('')}</select>
+        <button onclick="quitarEI('${p.inscripcion_id}')" class="text-ink-400 hover:text-brand-600 font-bold px-1" title="Quitar del equipo ideal">✕</button>
+      </div>`).join('')||'<p class="px-3 py-2 text-[11px] text-ink-400 border-t border-line">Sin jugadores — márcalos en CARGAR del partido.</p>'}
+    </div>`).join('')}
+    <p class="text-[10px] text-ink-400 mt-2">La imagen se genera con los jugadores tal como están aquí (aunque la formación no esté completa).</p>`;
+}
+async function cambiarLineaEI(insId,linea){
+  const r=await sb.from('equipo_ideal').update({linea}).eq('jornada_id',EI_JID).eq('inscripcion_id',insId);
+  if(r.error){toast(errNegocio(r.error));return;}
+  const p=EI_DATA.find(x=>x.inscripcion_id===insId); if(p) p.linea=linea; renderEquipoIdeal();
+}
+async function quitarEI(insId){
+  const r=await sb.from('equipo_ideal').delete().eq('jornada_id',EI_JID).eq('inscripcion_id',insId);
+  if(r.error){toast(errNegocio(r.error));return;}
+  EI_DATA=EI_DATA.filter(x=>x.inscripcion_id!==insId); renderEquipoIdeal();
+}
+/* Imagen 1080×1350 (formato redes) con el estilo de las imágenes actuales */
+async function generarImagenEquipoIdeal(){
+  const j=JORNADAS.find(x=>x.id===EI_JID)||{};
+  const f=formacionEI(CAT.modalidad);
+  toast('🖼 Generando imagen del equipo ideal…');
+  await Promise.all([document.fonts.load('80px "Bebas Neue"'),document.fonts.load('700 30px Inter'),document.fonts.load('600 26px Inter')]);
+  const logo=await cargarImg(TORNEO.logo_url||MARCA.logo_url);
+  const escudos={};
+  for(const p of EI_DATA){ if(p.club&&p.club.id&&!escudos[p.club.id]) escudos[p.club.id]=await cargarImg(p.club.escudo_url); }
+  const W=1080,H=1350;
+  const cv=document.createElement('canvas'); cv.width=W; cv.height=H; const x=cv.getContext('2d');
+  // fondo
+  const g=x.createLinearGradient(0,0,0,H); g.addColorStop(0,'#0b1630'); g.addColorStop(1,'#171e2e');
+  x.fillStyle=g; x.fillRect(0,0,W,H);
+  x.fillStyle='rgba(217,35,46,0.10)'; x.beginPath(); x.arc(W-120,140,260,0,Math.PI*2); x.fill();
+  const fitText=(t,font,max,min)=>{let s=parseInt(font.match(/(\d+)px/)[1]);const m0=min||14;
+    for(;s>=m0;s--){x.font=font.replace(/\d+px/,s+'px');if(x.measureText(t).width<=max)break;}return x.font;};
+  const circulo=(img,cx,cy,r,color,ini)=>{x.save();x.beginPath();x.arc(cx,cy,r,0,Math.PI*2);x.closePath();x.fillStyle=img?'#fff':(color||'#334155');x.fill();x.clip();
+    if(img){const s=r*1.7;x.drawImage(img,cx-s/2,cy-s/2,s,s);}else{x.fillStyle='#fff';x.font='700 '+Math.round(r*0.9)+'px Inter';x.textAlign='center';x.textBaseline='middle';x.fillText(ini||'?',cx,cy+2);}
+    x.restore();};
+  // cabecera
+  circulo(logo,96,120,58,'#d9232e',iniciales(TORNEO.nombre));
+  x.textAlign='left'; x.textBaseline='alphabetic';
+  x.fillStyle='#fbbf24'; x.font='700 22px Inter'; x.fillText('EQUIPO IDEAL DE LA FECHA',176,90);
+  x.fillStyle='#fff'; x.font=fitText(TORNEO.nombre.toUpperCase(),'64px "Bebas Neue"',700,40); x.fillText(TORNEO.nombre.toUpperCase(),176,150);
+  x.fillStyle='#cbd5e1'; x.font='600 24px Inter';
+  x.fillText(`${(CAT.nombre_display||('CATEGORÍA '+CAT.anio_nacimiento+' / '+CAT.modalidad)).toUpperCase()}  ·  FECHA ${j.numero??''}  ·  ${Object.values(f).join('-')}`,176,190);
+  // cancha
+  const PX=80,PY=250,PW=W-160,PH=980;
+  x.save(); x.beginPath(); x.roundRect(PX,PY,PW,PH,28); x.clip();
+  const bandas=10; for(let i=0;i<bandas;i++){x.fillStyle=i%2?'#1b6b33':'#1f7a3a';x.fillRect(PX,PY+i*PH/bandas,PW,PH/bandas);}
+  x.restore();
+  x.strokeStyle='rgba(255,255,255,0.85)'; x.lineWidth=4;
+  x.beginPath(); x.roundRect(PX+18,PY+18,PW-36,PH-36,14); x.stroke();               // borde
+  x.beginPath(); x.moveTo(PX+18,PY+PH/2); x.lineTo(PX+PW-18,PY+PH/2); x.stroke();  // media
+  x.beginPath(); x.arc(PX+PW/2,PY+PH/2,90,0,Math.PI*2); x.stroke();                // círculo
+  x.beginPath(); x.arc(PX+PW/2,PY+PH/2,6,0,Math.PI*2); x.fillStyle='#fff'; x.fill();
+  const area=(top)=>{const aw=460,ah=160,gw=220,gh=64,y0=top?PY+18:PY+PH-18;
+    x.beginPath(); x.rect(PX+PW/2-aw/2,top?y0:y0-ah,aw,ah); x.stroke();
+    x.beginPath(); x.rect(PX+PW/2-gw/2,top?y0:y0-gh,gw,gh); x.stroke();
+    x.beginPath(); x.arc(PX+PW/2,top?y0+118:y0-118,5,0,Math.PI*2); x.fillStyle='#fff'; x.fill();};
+  area(true); area(false);
+  // jugadores por línea (DEL arriba, ARQ abajo)
+  const Y={DEL:0.20,MED:0.43,DEF:0.66,ARQ:0.86};
+  const r=48;
+  // tamaño de letra UNIFORME para todos los nombres (y para todos los clubes):
+  // el que permita al nombre más largo caber en su columna
+  const anchoCol=p=>Math.min(230,PW/EI_DATA.filter(q=>q.linea===p.linea).length-16);
+  const ajustar=(font,min,textos)=>{let s=parseInt(font.match(/(\d+)px/)[1]);
+    for(;s>min;s--){x.font=font.replace(/\d+px/,s+'px'); if(textos.every(([t,w])=>x.measureText(t).width<=w)) break;} return font.replace(/\d+px/,s+'px');};
+  const fNom=ajustar('30px "Bebas Neue"',18,EI_DATA.map(p=>[p.nombre.toUpperCase(),anchoCol(p)]));
+  const fClub=ajustar('600 16px Inter',11,EI_DATA.map(p=>['( '+String(p.equipo).toUpperCase()+' )',anchoCol(p)]));
+  EI_LINEAS.forEach(l=>{
+    const lista=EI_DATA.filter(p=>p.linea===l); if(!lista.length) return;
+    const cy=PY+PH*Y[l];
+    lista.forEach((p,i)=>{
+      const cx=PX+PW*(i+1)/(lista.length+1);
+      const nom=p.nombre.toUpperCase(), clb='( '+String(p.equipo).toUpperCase()+' )';
+      // franja oscura translúcida detrás de los textos (las líneas de la cancha no los cruzan)
+      x.font=fNom; const w1=x.measureText(nom).width; x.font=fClub; const w2=x.measureText(clb).width;
+      const pw=Math.max(w1,w2)+28, py0=cy+r+10;
+      x.fillStyle='rgba(11,22,48,0.62)'; x.beginPath(); x.roundRect(cx-pw/2,py0,pw,62,12); x.fill();
+      x.save(); x.shadowColor='rgba(0,0,0,0.45)'; x.shadowBlur=18; x.shadowOffsetY=6;
+      circulo(escudos[p.club.id]||null,cx,cy,r,p.club.color,iniciales(p.club.nombre||'?'));
+      x.restore();
+      x.strokeStyle='#fff'; x.lineWidth=4; x.beginPath(); x.arc(cx,cy,r,0,Math.PI*2); x.stroke();
+      x.textAlign='center'; x.textBaseline='alphabetic';
+      x.fillStyle='#fff'; x.font=fNom; x.fillText(nom,cx,cy+r+38);
+      x.fillStyle='#e2e8f0'; x.font=fClub; x.fillText(clb,cx,cy+r+60);
+    });
+  });
+  // pie
+  x.textAlign='center'; x.fillStyle='#94a3b8'; x.font='600 20px Inter';
+  x.fillText('⚡ POWERED BY LIGUIFY · liguify.com',W/2,H-40);
+  const a=document.createElement('a');
+  a.download=`equipo-ideal-fecha-${j.numero??''}-${String(CAT.nombre_display||CAT.anio_nacimiento).toLowerCase().replace(/[^a-z0-9]+/g,'-')}.png`;
+  a.href=cv.toDataURL('image/png'); a.click();
+  toast('🖼 Imagen del equipo ideal descargada ✔');
+}
+
 function cargarImg(url){
   return new Promise(res=>{
     if(!url){res(null);return;}
@@ -4465,16 +4619,27 @@ async function modalResultado(m){
     sb.from('planilla_partido').select('*').eq('partido_id',m.id)
   ]);
   const jids=(ins.data||[]).map(i=>i.jugador_id);
-  const js=jids.length?await sb.from('jugador_maestro').select('id,nombres,apellidos').in('id',jids):{data:[]};
+  const js=jids.length?await sb.from('jugador_maestro').select('id,nombres,apellidos,posicion').in('id',jids):{data:[]};
   const jn=Object.fromEntries((js.data||[]).map(j=>[j.id,(j.nombres||'')+' '+(j.apellidos||'')]));
-  RS_INS=(ins.data||[]).map(i=>({...i,nombre:jn[i.jugador_id]||'—'})).sort((a,b)=>(a.dorsal??99)-(b.dorsal??99));
+  const jpos=Object.fromEntries((js.data||[]).map(j=>[j.id,j.posicion||'']));
+  RS_INS=(ins.data||[]).map(i=>({...i,nombre:jn[i.jugador_id]||'—',posicion:jpos[i.jugador_id]||''})).sort((a,b)=>(a.dorsal??99)-(b.dorsal??99));
   RS_PLANILLA=Object.fromEntries((pl.data||[]).map(p=>[p.inscripcion_id,p]));
+  // ⭐ equipo ideal de la FECHA: lo ya marcado para estos jugadores en esta jornada
+  RS_EI={};
+  if(m.jornada_id&&RS_INS.length){
+    const ei=await sb.from('equipo_ideal').select('inscripcion_id,linea').eq('jornada_id',m.jornada_id).in('inscripcion_id',RS_INS.map(i=>i.id));
+    (ei.data||[]).forEach(r=>{RS_EI[r.inscripcion_id]=r.linea;});
+  }
+  const selEI=i=>{const sug=sugerirLinea(i.posicion), act=RS_EI[i.id]||'';
+    return `<select id="st-ei-${i.id}" title="⭐ Equipo ideal de la fecha: elige su línea${i.posicion?' (posición: '+i.posicion+')':''}" class="w-[58px] border rounded-lg py-1 text-[10px] font-bold text-center ${act?'border-amber-400 bg-amber-50 text-amber-800':'border-line bg-white text-ink-400'}" onchange="this.className=this.className.replace(/border-line bg-white text-ink-400|border-amber-400 bg-amber-50 text-amber-800/,this.value?'border-amber-400 bg-amber-50 text-amber-800':'border-line bg-white text-ink-400')">
+      <option value="">☆</option>${['ARQ','DEF','MED','DEL'].map(l=>`<option value="${l}" ${act===l?'selected':''}>${l}${l===sug?' •':''}</option>`).join('')}</select>`;};
   const filaJ=i=>{const p=RS_PLANILLA[i.id]||{};return `<div class="flex items-center gap-2 py-1 border-b border-line last:border-0">
     <span class="w-5 text-ink-400 font-bold text-xs text-right shrink-0">${i.dorsal??''}</span>
     <span class="flex-1 min-w-0 text-xs font-semibold truncate">${i.nombre}</span>
     <input id="st-g-${i.id}" type="number" min="0" value="${p.goles||0}" title="Goles" class="w-10 border border-line rounded-lg text-center py-1 text-xs font-bold"/>
     <input id="st-a-${i.id}" type="number" min="0" value="${p.amarillas||0}" title="Tarjetas amarillas" class="w-10 border border-yellow-300 bg-yellow-50 rounded-lg text-center py-1 text-xs font-bold"/>
     <input id="st-r-${i.id}" type="number" min="0" value="${p.rojas||0}" title="Tarjetas rojas" class="w-10 border border-brand-100 bg-brand-50 rounded-lg text-center py-1 text-xs font-bold"/>
+    ${m.jornada_id?selEI(i):''}
   </div>`;};
   const optsFig=RS_INS.length?[[m.local_id,L?nomEq(L):''],[m.visita_id,V?nomEq(V):'']].map(([eqId,nom])=>{
     const list=RS_INS.filter(i=>i.equipo_id===eqId);
@@ -4512,7 +4677,7 @@ async function modalResultado(m){
         <div class="min-w-0">
           <div class="flex items-center justify-between border-b-2 border-ink-900 pb-1">
             <p class="font-display text-lg tracking-wide truncate">${nom}</p>
-            <span class="flex gap-2 text-[10px] font-bold text-ink-400 shrink-0"><span class="w-10 text-center" title="Goles">⚽</span><span class="w-10 text-center">🟨</span><span class="w-10 text-center">🟥</span></span>
+            <span class="flex gap-2 text-[10px] font-bold text-ink-400 shrink-0"><span class="w-10 text-center" title="Goles">⚽</span><span class="w-10 text-center">🟨</span><span class="w-10 text-center">🟥</span>${m.jornada_id?'<span class="w-[58px] text-center" title="Equipo ideal de la fecha">⭐</span>':''}</span>
           </div>
           <div>${RS_INS.filter(i=>i.equipo_id===eqId).map(filaJ).join('')||'<p class="text-xs text-ink-400 py-3 text-center">Sin jugadores en LBF.</p>'}</div>
         </div>`).join('')}
@@ -4534,6 +4699,8 @@ async function guardarResultado(id){
       penales:false,penales_local:null,penales_visita:null,figura_inscripcion_id:null,video_url:null}).eq('id',id);
     if(error){toast(errNegocio(error));return;}
     const pl=await sb.from('planilla_partido').update({jugo:false,goles:0,amarillas:0,rojas:0,minutos:0,asistencias:0}).eq('partido_id',id);
+    // al anular el resultado, sus jugadores salen del equipo ideal de la fecha
+    if(RS_M&&RS_M.jornada_id&&RS_INS.length) await sb.from('equipo_ideal').delete().eq('jornada_id',RS_M.jornada_id).in('inscripcion_id',RS_INS.map(i=>i.id));
     if(pl.error) toast('Partido reprogramado, pero la planilla no se pudo limpiar: '+errNegocio(pl.error));
     cerrarModal(); toast('Partido devuelto a PROGRAMADO ✔ — resultado y estadísticas borrados, tabla recalculada');
     if(esMesa()) await renderMesa(); else {await renderFixture(); await renderTabla();}
@@ -4571,7 +4738,18 @@ async function guardarResultado(id){
     const up=await sb.from('planilla_partido').upsert(cambios,{onConflict:'partido_id,inscripcion_id'});
     if(up.error){toast('Resultado guardado, pero las estadísticas fallaron: '+errNegocio(up.error));return;}
   }
-  cerrarModal(); toast(`Resultado guardado ✔${cambios.length?` — estadísticas de ${cambios.length} jugador(es) registradas`:''} — tabla recalculada y publicada en vivo ⚡`);
+  // ⭐ equipo ideal de la fecha: se reemplazan las marcas de ESTOS jugadores en ESTA jornada
+  let nEI=0;
+  if(RS_M.jornada_id&&RS_INS.length&&$('st-ei-'+RS_INS[0].id)){
+    const sel=RS_INS.map(i=>({inscripcion_id:i.id,linea:($('st-ei-'+i.id)||{}).value||''})).filter(x=>x.linea);
+    await sb.from('equipo_ideal').delete().eq('jornada_id',RS_M.jornada_id).in('inscripcion_id',RS_INS.map(i=>i.id));
+    if(sel.length){
+      const ins=await sb.from('equipo_ideal').insert(sel.map(x=>({jornada_id:RS_M.jornada_id,inscripcion_id:x.inscripcion_id,linea:x.linea})));
+      if(ins.error) toast('Resultado guardado, pero el equipo ideal no se pudo registrar: '+errNegocio(ins.error));
+      else nEI=sel.length;
+    }
+  }
+  cerrarModal(); toast(`Resultado guardado ✔${cambios.length?` — estadísticas de ${cambios.length} jugador(es) registradas`:''}${nEI?` — ⭐ ${nEI} al equipo ideal de la fecha`:''} — tabla recalculada y publicada en vivo ⚡`);
   if(esMesa()) await renderMesa(); else {await renderFixture(); await renderTabla();}
 }
 
