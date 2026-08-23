@@ -4107,44 +4107,94 @@ async function cargarEquipoIdeal(){
   catch(e){ $('ei-body').innerHTML=`<p class="text-brand-600 text-xs font-bold">${e.message}</p>`; return; }
   renderEquipoIdeal();
 }
-/* ---- ⭐ EQUIPO IDEAL DE TODO EL TORNEO por fecha: una imagen por categoría ---- */
+/* ---- ⭐ EQUIPO IDEAL DEL TORNEO: UNA sola imagen mezclando categorías ----
+   De todos los jugadores marcados en la fecha (todas las categorías), el
+   organizador elige cuáles integran el equipo del torneo; la elección se
+   guarda (equipo_ideal.en_torneo) y se genera una única imagen. ---- */
+let EIT={cats:[],js:[],num:null,data:[],form:'F9'};
 async function modalEquipoIdealTorneo(){
   const cats=(await sb.from('categoria').select('id,nombre_display,anio_nacimiento,modalidad').eq('torneo_id',TORNEO.id).order('anio_nacimiento',{ascending:false})).data||[];
   if(!cats.length){toast('⚠ El torneo no tiene categorías');return;}
   const js=(await sb.from('jornada').select('id,numero,categoria_id').in('categoria_id',cats.map(c=>c.id))).data||[];
   const JN=Object.fromEntries(js.map(j=>[j.id,j]));
-  const rows=js.length?(await sb.from('equipo_ideal').select('jornada_id').in('jornada_id',js.map(j=>j.id))).data||[]:[];
+  const rows=js.length?(await sb.from('equipo_ideal').select('jornada_id,en_torneo').in('jornada_id',js.map(j=>j.id))).data||[]:[];
   const porNum={};
-  rows.forEach(r=>{const j=JN[r.jornada_id]; if(!j) return; const k=j.numero; porNum[k]=porNum[k]||{jug:0,cats:new Set()}; porNum[k].jug++; porNum[k].cats.add(j.categoria_id);});
+  rows.forEach(r=>{const j=JN[r.jornada_id]; if(!j) return; const k=j.numero; porNum[k]=porNum[k]||{jug:0,sel:0,cats:new Set()}; porNum[k].jug++; if(r.en_torneo) porNum[k].sel++; porNum[k].cats.add(j.categoria_id);});
   const nums=Object.keys(porNum).map(Number).sort((a,b)=>a-b);
+  EIT={cats,js,num:null,data:[],form:(TORNEO.modalidad_default||'F9')};
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⭐ EQUIPO IDEAL DEL TORNEO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
-    <p class="text-xs text-ink-500 mb-3">Genera el equipo ideal de <b>todas las categorías</b> de una fecha: una imagen por categoría (formación según modalidad). Los jugadores se marcan en CARGAR de cada partido.</p>
-    ${nums.length?`<label class="block text-sm mb-4"><span class="text-ink-400 font-semibold text-xs">Fecha</span>
-      <select id="eit-f" class="w-full border-b border-line py-2 font-semibold bg-transparent">
-        ${nums.map(n=>`<option value="${n}">FECHA ${n} — ${porNum[n].cats.size} categoría(s) · ${porNum[n].jug} jugador(es) marcados</option>`).join('')}
-      </select></label>
-    <button onclick="generarEquipoIdealTorneo()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">🖼 GENERAR IMÁGENES</button>
-    <p id="eit-msg" class="text-xs text-ink-500 mt-2"></p>`
-    :'<p class="text-sm text-ink-400">Aún no hay jugadores marcados para el equipo ideal en ninguna fecha.</p>'}`);
-  window.__EIT={cats,js};
+    <p class="text-xs text-ink-500 mb-3">Una <b>sola imagen</b> con jugadores de <b>distintas categorías</b>. Elige la fecha, marca quiénes integran el equipo del torneo (entre los marcados en cada partido) y genera la imagen.</p>
+    ${nums.length?`<div class="grid grid-cols-[1fr_auto] gap-3 mb-3">
+      <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Fecha</span>
+        <select id="eit-f" onchange="cargarEIT()" class="w-full border-b border-line py-2 font-semibold bg-transparent">
+          ${nums.map(n=>`<option value="${n}">FECHA ${n} — ${porNum[n].cats.size} cat. · ${porNum[n].jug} marcados · ${porNum[n].sel} en el torneo</option>`).join('')}
+        </select></label>
+      <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Formación</span>
+        <select id="eit-m" onchange="EIT.form=this.value;renderEIT()" class="border-b border-line py-2 font-semibold bg-transparent">
+          ${['F7','F9','F11'].map(m=>`<option value="${m}" ${m===EIT.form?'selected':''}>${m} · ${Object.values(formacionEI(m)).join('-')}</option>`).join('')}
+        </select></label>
+    </div>
+    <div id="eit-body" class="text-sm">Cargando…</div>`
+    :'<p class="text-sm text-ink-400">Aún no hay jugadores marcados para el equipo ideal en ninguna fecha.</p>'}`, true);
+  if(nums.length) cargarEIT();
 }
-async function generarEquipoIdealTorneo(){
-  const num=+$('eit-f').value, {cats,js}=window.__EIT||{};
-  if(!cats) return;
-  const msg=t=>{const el=$('eit-msg'); if(el) el.textContent=t;};
-  let n=0, sin=[];
-  for(const c of cats){
-    const j=js.find(x=>x.categoria_id===c.id&&x.numero===num);
-    if(!j){continue;}
-    let data=[]; try{ data=await datosEquipoIdeal(j.id); }catch(e){ sin.push(c.nombre_display||c.anio_nacimiento); continue; }
-    if(!data.length){ sin.push(c.nombre_display||('Cat. '+c.anio_nacimiento)); continue; }
-    msg(`Generando ${c.nombre_display||('Categoría '+c.anio_nacimiento)}…`);
-    await generarImagenEquipoIdeal({cat:c,numero:num,data});
-    n++;
-    await new Promise(r=>setTimeout(r,700));   // el navegador necesita un respiro entre descargas
+async function cargarEIT(){
+  EIT.num=+$('eit-f').value;
+  $('eit-body').innerHTML='Cargando…';
+  const data=[];
+  for(const c of EIT.cats){
+    const j=EIT.js.find(x=>x.categoria_id===c.id&&x.numero===EIT.num); if(!j) continue;
+    const rows=(await sb.from('equipo_ideal').select('inscripcion_id,en_torneo').eq('jornada_id',j.id)).data||[];
+    if(!rows.length) continue;
+    const sel=Object.fromEntries(rows.map(r=>[r.inscripcion_id,r.en_torneo]));
+    let d=[]; try{ d=await datosEquipoIdeal(j.id); }catch(e){ continue; }
+    d.forEach(p=>{p.jornada_id=j.id; p.cat=(c.nombre_display||('Cat. '+c.anio_nacimiento)).replace(/^Categor[ií]a\s+/i,'').toUpperCase(); p.catCorta=String(c.anio_nacimiento); p.en_torneo=!!sel[p.inscripcion_id];});
+    data.push(...d);
   }
-  msg(`✔ ${n} imagen(es) generada(s) para la FECHA ${num}${sin.length?' · sin jugadores marcados: '+sin.join(', '):''}`);
-  toast(`🖼 ${n} imagen(es) del equipo ideal descargadas — FECHA ${num}`);
+  EIT.data=data; renderEIT();
+}
+function renderEIT(){
+  const f=formacionEI(EIT.form);
+  const porL=Object.fromEntries(EI_LINEAS.map(l=>[l,EIT.data.filter(x=>x.linea===l)]));
+  const selL=l=>porL[l].filter(p=>p.en_torneo).length;
+  const total=EIT.data.filter(p=>p.en_torneo).length, meta=Object.values(f).reduce((a,b)=>a+b,0);
+  const ok=EI_LINEAS.every(l=>selL(l)===f[l]);
+  $('eit-body').innerHTML=`
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+      <span class="text-xs font-bold ${ok?'text-emerald-700':'text-amber-700'}">${ok?'✔ Formación completa':'⚠ Elige jugadores hasta completar la formación'} · ${total}/${meta} seleccionados</span>
+      <span class="flex gap-2">
+        <button onclick="guardarEIT()" class="bg-ink-900 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-ink-700">💾 GUARDAR SELECCIÓN</button>
+        <button onclick="generarImagenEIT()" ${total?'':'disabled'} class="bg-brand-500 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-brand-600 disabled:opacity-40">🖼 GENERAR IMAGEN</button>
+      </span>
+    </div>
+    ${EI_LINEAS.map(l=>`<div class="border border-line rounded-xl mb-2 overflow-hidden">
+      <div class="flex items-center justify-between px-3 py-1.5 ${selL(l)===f[l]?'bg-emerald-50':selL(l)>f[l]?'bg-brand-50':'bg-paper'}">
+        <span class="font-display text-lg tracking-wide">${EI_NOMBRE[l]}</span>
+        <span class="text-[10px] font-bold ${selL(l)===f[l]?'text-emerald-700':selL(l)>f[l]?'text-brand-600':'text-ink-400'}">${selL(l)} / ${f[l]} · ${porL[l].length} marcados</span>
+      </div>
+      ${porL[l].map(p=>`<label class="flex items-center gap-2 px-3 py-1.5 border-t border-line text-xs cursor-pointer ${p.en_torneo?'bg-amber-50/60':''}">
+        <input type="checkbox" ${p.en_torneo?'checked':''} onchange="EIT.data.find(x=>x.inscripcion_id==='${p.inscripcion_id}').en_torneo=this.checked;renderEIT()" class="w-4 h-4 accent-[#d9232e]"/>
+        ${p.club.escudo_url?`<img src="${p.club.escudo_url}" class="w-6 h-6 object-contain shrink-0"/>`:`<span class="w-6 h-6 rounded-md grid place-items-center text-white text-[9px] font-bold shrink-0" style="background:${p.club.color||'#334155'}">${iniciales(p.club.nombre||'?')}</span>`}
+        <span class="flex-1 min-w-0 truncate"><b>${p.nombre}</b> <span class="text-ink-400">· ${p.equipo}</span></span>
+        <span class="text-[9px] font-bold bg-ink-900 text-white rounded-full px-2 py-0.5 shrink-0">${p.cat}</span>
+      </label>`).join('')||'<p class="px-3 py-2 text-[11px] text-ink-400 border-t border-line">Sin jugadores marcados en esta línea.</p>'}
+    </div>`).join('')}
+    <p class="text-[10px] text-ink-400 mt-2">La imagen se genera con los seleccionados (aunque la formación no esté completa). Guarda la selección para conservarla.</p>`;
+}
+async function guardarEIT(){
+  // por jornada: marcar en_torneo según la selección actual
+  const porJ={}; EIT.data.forEach(p=>{(porJ[p.jornada_id]=porJ[p.jornada_id]||[]).push(p);});
+  for(const [jid,lista] of Object.entries(porJ)){
+    const si=lista.filter(p=>p.en_torneo).map(p=>p.inscripcion_id), no=lista.filter(p=>!p.en_torneo).map(p=>p.inscripcion_id);
+    if(si.length){const r=await sb.from('equipo_ideal').update({en_torneo:true}).eq('jornada_id',jid).in('inscripcion_id',si); if(r.error){toast(errNegocio(r.error));return;}}
+    if(no.length){const r=await sb.from('equipo_ideal').update({en_torneo:false}).eq('jornada_id',jid).in('inscripcion_id',no); if(r.error){toast(errNegocio(r.error));return;}}
+  }
+  toast('Selección del equipo del torneo guardada ✔');
+}
+async function generarImagenEIT(){
+  const data=EIT.data.filter(p=>p.en_torneo);
+  if(!data.length){toast('⚠ Selecciona al menos un jugador');return;}
+  await generarImagenEquipoIdeal({cat:{modalidad:EIT.form,nombre_display:'TODAS LAS CATEGORÍAS'},numero:EIT.num,data,conCategoria:true,archivo:`equipo-ideal-torneo-fecha-${EIT.num}.png`});
 }
 function renderEquipoIdeal(){
   const f=formacionEI(CAT.modalidad);
@@ -4249,8 +4299,10 @@ async function generarImagenEquipoIdeal(ctx){
       const cx=PX+PW*(i+1)/(lista.length+1);
       const nom=primerNombre(p).toUpperCase();
       // franja oscura translúcida detrás del nombre
-      x.font=fNom; const w1=x.measureText(nom).width; const pw=w1+30, py0=cy+r+12;
-      x.fillStyle='rgba(11,22,48,0.62)'; x.beginPath(); x.roundRect(cx-pw/2,py0,pw,46,12); x.fill();
+      const catTxt=(ctx.conCategoria&&(p.cat||p.catCorta))?String(p.cat||p.catCorta):'';
+      x.font=fNom; const w1=x.measureText(nom).width; x.font='700 15px Inter'; const w2=catTxt?x.measureText(catTxt).width:0;
+      const pw=Math.max(w1,w2)+30, py0=cy+r+12, ph=catTxt?68:46;
+      x.fillStyle='rgba(11,22,48,0.62)'; x.beginPath(); x.roundRect(cx-pw/2,py0,pw,ph,12); x.fill();
       // foto con sombra y aro blanco
       x.save(); x.shadowColor='rgba(0,0,0,0.45)'; x.shadowBlur=18; x.shadowOffsetY=6;
       x.fillStyle='#fff'; x.beginPath(); x.arc(cx,cy,r+3,0,Math.PI*2); x.fill(); x.restore();
@@ -4265,13 +4317,14 @@ async function generarImagenEquipoIdeal(ctx){
       // nombre
       x.textAlign='center'; x.textBaseline='alphabetic';
       x.fillStyle='#fff'; x.font=fNom; x.fillText(nom,cx,cy+r+44);
+      if(catTxt){ x.fillStyle='#fbbf24'; x.font='700 15px Inter'; x.fillText(catTxt,cx,cy+r+66); }
     });
   });
   // pie
   x.textAlign='center'; x.fillStyle='#94a3b8'; x.font='600 20px Inter';
   x.fillText('⚡ POWERED BY LIGUIFY · liguify.com',W/2,H-40);
   const a=document.createElement('a');
-  a.download=`equipo-ideal-fecha-${numero??''}-${String(CATX.nombre_display||CATX.anio_nacimiento).toLowerCase().replace(/[^a-z0-9]+/g,'-')}.png`;
+  a.download=ctx.archivo||`equipo-ideal-fecha-${numero??''}-${String(CATX.nombre_display||CATX.anio_nacimiento).toLowerCase().replace(/[^a-z0-9]+/g,'-')}.png`;
   a.href=cv.toDataURL('image/png'); a.click();
   toast('🖼 Imagen del equipo ideal descargada ✔');
 }
