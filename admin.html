@@ -4739,17 +4739,20 @@ async function guardarResultado(id){
     if(up.error){toast('Resultado guardado, pero las estadísticas fallaron: '+errNegocio(up.error));return;}
   }
   // ⭐ equipo ideal de la fecha: se reemplazan las marcas de ESTOS jugadores en ESTA jornada
-  let nEI=0;
+  let nEI=0, errEI='';
   if(RS_M.jornada_id&&RS_INS.length&&$('st-ei-'+RS_INS[0].id)){
     const sel=RS_INS.map(i=>({inscripcion_id:i.id,linea:($('st-ei-'+i.id)||{}).value||''})).filter(x=>x.linea);
-    await sb.from('equipo_ideal').delete().eq('jornada_id',RS_M.jornada_id).in('inscripcion_id',RS_INS.map(i=>i.id));
-    if(sel.length){
+    const del=await sb.from('equipo_ideal').delete().eq('jornada_id',RS_M.jornada_id).in('inscripcion_id',RS_INS.map(i=>i.id));
+    if(del.error){errEI='borrar: '+del.error.message;console.error('equipo_ideal delete',del.error);}
+    if(sel.length&&!errEI){
       const ins=await sb.from('equipo_ideal').insert(sel.map(x=>({jornada_id:RS_M.jornada_id,inscripcion_id:x.inscripcion_id,linea:x.linea})));
-      if(ins.error) toast('Resultado guardado, pero el equipo ideal no se pudo registrar: '+errNegocio(ins.error));
+      if(ins.error){errEI=ins.error.message;console.error('equipo_ideal insert',ins.error);}
       else nEI=sel.length;
     }
   }
-  cerrarModal(); toast(`Resultado guardado ✔${cambios.length?` — estadísticas de ${cambios.length} jugador(es) registradas`:''}${nEI?` — ⭐ ${nEI} al equipo ideal de la fecha`:''} — tabla recalculada y publicada en vivo ⚡`);
+  cerrarModal();
+  if(errEI) toast(`Resultado guardado ✔ pero el ⭐ equipo ideal NO se registró: ${errEI}`);
+  else toast(`Resultado guardado ✔${cambios.length?` — estadísticas de ${cambios.length} jugador(es) registradas`:''}${nEI?` — ⭐ ${nEI} al equipo ideal de la fecha`:''} — tabla recalculada y publicada en vivo ⚡`);
   if(esMesa()) await renderMesa(); else {await renderFixture(); await renderTabla();}
 }
 
