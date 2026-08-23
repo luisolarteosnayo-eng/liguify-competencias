@@ -539,6 +539,7 @@ async function renderTabla(){
     ${[['zonas','POR ZONA'],['puestos','⚖ MEJORES POR PUESTO']].map(([m,l])=>`<button onclick="setTablaModo('${m}')" class="text-xs font-bold px-4 py-2 rounded-xl border ${TABLA_MODO===m?'bg-ink-900 text-white border-ink-900':'bg-white border-line text-ink-500 hover:bg-paper'}">${l}</button>`).join('')}
   </div>`:'';
   const golHTML=await goleadoresHTML(CAT.id);
+  const ultHTML=await ultimosResultadosHTML();
   if(TABLA_MODO==='puestos'&&zonas.length>1){
     const porPuesto={};
     zonas.forEach(z=>{data.filter(r=>r.zona===z).sort(cmp).forEach((r,i)=>{(porPuesto[i+1]=porPuesto[i+1]||[]).push({...r,_zona:z});});});
@@ -559,7 +560,7 @@ async function renderTabla(){
               <td class="text-center text-xs font-bold text-ink-500">${r._zona}</td>
               ${celdas(r)}
             </tr>`).join('')}</tbody></table></div>`;
-      }).join('')+golHTML;
+      }).join('')+ultHTML+golHTML;
     return;
   }
   $('tab-tabla').innerHTML=toggle+zonas.map(z=>{
@@ -576,7 +577,7 @@ async function renderTabla(){
           <td><button onclick='irEquipoId("${r.equipo_id}")' class="flex items-center gap-2.5 font-semibold text-sm hover:text-brand-600">${EQUIPOS[r.equipo_id]?badge(EQUIPOS[r.equipo_id]):''}<span>${r.equipo}</span></button></td>
           ${orden.map(k=>{const v=r[COLDEF[k].f];return `<td class="text-center text-sm ${k==='PUNTOS'?'font-extrabold':k==='DIF_GOL'?(v>0?'text-emerald-600 font-semibold':v<0?'text-brand-600 font-semibold':'text-ink-400'):'text-ink-400'}">${k==='DIF_GOL'&&v>0?'+':''}${v}</td>`;}).join('')}
         </tr>`).join('')}</tbody></table></div>`;
-  }).join('')+golHTML || '<p class="text-ink-400 text-sm">Sin equipos en zonas todavía.</p>';
+  }).join('')+ultHTML+golHTML || '<p class="text-ink-400 text-sm">Sin equipos en zonas todavía.</p>';
 }
 
 /* Fixture: partidos agrupados por jornada, desde la BD */
@@ -592,30 +593,54 @@ async function renderFixture(){
   $('tab-fixture').innerHTML=Object.entries(grupos).map(([g,ms])=>`
     <div class="bg-white rounded-2xl border border-line mb-4">
       <div class="px-4 py-2.5 border-b border-line font-display text-lg tracking-wide">${g.toUpperCase()}</div>
-      ${ms.map(m=>{
-        const fin=m.estado==='finalizado'||m.estado==='walkover', vivo=m.estado==='en_vivo';
-        const L=EQUIPOS[m.local_id], V=EQUIPOS[m.visita_id];
-        const lado=(e,ori,der)=>e
-          ?(der?`${badge(e)} ${nomEq(e)}`:`${nomEq(e)} ${badge(e)}`)
-          :`<span class="italic text-ink-400">${etiquetaCupo(ori)}</span>`;
-        const gL=fin&&(m.penales?(m.penales_local??0)>(m.penales_visita??0):m.goles_local>m.goles_visita);
-        const gV=fin&&(m.penales?(m.penales_visita??0)>(m.penales_local??0):m.goles_visita>m.goles_local);
-        return `<div onclick="abrirDetallePartido('${m.id}')" class="px-3 sm:px-4 py-3 border-b border-line last:border-0 cursor-pointer hover:bg-paper" title="Ver detalle del partido">
-          <div class="flex items-center gap-1 sm:gap-2">
-            <div class="flex-1 min-w-0 flex items-center justify-end gap-1.5 sm:gap-2 text-xs sm:text-sm ${gL?'font-bold':''}">${lado(L,m.local_origen,false)}</div>
-            <div class="w-24 sm:w-28 text-center shrink-0">
-              ${vivo?`<span class="flex items-center justify-center gap-1 text-[9px] font-bold text-brand-600"><span class="live-dot"></span>EN VIVO</span>`
-                :`<span class="block text-[9px] font-bold uppercase ${fin?'text-emerald-600':'text-ink-400'}">${(!m.local_id||!m.visita_id)?'por definir':m.estado}</span>`}
-              <span class="font-display text-2xl">${m.goles_local??'–'} : ${m.goles_visita??'–'}</span>
-              ${m.penales?`<span class="block text-[11px] text-ink-400 -mt-0.5">penales ${m.penales_local} x ${m.penales_visita}</span>`:''}
-            </div>
-            <div class="flex-1 min-w-0 flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm ${gV?'font-bold':''}">${lado(V,m.visita_origen,true)}</div>
-          </div>
-          <p class="text-[11px] font-semibold text-ink-500 text-center mt-1.5">${(m.jornada&&m.jornada.horarios_publicados===false)?'🕒 Horario por confirmar':`📅 ${m.fecha||'Día por definir'}  ·  🕒 ${m.hora?m.hora.slice(0,5):'--:--'}${m.sede?'  ·  📍 '+m.sede:''}`}</p>
-          ${m.video_url?videoPill(m.video_url):''}
-        </div>`;
-      }).join('')}
+      ${ms.map(filaPartidoPublico).join('')}
     </div>`).join('') || '<p class="text-ink-400 text-sm">Sin partidos programados.</p>';
+}
+/* Fila de partido (la usan el Fixture y los Últimos resultados de la Tabla) */
+function filaPartidoPublico(m){
+  const fin=m.estado==='finalizado'||m.estado==='walkover', vivo=m.estado==='en_vivo';
+  const L=EQUIPOS[m.local_id], V=EQUIPOS[m.visita_id];
+  const lado=(e,ori,der)=>e
+    ?(der?`${badge(e)} ${nomEq(e)}`:`${nomEq(e)} ${badge(e)}`)
+    :`<span class="italic text-ink-400">${etiquetaCupo(ori)}</span>`;
+  const gL=fin&&(m.penales?(m.penales_local??0)>(m.penales_visita??0):m.goles_local>m.goles_visita);
+  const gV=fin&&(m.penales?(m.penales_visita??0)>(m.penales_local??0):m.goles_visita>m.goles_local);
+  return `<div onclick="abrirDetallePartido('${m.id}')" class="px-3 sm:px-4 py-3 border-b border-line last:border-0 cursor-pointer hover:bg-paper" title="Ver detalle del partido">
+    <div class="flex items-center gap-1 sm:gap-2">
+      <div class="flex-1 min-w-0 flex items-center justify-end gap-1.5 sm:gap-2 text-xs sm:text-sm ${gL?'font-bold':''}">${lado(L,m.local_origen,false)}</div>
+      <div class="w-24 sm:w-28 text-center shrink-0">
+        ${vivo?`<span class="flex items-center justify-center gap-1 text-[9px] font-bold text-brand-600"><span class="live-dot"></span>EN VIVO</span>`
+          :`<span class="block text-[9px] font-bold uppercase ${fin?'text-emerald-600':'text-ink-400'}">${(!m.local_id||!m.visita_id)?'por definir':m.estado}</span>`}
+        <span class="font-display text-2xl">${m.goles_local??'–'} : ${m.goles_visita??'–'}</span>
+        ${m.penales?`<span class="block text-[11px] text-ink-400 -mt-0.5">penales ${m.penales_local} x ${m.penales_visita}</span>`:''}
+      </div>
+      <div class="flex-1 min-w-0 flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm ${gV?'font-bold':''}">${lado(V,m.visita_origen,true)}</div>
+    </div>
+    <p class="text-[11px] font-semibold text-ink-500 text-center mt-1.5">${(m.jornada&&m.jornada.horarios_publicados===false)?'🕒 Horario por confirmar':`📅 ${m.fecha||'Día por definir'}  ·  🕒 ${m.hora?m.hora.slice(0,5):'--:--'}${m.sede?'  ·  📍 '+m.sede:''}`}</p>
+    ${m.video_url?videoPill(m.video_url):''}
+  </div>`;
+}
+/* ÚLTIMOS RESULTADOS (pestaña Tabla): la última fecha jugada o en juego.
+   Se elige la jornada visible de mayor número que tenga algún partido
+   finalizado/walkover/en vivo, y se muestran TODOS sus partidos. */
+async function ultimosResultadosHTML(){
+  const {data}=await sb.from('partido')
+    .select('*, jornada:jornada_id(numero,nombre,horarios_publicados)')
+    .eq('categoria_id',CAT.id).not('jornada_id','is',null).order('fecha').order('hora');
+  const vis=(data||[]).filter(m=>!(m.jornada&&m.jornada.horarios_publicados===false));
+  const jugados=vis.filter(m=>['finalizado','walkover','en_vivo'].includes(m.estado));
+  if(!jugados.length) return '';
+  const num=Math.max(...jugados.map(m=>(m.jornada&&m.jornada.numero)||0));
+  const ms=vis.filter(m=>((m.jornada&&m.jornada.numero)||0)===num);
+  ms.forEach(m=>{PART_IDX[m.id]=m;});
+  const enVivo=ms.some(m=>m.estado==='en_vivo');
+  return `<div class="bg-white rounded-2xl border border-line mb-4">
+    <div class="px-4 py-2.5 border-b border-line flex items-center justify-between flex-wrap gap-2">
+      <span class="font-display text-lg tracking-wide">${enVivo?'🔴 SE ESTÁ JUGANDO':'⚽ ÚLTIMOS RESULTADOS'} · FECHA ${num}</span>
+      <button onclick="renderTabs('fixture')" class="text-[11px] font-bold text-brand-600 hover:underline">Ver fixture completo →</button>
+    </div>
+    ${ms.map(filaPartidoPublico).join('')}
+  </div>`;
 }
 
 /* Llaves: bracket de la fase eliminatoria (no suma puntos a grupos) */
