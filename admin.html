@@ -4088,9 +4088,10 @@ async function cargarEquipoIdeal(){
   const ins=insIds.length?(await sb.from('inscripcion_lbf').select('id,equipo_id,jugador_id,dorsal').in('id',insIds)).data||[]:[];
   const jids=[...new Set(ins.map(i=>i.jugador_id))];
   const js=jids.length?(await sb.from('jugador_maestro').select('id,nombres,apellidos,posicion,foto_url').in('id',jids)).data||[]:[];
+  await fotosDelTorneo(js);   // foto del jugador en ESTE torneo (si el club la subió), si no la última
   const J=Object.fromEntries(js.map(x=>[x.id,x])), I=Object.fromEntries(ins.map(x=>[x.id,x]));
   EI_DATA=(rows||[]).map(r=>{const i=I[r.inscripcion_id]||{}, jg=J[i.jugador_id]||{}; const e=EQUIPOS[i.equipo_id]||{}, cl=CLUBES[e.club_id]||{};
-    return {inscripcion_id:r.inscripcion_id,linea:r.linea,nombre:((jg.nombres||'')+' '+(jg.apellidos||'')).trim(),posicion:jg.posicion||'',foto:jg.foto_url||null,
+    return {inscripcion_id:r.inscripcion_id,linea:r.linea,nombre:((jg.nombres||'')+' '+(jg.apellidos||'')).trim(),nombres:(jg.nombres||'').trim(),posicion:jg.posicion||'',foto:jg.foto_url||null,
             equipo:nomEq(e)||cl.nombre||'—',club:cl,equipo_id:i.equipo_id};});
   renderEquipoIdeal();
 }
@@ -4170,33 +4171,46 @@ async function generarImagenEquipoIdeal(){
     x.beginPath(); x.rect(PX+PW/2-gw/2,top?y0:y0-gh,gw,gh); x.stroke();
     x.beginPath(); x.arc(PX+PW/2,top?y0+118:y0-118,5,0,Math.PI*2); x.fillStyle='#fff'; x.fill();};
   area(true); area(false);
-  // jugadores por línea (DEL arriba, ARQ abajo)
+  // jugadores por línea (DEL arriba, ARQ abajo): FOTO del jugador + insignia del club + solo NOMBRE
   const Y={DEL:0.20,MED:0.43,DEF:0.66,ARQ:0.86};
-  const r=48;
-  // tamaño de letra UNIFORME para todos los nombres (y para todos los clubes):
-  // el que permita al nombre más largo caber en su columna
-  const anchoCol=p=>Math.min(230,PW/EI_DATA.filter(q=>q.linea===p.linea).length-16);
+  const r=62;                       // radio de la foto
+  const fotos={};
+  for(const p of EI_DATA){ fotos[p.inscripcion_id]=await cargarImg(p.foto); }
+  const primerNombre=p=>String(p.nombres||p.nombre||'').trim().split(/\s+/)[0]||'';
+  const anchoCol=p=>Math.min(240,PW/EI_DATA.filter(q=>q.linea===p.linea).length-16);
   const ajustar=(font,min,textos)=>{let s=parseInt(font.match(/(\d+)px/)[1]);
     for(;s>min;s--){x.font=font.replace(/\d+px/,s+'px'); if(textos.every(([t,w])=>x.measureText(t).width<=w)) break;} return font.replace(/\d+px/,s+'px');};
-  const fNom=ajustar('30px "Bebas Neue"',18,EI_DATA.map(p=>[p.nombre.toUpperCase(),anchoCol(p)]));
-  const fClub=ajustar('600 16px Inter',11,EI_DATA.map(p=>['( '+String(p.equipo).toUpperCase()+' )',anchoCol(p)]));
+  const fNom=ajustar('34px "Bebas Neue"',20,EI_DATA.map(p=>[primerNombre(p).toUpperCase(),anchoCol(p)]));
+  // foto recortada en círculo (cover); sin foto → escudo grande; sin escudo → iniciales
+  const fotoCirc=(img,cx,cy,rad,p)=>{
+    x.save(); x.beginPath(); x.arc(cx,cy,rad,0,Math.PI*2); x.closePath(); x.clip();
+    if(img){ const s=Math.max(rad*2/img.width,rad*2/img.height); const w=img.width*s,h=img.height*s; x.drawImage(img,cx-w/2,cy-h/2,w,h); }
+    else { const esc=escudos[p.club.id]||null; x.fillStyle=esc?'#fff':(p.club.color||'#334155'); x.fillRect(cx-rad,cy-rad,rad*2,rad*2);
+      if(esc){const s=rad*1.5;x.drawImage(esc,cx-s/2,cy-s/2,s,s);} else {x.fillStyle='#fff';x.font='700 '+Math.round(rad*0.8)+'px Inter';x.textAlign='center';x.textBaseline='middle';x.fillText(iniciales(p.club.nombre||'?'),cx,cy+2);} }
+    x.restore(); };
   EI_LINEAS.forEach(l=>{
     const lista=EI_DATA.filter(p=>p.linea===l); if(!lista.length) return;
     const cy=PY+PH*Y[l];
     lista.forEach((p,i)=>{
       const cx=PX+PW*(i+1)/(lista.length+1);
-      const nom=p.nombre.toUpperCase(), clb='( '+String(p.equipo).toUpperCase()+' )';
-      // franja oscura translúcida detrás de los textos (las líneas de la cancha no los cruzan)
-      x.font=fNom; const w1=x.measureText(nom).width; x.font=fClub; const w2=x.measureText(clb).width;
-      const pw=Math.max(w1,w2)+28, py0=cy+r+10;
-      x.fillStyle='rgba(11,22,48,0.62)'; x.beginPath(); x.roundRect(cx-pw/2,py0,pw,62,12); x.fill();
+      const nom=primerNombre(p).toUpperCase();
+      // franja oscura translúcida detrás del nombre
+      x.font=fNom; const w1=x.measureText(nom).width; const pw=w1+30, py0=cy+r+12;
+      x.fillStyle='rgba(11,22,48,0.62)'; x.beginPath(); x.roundRect(cx-pw/2,py0,pw,46,12); x.fill();
+      // foto con sombra y aro blanco
       x.save(); x.shadowColor='rgba(0,0,0,0.45)'; x.shadowBlur=18; x.shadowOffsetY=6;
-      circulo(escudos[p.club.id]||null,cx,cy,r,p.club.color,iniciales(p.club.nombre||'?'));
-      x.restore();
+      x.fillStyle='#fff'; x.beginPath(); x.arc(cx,cy,r+3,0,Math.PI*2); x.fill(); x.restore();
+      fotoCirc(fotos[p.inscripcion_id]||null,cx,cy,r,p);
       x.strokeStyle='#fff'; x.lineWidth=4; x.beginPath(); x.arc(cx,cy,r,0,Math.PI*2); x.stroke();
+      // insignia del club (abajo a la derecha de la foto)
+      const bx=cx+r*0.68, by=cy+r*0.68, br=24, esc=escudos[p.club.id]||null;
+      x.save(); x.shadowColor='rgba(0,0,0,0.4)'; x.shadowBlur=8; x.fillStyle='#fff'; x.beginPath(); x.arc(bx,by,br,0,Math.PI*2); x.fill(); x.restore();
+      x.save(); x.beginPath(); x.arc(bx,by,br-2,0,Math.PI*2); x.clip();
+      if(esc){const s=(br-2)*1.7;x.drawImage(esc,bx-s/2,by-s/2,s,s);} else {x.fillStyle=p.club.color||'#334155';x.fillRect(bx-br,by-br,br*2,br*2);x.fillStyle='#fff';x.font='700 16px Inter';x.textAlign='center';x.textBaseline='middle';x.fillText(iniciales(p.club.nombre||'?'),bx,by+1);}
+      x.restore();
+      // nombre
       x.textAlign='center'; x.textBaseline='alphabetic';
-      x.fillStyle='#fff'; x.font=fNom; x.fillText(nom,cx,cy+r+38);
-      x.fillStyle='#e2e8f0'; x.font=fClub; x.fillText(clb,cx,cy+r+60);
+      x.fillStyle='#fff'; x.font=fNom; x.fillText(nom,cx,cy+r+44);
     });
   });
   // pie
