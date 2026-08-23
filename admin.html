@@ -3352,7 +3352,8 @@ async function renderFixture(){
         ${esAdmin()?`<button onclick='modalEditPartido(${J})' class="text-xs font-bold text-ink-500 border border-line rounded-lg px-2 py-1.5 hover:bg-paper" title="Editar fecha, hora, sede, cancha, árbitro">✏️</button>`:''}
         ${ph?'':`<button onclick='abrirAcred(${J})' class="text-xs font-bold text-ink-500 border border-line rounded-lg px-2 py-1.5 hover:bg-paper" title="Acreditación en cancha">🪪</button>
         <button onclick='abrirLive(${J})' class="text-xs font-bold text-white bg-brand-500 rounded-lg px-2 py-1.5 hover:bg-brand-600" title="Match Center en vivo">▶</button>
-        <button onclick='modalResultado(${J})' class="text-xs font-bold text-brand-600 border border-brand-100 rounded-lg px-2 py-1.5 hover:bg-brand-50">CARGAR</button>`}
+        <button onclick='modalResultado(${J})' class="text-xs font-bold text-brand-600 border border-brand-100 rounded-lg px-2 py-1.5 hover:bg-brand-50">CARGAR</button>
+        ${esAdmin()?`<button onclick='modalVideoPartido(${J})' class="text-xs font-bold rounded-lg px-2 py-1.5 border ${m.video_url?'text-emerald-700 border-emerald-300 bg-emerald-50 hover:bg-emerald-100':'text-ink-500 border-line hover:bg-paper'}" title="${m.video_url?'Video cargado — editar o quitar':'Cargar el video del partido (no toca el resultado)'}">📺</button>`:''}`}
         ${esAdmin()?`<button onclick='eliminarPartido(${J})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-brand-50 hover:text-brand-600" title="Eliminar partido">🗑</button>`:''}
       </div>
     </div>`;
@@ -4743,6 +4744,30 @@ async function eliminarPartido(m){
   await renderFixture(); await renderTabla(); await renderEquipos();
 }
 let RS_INS=[], RS_PLANILLA={}, RS_M=null;
+/* ---- 📺 VIDEO DEL PARTIDO: botón aparte; solo escribe video_url (no toca
+   resultado, planilla ni tabla; no dispara recálculos) ---- */
+function modalVideoPartido(m){
+  const L=EQUIPOS[m.local_id],V=EQUIPOS[m.visita_id];
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">📺 VIDEO DEL PARTIDO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-sm font-semibold mb-1">${L?nomEq(L):'Por definir'} <span class="text-ink-400">vs</span> ${V?nomEq(V):'Por definir'}</p>
+    <p class="text-xs text-ink-400 mb-4">${m.fecha||''}${m.hora?' · '+m.hora.slice(0,5):''}${m.sede?' · '+m.sede:''}. El enlace se muestra en el público, en el club y en los perfiles de los jugadores. Guardar aquí <b>no modifica</b> el resultado ni las estadísticas.</p>
+    <label class="block text-sm mb-4"><span class="text-ink-400 font-semibold text-xs">URL del video (YouTube, Facebook, Drive…)</span>
+      <input id="vp-url" type="url" value="${(m.video_url||'').replace(/"/g,'&quot;')}" placeholder="https://youtube.com/..." class="w-full border-b border-line py-2 font-semibold bg-transparent"/></label>
+    <div class="flex gap-2">
+      ${m.video_url?`<button onclick="guardarVideoPartido('${m.id}',true)" class="border border-line text-ink-500 text-sm font-bold px-4 py-2.5 rounded-xl hover:bg-brand-50 hover:text-brand-600">QUITAR VIDEO</button>`:''}
+      <button onclick="guardarVideoPartido('${m.id}',false)" class="flex-1 bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR VIDEO</button>
+    </div>`);
+  setTimeout(()=>{const i=$('vp-url'); if(i&&!esMovil()) i.focus();},50);
+}
+async function guardarVideoPartido(id,quitar){
+  let vid=quitar?null:($('vp-url').value.trim()||null);
+  if(!quitar&&!vid){toast('⚠ Pega el enlace del video (o usa QUITAR VIDEO)');return;}
+  if(vid&&!/^https?:\/\//i.test(vid)) vid='https://'+vid;
+  const {error}=await sb.from('partido').update({video_url:vid}).eq('id',id);
+  if(error){toast(errNegocio(error));return;}
+  cerrarModal(); toast(quitar?'Video quitado':'📺 Video guardado ✔ — visible en el público');
+  if(esMesa()) await renderMesa(); else await renderFixture();
+}
 async function modalResultado(m){
   RS_M=m;
   const L=EQUIPOS[m.local_id],V=EQUIPOS[m.visita_id];
@@ -4801,8 +4826,7 @@ async function modalResultado(m){
         <input id="rs-pv" type="number" min="0" value="${m.penales_visita??0}" class="w-12 border border-line rounded-lg text-center py-1 font-bold"/>
       </span>
     </div>
-    ${esAdmin()?`<label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">📺 Video del partido (URL de YouTube u otro — visible en el público)</span>
-      <input id="rs-vid" type="url" value="${m.video_url||''}" placeholder="https://youtube.com/..." class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>`:''}
+    ${m.video_url?`<p class="text-[11px] text-ink-400 mb-3">📺 Este partido tiene video cargado. Se edita con el botón 📺 de la fila del partido (no desde aquí).</p>`:''}
     ${RS_INS.length?`<div class="border-t border-line pt-2 mb-3">
       <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-2">Estadísticas por jugador (opcional)</p>
       <div class="grid sm:grid-cols-2 gap-x-6 gap-y-2">
