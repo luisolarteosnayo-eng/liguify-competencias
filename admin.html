@@ -1593,12 +1593,14 @@ async function renderTablaGeneral(contId,torneo,cats){
   });
   const lista=Object.values(acc).map(a=>({...a,dg:a.gf-a.gc,ncat:a.cats.size}))
     .sort((a,b)=>b.pts-a.pts||b.dg-a.dg||b.gf-a.gf||a.pj-b.pj||a.nombre.localeCompare(b.nombre,'es'));
+  TG_LISTA=lista;   // para 🖼 COMPARTIR
   const escudo=cl=>`<span class="inline-grid place-items-center w-7 h-7 rounded-lg text-white text-[10px] font-bold overflow-hidden relative shrink-0" style="background:${cl.escudo_url?'#fff':(cl.color||'#334155')}">${cl.escudo_url?`<img src="${cl.escudo_url}" class="absolute inset-0 w-full h-full object-contain"/>`:(cl.nombre||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</span>`;
   const th=t=>`<th class="px-2 py-2 text-[10px] font-bold text-ink-400 text-center">${t}</th>`;
   el.innerHTML=`<div class="bg-white border border-line rounded-2xl overflow-hidden mb-6">
     <div class="px-5 py-3 border-b border-line flex items-center justify-between flex-wrap gap-2">
       <span class="font-display text-xl tracking-wide">🏆 TABLA GENERAL</span>
-      <span class="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Acumulado de todas las categorías · ${lista.length} equipos</span>
+      <span class="flex items-center gap-2"><span class="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Acumulado de todas las categorías · ${lista.length} equipos</span>
+      <button onclick="compartirTablaGeneral()" title="Descargar imagen de la tabla general para redes" class="text-[10px] font-bold text-ink-500 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper">🖼 COMPARTIR</button></span>
     </div>
     <div class="overflow-x-auto"><table class="w-full text-sm">
       <thead><tr class="bg-paper"><th class="px-3 py-2 text-[10px] font-bold text-ink-400 text-left">#</th><th class="px-2 py-2 text-[10px] font-bold text-ink-400 text-left">EQUIPO</th>${th('PJ')}${th('PG')}${th('PE')}${th('PP')}${th('GF')}${th('GC')}${th('DG')}${th('PTS')}</tr></thead>
@@ -4346,6 +4348,68 @@ async function generarImagenEquipoIdeal(ctx){
   toast('🖼 Imagen del equipo ideal descargada ✔');
 }
 
+/* ============ 🖼 IMAGEN DE TABLA DE POSICIONES (para redes) ============
+   opts: {titulo, linea2, linea3, filas:[{nombre,escudo_url,color,pj,pg,pe,pp,gf,gc,dg,pts}], archivo}
+   1080px de ancho, alto según filas; estilo de las demás imágenes del sistema. */
+let TG_LISTA=[], TZ_DATA={};
+async function generarImagenTabla(o){
+  toast('🖼 Generando imagen de la tabla…');
+  await Promise.all([document.fonts.load('80px "Bebas Neue"'),document.fonts.load('700 30px Inter'),document.fonts.load('600 26px Inter')]);
+  const logo=await cargarImg(TORNEO.logo_url||MARCA.logo_url);
+  const esc={}; for(const f of o.filas){ if(f.escudo_url&&!esc[f.escudo_url]) esc[f.escudo_url]=await cargarImg(f.escudo_url); }
+  const W=1080, RH=74, top=262, H=top+44+o.filas.length*RH+110;
+  const cv=document.createElement('canvas'); cv.width=W; cv.height=H; const x=cv.getContext('2d');
+  const g=x.createLinearGradient(0,0,0,H); g.addColorStop(0,'#0b1630'); g.addColorStop(1,'#171e2e'); x.fillStyle=g; x.fillRect(0,0,W,H);
+  x.fillStyle='rgba(217,35,46,0.10)'; x.beginPath(); x.arc(W-120,140,260,0,Math.PI*2); x.fill();
+  const fit=(t,font,max,min)=>{let s=parseInt(font.match(/(\d+)px/)[1]);for(;s>=(min||14);s--){x.font=font.replace(/\d+px/,s+'px');if(x.measureText(t).width<=max)break;}return x.font;};
+  const circ=(img,cx,cy,r,color,ini)=>{x.save();x.beginPath();x.arc(cx,cy,r,0,Math.PI*2);x.closePath();x.fillStyle=img?'#fff':(color||'#334155');x.fill();x.clip();
+    if(img){const s=r*1.7;x.drawImage(img,cx-s/2,cy-s/2,s,s);}else{x.fillStyle='#fff';x.font='700 '+Math.round(r*0.9)+'px Inter';x.textAlign='center';x.textBaseline='middle';x.fillText(ini||'?',cx,cy+2);}x.restore();};
+  // cabecera
+  circ(logo,96,122,58,'#d9232e',iniciales(TORNEO.nombre));
+  x.textAlign='left'; x.textBaseline='alphabetic';
+  x.save(); x.shadowColor='rgba(0,0,0,0.55)'; x.shadowBlur=14; x.shadowOffsetY=4;
+  x.fillStyle='#fbbf24'; x.font=fit(o.titulo,'62px "Bebas Neue"',820,44); x.fillText(o.titulo,176,108); x.restore();
+  x.fillStyle='#fff'; x.font=fit(o.linea2,'42px "Bebas Neue"',820,28); x.fillText(o.linea2,176,156);
+  x.fillStyle='#cbd5e1'; x.font=fit(o.linea3,'600 22px Inter',820,16); x.fillText(o.linea3,176,192);
+  // tarjeta de la tabla
+  x.fillStyle='rgba(255,255,255,0.06)'; x.beginPath(); x.roundRect(40,top-10,W-80,44+o.filas.length*RH+20,24); x.fill();
+  const cols=[['PJ',548],['PG',612],['PE',676],['PP',740],['GF',804],['GC',868],['DG',940],['PTS',1016]];
+  x.fillStyle='#94a3b8'; x.font='700 17px Inter'; x.textAlign='center';
+  cols.forEach(([h,cx])=>x.fillText(h,cx,top+22));
+  x.textAlign='left'; x.fillText('EQUIPO',150,top+22); x.fillText('#',74,top+22);
+  x.strokeStyle='rgba(255,255,255,0.12)'; x.lineWidth=2; x.beginPath(); x.moveTo(56,top+36); x.lineTo(W-56,top+36); x.stroke();
+  o.filas.forEach((f,i)=>{
+    const y=top+44+i*RH, cy=y+RH/2;
+    if(i<3){ x.fillStyle='rgba(251,191,36,0.10)'; x.beginPath(); x.roundRect(56,y+4,W-112,RH-8,14); x.fill(); }
+    else if(i%2){ x.fillStyle='rgba(255,255,255,0.035)'; x.fillRect(56,y+4,W-112,RH-8); }
+    x.textBaseline='middle';
+    x.textAlign='center'; x.fillStyle=i<3?'#fbbf24':'#94a3b8'; x.font='34px "Bebas Neue"'; x.fillText(String(i+1),84,cy+2);
+    circ(f.escudo_url?esc[f.escudo_url]:null,132,cy,24,f.color,iniciales(f.nombre||'?'));
+    x.textAlign='left'; x.fillStyle='#fff'; x.font=fit(String(f.nombre).toUpperCase(),'30px "Bebas Neue"',330,18); x.fillText(String(f.nombre).toUpperCase(),170,cy+2);
+    x.textAlign='center'; x.font='600 22px Inter'; x.fillStyle='#e2e8f0';
+    [['pj',548],['pg',612],['pe',676],['pp',740],['gf',804],['gc',868]].forEach(([k,cx])=>x.fillText(String(f[k]??0),cx,cy+1));
+    x.fillStyle=f.dg>0?'#6ee7b7':f.dg<0?'#fca5a5':'#cbd5e1'; x.font='700 22px Inter'; x.fillText((f.dg>0?'+':'')+(f.dg??0),940,cy+1);
+    x.fillStyle='#fff'; x.font='36px "Bebas Neue"'; x.fillText(String(f.pts??0),1016,cy+3);
+  });
+  x.textAlign='center'; x.textBaseline='alphabetic'; x.fillStyle='#94a3b8'; x.font='600 20px Inter';
+  x.fillText('⚡ POWERED BY LIGUIFY · liguify.com',W/2,H-40);
+  const a=document.createElement('a'); a.download=o.archivo||'tabla.png'; a.href=cv.toDataURL('image/png'); a.click();
+  toast('🖼 Imagen de la tabla descargada ✔');
+}
+function compartirTablaGeneral(){
+  if(!TG_LISTA.length){toast('⚠ La tabla general está vacía');return;}
+  generarImagenTabla({titulo:'TABLA GENERAL',linea2:TORNEO.nombre.toUpperCase(),linea3:`ACUMULADO DE TODAS LAS CATEGORÍAS · ${TG_LISTA.length} EQUIPOS`,
+    filas:TG_LISTA.map(a=>({nombre:a.nombre,escudo_url:(a.club||{}).escudo_url,color:(a.club||{}).color,pj:a.pj,pg:a.pg,pe:a.pe,pp:a.pp,gf:a.gf,gc:a.gc,dg:a.dg,pts:a.pts})),
+    archivo:`tabla-general-${TORNEO.nombre.toLowerCase().replace(/[^a-z0-9]+/g,'-')}.png`});
+}
+function compartirTablaZona(z){
+  const rows=TZ_DATA[z]||[]; if(!rows.length){toast('⚠ Zona sin equipos');return;}
+  const catTxt=(CAT.nombre_display||('CATEGORÍA '+CAT.anio_nacimiento+' / '+CAT.modalidad)).toUpperCase();
+  generarImagenTabla({titulo:'TABLA DE POSICIONES',linea2:TORNEO.nombre.toUpperCase(),linea3:`${catTxt}${Object.keys(TZ_DATA).length>1?'  ·  ZONA '+z:''}`,
+    filas:rows.map(r=>{const e=EQUIPOS[r.equipo_id]||{}, cl=CLUBES[e.club_id]||{};return {nombre:r.equipo,escudo_url:cl.escudo_url,color:cl.color,pj:r.pj,pg:r.pg,pe:r.pe,pp:r.pp,gf:r.gf,gc:r.gc,dg:r.dg,pts:r.pts};}),
+    archivo:`tabla-${catTxt.toLowerCase().replace(/[^a-z0-9]+/g,'-')}${Object.keys(TZ_DATA).length>1?'-zona-'+String(z).toLowerCase():''}.png`});
+}
+
 function cargarImg(url){
   return new Promise(res=>{
     if(!url){res(null);return;}
@@ -5227,10 +5291,11 @@ async function renderTabla(){
       }).join('')+golHTML;
     return;
   }
+  TZ_DATA={};
   $('tab-tabla').innerHTML=toggle+zonas.map(z=>{
-    const rows=data.filter(r=>r.zona===z).sort(orden);
+    const rows=data.filter(r=>r.zona===z).sort(orden); TZ_DATA[z]=rows;
     return `<div class="bg-white rounded-2xl border border-line mb-4 overflow-x-auto">
-      <div class="px-4 py-3 border-b border-line flex items-center justify-between"><span class="font-display text-xl tracking-wide">ZONA ${z}</span><span class="text-[9px] text-emerald-600 font-bold uppercase">⟳ calculada por Postgres</span></div>
+      <div class="px-4 py-3 border-b border-line flex items-center justify-between"><span class="font-display text-xl tracking-wide">ZONA ${z}</span><span class="flex items-center gap-2"><span class="text-[9px] text-emerald-600 font-bold uppercase">⟳ calculada por Postgres</span><button onclick="compartirTablaZona('${z}')" title="Descargar imagen de esta tabla para redes" class="text-[10px] font-bold text-ink-500 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper">🖼 COMPARTIR</button></span></div>
       <table class="w-full min-w-[440px]"><thead><tr class="text-[10px] uppercase text-ink-400 border-b border-line"><th class="py-2 w-8"></th><th class="text-left">Equipo</th><th class="w-9">PJ</th><th class="w-9">DG</th><th class="w-10">PTS</th></tr></thead>
       <tbody>${rows.map((r,i)=>`<tr class="border-b border-line last:border-0">
         <td class="py-2 pl-2 text-ink-400 font-bold text-center">${i+1}</td>
