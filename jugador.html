@@ -169,6 +169,12 @@ function render(){
     ${statTot(tot('rojas'),'🟥','text-brand-600')}
   </div>
 
+  ${(P.equipo_ideal||[]).length?`<div class="bg-gradient-to-r from-amber-400 to-amber-300 rounded-2xl px-5 py-4 mb-5 shadow-sm">
+    <p class="font-display text-xl tracking-wide text-ink-900 mb-2">⭐ EQUIPO IDEAL DE LA FECHA <span class="font-sans text-xs font-bold align-middle bg-ink-900 text-amber-300 rounded-full px-2.5 py-1 ml-1">${P.equipo_ideal.length} ${P.equipo_ideal.length===1?'VEZ':'VECES'}</span></p>
+    <div class="flex flex-wrap gap-2">${P.equipo_ideal.map(e=>`
+      <span class="bg-white/85 text-ink-900 rounded-xl px-3 py-1.5 text-[11px] font-bold">FECHA ${e.numero??'?'} · ${esc(e.torneo)}<span class="text-ink-500 font-semibold"> · ${esc(e.categoria)} · ${({ARQ:'Portero',DEF:'Defensa',MED:'Mediocampista',DEL:'Delantero'})[e.linea]||e.linea||''}</span></span>`).join('')}</div>
+  </div>`:''}
+
   ${fotos.length?`<h2 class="font-display text-2xl tracking-wide mb-2">📸 GALERÍA</h2>
   <div class="grid grid-cols-3 gap-2 mb-5">${fotos.map(f=>`
     <a href="${esc(f.url)}" target="_blank" class="block aspect-square rounded-2xl overflow-hidden border border-line bg-white"><img src="${esc(f.url)}" class="w-full h-full object-cover"/></a>`).join('')}</div>`:''}
@@ -208,6 +214,7 @@ function render(){
       <span class="flex-1 min-w-32 font-bold text-xs truncate">vs ${esc(m.rival)}</span>
       <span class="text-[10px] text-ink-400 font-semibold hidden sm:inline truncate max-w-32">${esc(m.torneo)}</span>
       <span class="flex gap-1.5 text-[11px] font-bold shrink-0">
+        ${m.ideal?'<span class="text-amber-500" title="Elegido en el equipo ideal de la fecha">⭐</span>':''}
         ${m.goles?`<span class="text-brand-600">⚽${m.goles>1?'×'+m.goles:''}</span>`:''}
         ${m.amarillas?'<span>🟨</span>':''}${m.rojas?'<span>🟥</span>':''}
         ${m.jugo&&!m.goles&&!m.amarillas&&!m.rojas?'<span class="text-emerald-600" title="Jugó">✓</span>':''}
