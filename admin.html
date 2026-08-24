@@ -1586,6 +1586,9 @@ async function abrirTorneo(t){
       <span class="text-ink-400">→</span></button>`).join('') || '<p class="text-ink-400 text-sm">Sin categorías — crea la primera.</p>';
   renderKPIs('t-kpis-adm',(cs||[]).map(c=>c.id));
   renderTablaGeneral('t-general-adm',t,cs);
+  // Torneo de UNA sola categoría: entrar directo a la categoría (el ← de la
+  // categoría sigue llevando a la pantalla del torneo: tabla general, planillas, etc.)
+  if((cs||[]).length===1){ await abrirCategoria(cs[0]); return; }
   show('s-torneo');
 }
 /* ---- 🏆 TABLA GENERAL del torneo (config "Mostrar tabla general") ----
