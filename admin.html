@@ -4413,7 +4413,7 @@ function compartirTablaZona(z){
 /* ============ 🖼 IMAGEN DE GOLEADORES (para redes) ============ */
 async function compartirGoleadores(){
   const {data,error}=await sb.from('vista_goleadores').select('*').eq('categoria_id',CAT.id)
-    .gt('goles',0).order('goles',{ascending:false}).order('apellidos').limit(10);
+    .gt('goles',0).order('goles',{ascending:false}).order('apellidos').limit(6);
   if(error||!data||!data.length){toast('⚠ Aún no hay goleadores en esta categoría');return;}
   toast('🖼 Generando imagen de goleadores…');
   await Promise.all([document.fonts.load('80px "Bebas Neue"'),document.fonts.load('700 30px Inter'),document.fonts.load('600 26px Inter')]);
@@ -5295,7 +5295,7 @@ async function goleadoresHTML(categoriaId){
     .gt('goles',0).order('goles',{ascending:false}).order('apellidos').limit(6);
   if(error||!data||!data.length) return '';
   return `<div class="bg-white rounded-2xl border border-line mb-4 overflow-hidden">
-    <div class="px-4 py-3 border-b border-line flex items-center justify-between"><span class="font-display text-xl tracking-wide">⚽ GOLEADORES</span><button onclick="compartirGoleadores()" title="Descargar imagen de goleadores (top 10) para redes" class="text-[10px] font-bold text-ink-500 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper">🖼 COMPARTIR</button></div>
+    <div class="px-4 py-3 border-b border-line flex items-center justify-between"><span class="font-display text-xl tracking-wide">⚽ GOLEADORES</span><button onclick="compartirGoleadores()" title="Descargar imagen de goleadores (top 6) para redes" class="text-[10px] font-bold text-ink-500 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper">🖼 COMPARTIR</button></div>
     ${data.map((g,i)=>`<div class="flex items-center gap-3 px-4 py-2 border-b border-line last:border-0 ${i===0?'bg-amber-50/60':''}">
       <span class="w-5 text-ink-400 font-bold text-sm text-center shrink-0">${i+1}</span>
       <span class="w-9 h-9 rounded-full grid place-items-center text-[10px] font-bold text-white overflow-hidden relative shrink-0" style="background:#2b3550">${g.foto_url?`<img src="${g.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(g.nombres+' '+g.apellidos)}</span>
