@@ -361,11 +361,21 @@ function pasoRegistroPadre(){
     <p class="text-xs text-ink-500 mb-4">Datos del padre/madre responsable. La foto de tu DNI se guarda en almacenamiento <b>privado</b> (no se publica) y sirve para verificar tu identidad.</p>
     <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Nombre y apellido *</span>
       <input id="rp-nom" class="w-full border-b border-line py-2 font-semibold bg-transparent"/></label>
-    <div class="grid grid-cols-2 gap-3 mb-3">
-      <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Teléfono *</span>
-        <input id="rp-tel" inputmode="tel" class="w-full border-b border-line py-2 font-semibold bg-transparent"/></label>
-      <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Email</span>
-        <input value="${esc(SESION.user.email)}" readonly class="w-full border-b border-line py-2 font-semibold bg-transparent text-ink-400"/></label>
+    <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Email</span>
+      <input value="${esc(SESION.user.email)}" readonly class="w-full border-b border-line py-2 font-semibold bg-transparent text-ink-400"/></label>
+    <div class="bg-paper border border-line rounded-xl p-3 mb-3">
+      <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1">📲 Celular (se verifica por SMS) *</p>
+      <div class="flex items-end gap-2">
+        <label class="block text-sm flex-1"><span class="text-ink-400 font-semibold text-xs">Celular (9 dígitos, empieza con 9)</span>
+          <input id="rp-tel" inputmode="tel" maxlength="12" oninput="resetSMS()" class="w-full border-b border-line py-2 font-semibold bg-transparent"/></label>
+        <button id="rp-sms-btn" onclick="enviarCodigoSMS()" class="shrink-0 text-xs font-bold text-brand-600 border border-brand-100 rounded-xl px-3 py-2 hover:bg-brand-50">ENVIAR CÓDIGO</button>
+      </div>
+      <div id="rp-sms-fila" class="hidden flex items-end gap-2 mt-2">
+        <label class="block text-sm flex-1"><span class="text-ink-400 font-semibold text-xs">Código recibido por SMS</span>
+          <input id="rp-sms-cod" inputmode="numeric" maxlength="6" autocomplete="one-time-code" class="w-full border-b border-line py-2 font-semibold bg-transparent tracking-[0.3em]"/></label>
+        <button id="rp-sms-ver" onclick="verificarCodigoSMS()" class="shrink-0 text-xs font-bold text-white bg-brand-500 rounded-xl px-3 py-2 hover:bg-brand-600">VERIFICAR</button>
+      </div>
+      <p id="rp-sms-msg" class="text-xs font-bold mt-1.5 text-ink-500"></p>
     </div>
     <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1">Foto de TU DNI (ambos lados) *</p>
     <label class="block text-sm mb-2"><span class="text-ink-400 font-semibold text-xs">Frontal</span>
@@ -374,6 +384,44 @@ function pasoRegistroPadre(){
       <input id="rp-drv" type="file" accept="image/*" class="w-full text-xs mt-1"/></label>
     <button id="rp-btn" onclick="enviarRegistroPadre()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">COMPLETAR REGISTRO</button>
     <p id="rp-msg" class="text-xs text-brand-600 font-bold mt-2"></p>`);
+}
+/* ── Verificación del celular por SMS (nivel 2) ── */
+function normTelPe(t){const d=String(t||'').replace(/\D/g,'');if(/^519\d{8}$/.test(d))return '+'+d;if(/^9\d{8}$/.test(d))return '+51'+d;return null;}
+function resetSMS(){ if(W.telOk){ W.telOk=null; $('rp-sms-msg').textContent='Cambiaste el número: vuelve a verificarlo por SMS.'; $('rp-sms-msg').className='text-xs font-bold mt-1.5 text-amber-600'; $('rp-sms-fila').classList.add('hidden'); $('rp-sms-btn').disabled=false; $('rp-sms-btn').textContent='ENVIAR CÓDIGO'; } }
+async function enviarCodigoSMS(){
+  const tel=normTelPe($('rp-tel').value);
+  if(!tel){$('rp-sms-msg').textContent='Número inválido: 9 dígitos y empieza con 9.';$('rp-sms-msg').className='text-xs font-bold mt-1.5 text-brand-600';return;}
+  $('rp-sms-btn').disabled=true; $('rp-sms-btn').textContent='Enviando…';
+  try{
+    const r=await sb.functions.invoke('enviar-sms-padre',{body:{telefono:tel}});
+    const d=r.data||{};
+    if(r.error||d.error) throw new Error(d.error||(d.msg)||r.error.message||'No se pudo enviar el SMS');
+    if(!d.ok) throw new Error(d.msg||'No se pudo enviar el SMS');
+    $('rp-sms-fila').classList.remove('hidden');
+    $('rp-sms-msg').textContent='📨 Código enviado a '+tel+'. Vence en 10 minutos.';
+    $('rp-sms-msg').className='text-xs font-bold mt-1.5 text-emerald-700';
+    let s=60; $('rp-sms-btn').textContent='REENVIAR ('+s+')';
+    const iv=setInterval(()=>{s--;if(s<=0){clearInterval(iv);$('rp-sms-btn').disabled=false;$('rp-sms-btn').textContent='REENVIAR';}else $('rp-sms-btn').textContent='REENVIAR ('+s+')';},1000);
+    setTimeout(()=>$('rp-sms-cod')&&$('rp-sms-cod').focus(),100);
+  }catch(e){
+    $('rp-sms-msg').textContent='⚠ '+(e.message||e);
+    $('rp-sms-msg').className='text-xs font-bold mt-1.5 text-brand-600';
+    $('rp-sms-btn').disabled=false; $('rp-sms-btn').textContent='ENVIAR CÓDIGO';
+  }
+}
+async function verificarCodigoSMS(){
+  const tel=normTelPe($('rp-tel').value), cod=$('rp-sms-cod').value.trim();
+  if(!tel||cod.length!==6){$('rp-sms-msg').textContent='Digita el código de 6 dígitos que recibiste.';$('rp-sms-msg').className='text-xs font-bold mt-1.5 text-brand-600';return;}
+  $('rp-sms-ver').disabled=true;
+  const r=await sb.rpc('verificar_codigo_sms',{p_telefono:tel,p_codigo:cod});
+  $('rp-sms-ver').disabled=false;
+  if(r.error){$('rp-sms-msg').textContent='⚠ '+r.error.message;$('rp-sms-msg').className='text-xs font-bold mt-1.5 text-brand-600';return;}
+  if(!r.data||!r.data.ok){$('rp-sms-msg').textContent='⚠ '+((r.data&&r.data.msg)||'Código incorrecto');$('rp-sms-msg').className='text-xs font-bold mt-1.5 text-brand-600';return;}
+  W.telOk=r.data.telefono;
+  $('rp-sms-fila').classList.add('hidden');
+  $('rp-sms-btn').disabled=true; $('rp-sms-btn').textContent='VERIFICADO';
+  $('rp-sms-msg').textContent='✅ Celular verificado: '+W.telOk;
+  $('rp-sms-msg').className='text-xs font-bold mt-1.5 text-emerald-700';
 }
 async function subirDniPadre(inputId,lado){
   let f=$(inputId).files[0]; if(!f) return null;
@@ -386,7 +434,8 @@ async function subirDniPadre(inputId,lado){
 async function enviarRegistroPadre(){
   const nom=$('rp-nom').value.trim(), tel=$('rp-tel').value.trim();
   if(!nom){$('rp-msg').textContent='Tu nombre y apellido son obligatorios.';return;}
-  if(!tel){$('rp-msg').textContent='El teléfono es obligatorio.';return;}
+  if(!tel){$('rp-msg').textContent='El celular es obligatorio.';return;}
+  if(!W.telOk||W.telOk!==normTelPe(tel)){$('rp-msg').textContent='Verifica tu celular: pide el código por SMS y digítalo antes de continuar.';return;}
   if(!$('rp-dfr').files[0]||!$('rp-drv').files[0]){$('rp-msg').textContent='Sube la foto de tu DNI por ambos lados.';return;}
   $('rp-btn').disabled=true; $('rp-btn').textContent='Registrando…'; $('rp-msg').textContent='';
   try{
