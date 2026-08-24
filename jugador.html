@@ -417,11 +417,12 @@ function modalEditar(){
   ${fotos.length<3?`<input id="ed-foto" type="file" accept="image/*" class="text-xs mb-1"/>
   <button onclick="subirFoto()" class="w-full bg-ink-900 text-white text-xs font-bold py-2 rounded-xl hover:bg-ink-700 mb-4">SUBIR FOTO</button>`:'<p class="text-[10px] text-ink-400 mb-4">Límite alcanzado: elimina una para subir otra.</p>'}
 
-  <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-2">🎬 Videos (${videos.length}/8)</p>
+  <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-2">🎬 Videos (${videos.length}/2)</p>
   ${videos.map(v=>`<div class="flex items-center gap-2 text-xs font-semibold py-1 border-b border-line">
     <span class="flex-1 truncate">${esc(v.titulo||v.url)}</span>
     <button onclick="quitarMedia('${v.id}')" class="text-ink-400 hover:text-brand-600 font-bold">✕</button></div>`).join('')}
-  ${videos.length<8?`<input id="ed-vurl" placeholder="Link del video (YouTube, TikTok…)" class="w-full border-b border-line py-1.5 text-xs font-semibold bg-transparent mt-2"/>
+  ${videos.length<2?`<input id="ed-vurl" placeholder="Link del video (YouTube, TikTok…)" class="w-full border-b border-line py-1.5 text-xs font-semibold bg-transparent mt-2"/>
+  ${videos.length>=2?'<p class="text-[10px] text-ink-400 mb-2">Limite del plan actual: 2 videos. Pronto podras ampliar tu galeria de videos.</p>':''}
   <input id="ed-vtit" placeholder="Título (ej. Golazo vs River)" class="w-full border-b border-line py-1.5 text-xs font-semibold bg-transparent mb-2"/>
   <button onclick="agregarVideo()" class="w-full bg-ink-900 text-white text-xs font-bold py-2 rounded-xl hover:bg-ink-700">AGREGAR VIDEO</button>`:''}
   <p class="text-[10px] text-ink-400 mt-3">Las estadísticas y el historial de partidos son oficiales del torneo y se actualizan solos.</p>`);
