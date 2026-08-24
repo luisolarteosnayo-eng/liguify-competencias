@@ -168,8 +168,8 @@ function render(){
       </div>
     </div>
     ${(P.ranking.torneos||[]).length||(P.ranking.categorias||[]).length?`<div class="flex flex-wrap gap-2 mt-3">
-      ${(P.ranking.torneos||[]).map(r=>`<span class="bg-white/10 rounded-xl px-3 py-1.5 text-[11px] font-bold">${esc(r.torneo)} <span class="text-amber-400">#${r.puesto}</span><span class="text-white/50 font-semibold"> de ${r.total}</span></span>`).join('')}
       ${(P.ranking.categorias||[]).map(r=>`<span class="bg-white/10 rounded-xl px-3 py-1.5 text-[11px] font-bold">${esc(r.categoria)} <span class="text-white/50 font-semibold">· ${esc(r.torneo)}</span> <span class="text-amber-400">#${r.puesto}</span><span class="text-white/50 font-semibold"> de ${r.total}</span></span>`).join('')}
+      ${(P.ranking.torneos||[]).map(r=>`<span class="bg-white/10 rounded-xl px-3 py-1.5 text-[11px] font-bold">${esc(r.torneo)} <span class="text-amber-400">#${r.puesto}</span><span class="text-white/50 font-semibold"> de ${r.total}</span></span>`).join('')}
     </div>`:''}
     <p class="text-[10px] text-white/40 font-semibold mt-2">Puntos por partidos, goles, asistencias, figura y equipo ideal según su posición; las tarjetas restan. Actualización semanal${P.ranking.actualizado?' · '+P.ranking.actualizado.split('-').reverse().join('/'):''}.</p>
   </div>`:''}
