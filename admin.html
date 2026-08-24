@@ -4291,76 +4291,70 @@ async function generarImagenEquipoIdeal(ctx){
   x.fillStyle='#fff'; x.font=fitText(TORNEO.nombre.toUpperCase(),'42px "Bebas Neue"',800,28); x.fillText(TORNEO.nombre.toUpperCase(),176,156);
   x.fillStyle='#cbd5e1'; x.font='600 22px Inter';
   x.fillText(`${(CATX.nombre_display||('CATEGORÍA '+CATX.anio_nacimiento+' / '+CATX.modalidad)).toUpperCase()}  ·  FECHA ${numero??''}  ·  ${Object.values(f).join('-')}`,176,192);
-  // cancha
-  const PX=80,PY=250,PW=W-160,PH=980;
-  x.save(); x.beginPath(); x.roundRect(PX,PY,PW,PH,28); x.clip();
-  const bandas=10; for(let i=0;i<bandas;i++){x.fillStyle=i%2?'#1b6b33':'#1f7a3a';x.fillRect(PX,PY+i*PH/bandas,PW,PH/bandas);}
-  x.restore();
-  x.strokeStyle='rgba(255,255,255,0.85)'; x.lineWidth=4;
-  x.beginPath(); x.roundRect(PX+18,PY+18,PW-36,PH-36,14); x.stroke();               // borde
-  x.beginPath(); x.moveTo(PX+18,PY+PH/2); x.lineTo(PX+PW-18,PY+PH/2); x.stroke();  // media
-  x.beginPath(); x.arc(PX+PW/2,PY+PH/2,90,0,Math.PI*2); x.stroke();                // círculo
-  x.beginPath(); x.arc(PX+PW/2,PY+PH/2,6,0,Math.PI*2); x.fillStyle='#fff'; x.fill();
-  const area=(top)=>{const aw=460,ah=160,gw=220,gh=64,y0=top?PY+18:PY+PH-18;
-    x.beginPath(); x.rect(PX+PW/2-aw/2,top?y0:y0-ah,aw,ah); x.stroke();
-    x.beginPath(); x.rect(PX+PW/2-gw/2,top?y0:y0-gh,gw,gh); x.stroke();
-    x.beginPath(); x.arc(PX+PW/2,top?y0+118:y0-118,5,0,Math.PI*2); x.fillStyle='#fff'; x.fill();};
-  area(true); area(false);
-  // jugadores por línea (DEL arriba, ARQ abajo): FOTO del jugador + insignia del club + solo NOMBRE
-  // Posición vertical CALCULADA: las líneas con jugadores se reparten en toda la
-  // altura de la cancha; la ficha (foto + nombre [+ categoría]) queda siempre
-  // dentro de las líneas y sin pisarse con la siguiente.
-  const lineasConJug=EI_LINEAS.filter(l=>DATA.some(p=>p.linea===l));   // ARQ,DEF,MED,DEL (las presentes)
-  const ordenVisual=['DEL','MED','DEF','ARQ'].filter(l=>lineasConJug.includes(l));
-  const tieneCat=!!(ctx.conCategoria&&DATA.some(p=>p.cat||p.catCorta));
-  const r0=62, altoFicha=r0*2+12+(tieneCat?68:46)+6;    // desde el borde superior de la foto hasta el final de la franja
-  const topIn=PY+18+14, botIn=PY+PH-18-14;               // dentro de las líneas de la cancha
-  const nL=ordenVisual.length;
-  const paso=nL>1?(botIn-topIn-altoFicha)/(nL-1):0;
-  const Y={}; ordenVisual.forEach((l,i)=>{ Y[l]=(nL>1?topIn+i*paso:(topIn+botIn)/2-altoFicha/2)+r0+6; });   // Y = centro de la foto
-  const r=62;                       // radio de la foto
+  // BANDAS HORIZONTALES por línea (formato tipo "XI ideal"): etiqueta de la
+  // línea + franja de cancha con las fotos; PORTERO arriba, DELANTEROS abajo.
+  const ETIQ={ARQ:'PORTERO',DEF:'DEFENSAS',MED:'MEDIOCAMPISTAS',DEL:'DELANTEROS'};
+  const orden=['ARQ','DEF','MED','DEL'].filter(l=>DATA.some(p=>p.linea===l));
   const fotos={};
   for(const p of DATA){ fotos[p.inscripcion_id]=await cargarImg(p.foto); }
   const primerNombre=p=>String(p.nombres||p.nombre||'').trim().split(/\s+/)[0]||'';
-  const anchoCol=p=>Math.min(240,PW/DATA.filter(q=>q.linea===p.linea).length-16);
-  const ajustar=(font,min,textos)=>{let s=parseInt(font.match(/(\d+)px/)[1]);
-    for(;s>min;s--){x.font=font.replace(/\d+px/,s+'px'); if(textos.every(([t,w])=>x.measureText(t).width<=w)) break;} return font.replace(/\d+px/,s+'px');};
-  const fNom=ajustar('34px "Bebas Neue"',20,DATA.map(p=>[primerNombre(p).toUpperCase(),anchoCol(p)]));
-  // foto recortada en círculo (cover); sin foto → escudo grande; sin escudo → iniciales
-  const fotoCirc=(img,cx,cy,rad,p)=>{
-    x.save(); x.beginPath(); x.arc(cx,cy,rad,0,Math.PI*2); x.closePath(); x.clip();
-    if(img){ const s=Math.max(rad*2/img.width,rad*2/img.height); const w=img.width*s,h=img.height*s; x.drawImage(img,cx-w/2,cy-h/2,w,h); }
-    else { const esc=escudos[p.club.id]||null; x.fillStyle=esc?'#fff':(p.club.color||'#334155'); x.fillRect(cx-rad,cy-rad,rad*2,rad*2);
-      if(esc){const s=rad*1.5;x.drawImage(esc,cx-s/2,cy-s/2,s,s);} else {x.fillStyle='#fff';x.font='700 '+Math.round(rad*0.8)+'px Inter';x.textAlign='center';x.textBaseline='middle';x.fillText(iniciales(p.club.nombre||'?'),cx,cy+2);} }
-    x.restore(); };
-  EI_LINEAS.forEach(l=>{
-    const lista=DATA.filter(p=>p.linea===l); if(!lista.length) return;
-    const cy=Y[l];
+  const areaTop=222, areaBot=H-64, nB=orden.length;
+  const bandH=(areaBot-areaTop)/nB, labelH=46, gap=12, stripH=bandH-labelH-gap;
+  const fitF=(t,font,max,min)=>{let s=parseInt(font.match(/(\d+)px/)[1]);for(;s>=(min||14);s--){x.font=font.replace(/\d+px/,s+'px');if(x.measureText(t).width<=max)break;}return x.font;};
+  orden.forEach((l,bi)=>{
+    const lista=DATA.filter(p=>p.linea===l);
+    const bTop=areaTop+bi*bandH;
+    // etiqueta de la línea
+    x.textAlign='center'; x.textBaseline='middle';
+    x.fillStyle='#fbbf24'; x.font='34px "Bebas Neue"';
+    x.save(); x.shadowColor='rgba(0,0,0,0.5)'; x.shadowBlur=8;
+    x.fillText(ETIQ[l]||l,W/2,bTop+labelH/2+2); x.restore();
+    // franja de cancha
+    const sy=bTop+labelH, sx=40, sw=W-80, sh=stripH;
+    x.save(); x.beginPath(); x.roundRect(sx,sy,sw,sh,22); x.clip();
+    const gg=x.createLinearGradient(0,sy,0,sy+sh); gg.addColorStop(0,'#1f7a3a'); gg.addColorStop(1,'#155c2a');
+    x.fillStyle=gg; x.fillRect(sx,sy,sw,sh);
+    for(let k=0;k<6;k++){ if(k%2){x.fillStyle='rgba(255,255,255,0.035)';x.fillRect(sx+k*sw/6,sy,sw/6,sh);} }
+    // marcas de cancha decorativas
+    x.strokeStyle='rgba(255,255,255,0.5)'; x.lineWidth=3;
+    if(l==='ARQ'){ x.strokeRect(sx+sw/2-220,sy-2,440,sh*0.45); x.strokeRect(sx+sw/2-110,sy-2,220,sh*0.22); }
+    else if(l==='DEL'){ x.beginPath(); x.arc(sx+sw/2,sy+sh+40,110,Math.PI,2*Math.PI); x.stroke(); }
+    else { x.beginPath(); x.arc(sx+sw/2,l==='DEF'?sy-2:sy+sh+2,120,0,Math.PI*2); x.stroke(); x.beginPath(); x.moveTo(sx,l==='DEF'?sy+2:sy+sh-2); x.lineTo(sx+sw,l==='DEF'?sy+2:sy+sh-2); x.stroke(); }
+    x.restore();
+    // jugadores dentro de la franja
+    const r=Math.min(56,Math.round(sh*0.30));
+    const cy=sy+sh*0.40, pillY=sy+sh-46;
     lista.forEach((p,i)=>{
-      const cx=PX+PW*(i+1)/(lista.length+1);
-      const nom=primerNombre(p).toUpperCase();
-      // franja oscura translúcida detrás del nombre
-      const catTxt=(ctx.conCategoria&&(p.cat||p.catCorta))?String(p.cat||p.catCorta):'';
-      x.font=fNom; const w1=x.measureText(nom).width; x.font='700 15px Inter'; const w2=catTxt?x.measureText(catTxt).width:0;
-      const pw=Math.max(w1,w2)+30, py0=cy+r+12, ph=catTxt?68:46;
-      x.fillStyle='rgba(11,22,48,0.62)'; x.beginPath(); x.roundRect(cx-pw/2,py0,pw,ph,12); x.fill();
-      // foto con sombra y aro blanco
-      x.save(); x.shadowColor='rgba(0,0,0,0.45)'; x.shadowBlur=18; x.shadowOffsetY=6;
-      x.fillStyle='#fff'; x.beginPath(); x.arc(cx,cy,r+3,0,Math.PI*2); x.fill(); x.restore();
-      fotoCirc(fotos[p.inscripcion_id]||null,cx,cy,r,p);
-      x.strokeStyle='#fff'; x.lineWidth=4; x.beginPath(); x.arc(cx,cy,r,0,Math.PI*2); x.stroke();
-      // insignia del club (abajo a la derecha de la foto)
-      const bx=cx+r*0.68, by=cy+r*0.68, br=24, esc=escudos[p.club.id]||null;
-      x.save(); x.shadowColor='rgba(0,0,0,0.4)'; x.shadowBlur=8; x.fillStyle='#fff'; x.beginPath(); x.arc(bx,by,br,0,Math.PI*2); x.fill(); x.restore();
-      x.save(); x.beginPath(); x.arc(bx,by,br-2,0,Math.PI*2); x.clip();
-      if(esc){const s=(br-2)*1.7;x.drawImage(esc,bx-s/2,by-s/2,s,s);} else {x.fillStyle=p.club.color||'#334155';x.fillRect(bx-br,by-br,br*2,br*2);x.fillStyle='#fff';x.font='700 16px Inter';x.textAlign='center';x.textBaseline='middle';x.fillText(iniciales(p.club.nombre||'?'),bx,by+1);}
+      const cx=sx+sw*(i+1)/(lista.length+1);
+      // foto con aro
+      x.save(); x.shadowColor='rgba(0,0,0,0.5)'; x.shadowBlur=16; x.shadowOffsetY=5;
+      x.fillStyle='#fff'; x.beginPath(); x.arc(cx,cy,r+4,0,Math.PI*2); x.fill(); x.restore();
+      x.save(); x.beginPath(); x.arc(cx,cy,r,0,Math.PI*2); x.closePath(); x.clip();
+      const img=fotos[p.inscripcion_id]||null, esc=escudos[p.club.id]||null;
+      if(img){ const s=Math.max(r*2/img.width,r*2/img.height); x.drawImage(img,cx-img.width*s/2,cy-img.height*s/2,img.width*s,img.height*s); }
+      else if(esc){ x.fillStyle='#fff'; x.fillRect(cx-r,cy-r,r*2,r*2); const s=r*1.5; x.drawImage(esc,cx-s/2,cy-s/2,s,s); }
+      else { x.fillStyle=p.club.color||'#334155'; x.fillRect(cx-r,cy-r,r*2,r*2); x.fillStyle='#fff'; x.font='700 '+Math.round(r*0.7)+'px Inter'; x.textAlign='center'; x.textBaseline='middle'; x.fillText(iniciales(p.club.nombre||'?'),cx,cy+2); }
       x.restore();
-      // nombre
-      x.textAlign='center'; x.textBaseline='alphabetic';
-      x.fillStyle='#fff'; x.font=fNom; x.fillText(nom,cx,cy+r+44);
-      if(catTxt){ x.fillStyle='#fbbf24'; x.font='700 15px Inter'; x.fillText(catTxt,cx,cy+r+66); }
+      // píldora: [escudo] NOMBRE [· categoría]
+      const nom=primerNombre(p).toUpperCase();
+      const catTxt=(ctx.conCategoria&&(p.catCorta||p.cat))?String(p.catCorta||p.cat):'';
+      const maxW=sw/(lista.length)-24;
+      x.font=fitF(nom,'26px "Bebas Neue"',maxW-70,16); const fN=x.font; const wN=x.measureText(nom).width;
+      x.font='700 14px Inter'; const wC=catTxt?x.measureText(catTxt).width+10:0;
+      const br=13, pw=Math.min(maxW,26+br*2+wN+wC+10), ph=36;
+      x.save(); x.shadowColor='rgba(0,0,0,0.4)'; x.shadowBlur=8;
+      x.fillStyle='rgba(9,16,38,0.88)'; x.beginPath(); x.roundRect(cx-pw/2,pillY,pw,ph,18); x.fill(); x.restore();
+      const esc2=escudos[p.club.id]||null, bx=cx-pw/2+8+br, by=pillY+ph/2;
+      x.save(); x.beginPath(); x.arc(bx,by,br,0,Math.PI*2); x.clip();
+      if(esc2){ x.fillStyle='#fff'; x.fillRect(bx-br,by-br,br*2,br*2); const s=br*1.8; x.drawImage(esc2,bx-s/2,by-s/2,s,s); }
+      else { x.fillStyle=p.club.color||'#334155'; x.fillRect(bx-br,by-br,br*2,br*2); x.fillStyle='#fff'; x.font='700 11px Inter'; x.textAlign='center'; x.textBaseline='middle'; x.fillText(iniciales(p.club.nombre||'?').slice(0,1),bx,by+1); }
+      x.restore();
+      x.textAlign='left'; x.textBaseline='middle';
+      x.fillStyle='#fff'; x.font=fN; x.fillText(nom,bx+br+8,by+2);
+      if(catTxt){ x.fillStyle='#fbbf24'; x.font='700 14px Inter'; x.fillText(catTxt,bx+br+8+wN+8,by+1); }
     });
   });
+  x.textBaseline='alphabetic';
   // pie
   x.textAlign='center'; x.fillStyle='#94a3b8'; x.font='600 20px Inter';
   x.fillText('⚡ POWERED BY LIGUIFY · liguify.com',W/2,H-40);
