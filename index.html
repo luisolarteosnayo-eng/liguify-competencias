@@ -83,6 +83,7 @@ tailwind.config={theme:{extend:{
         <p id="t-meta" class="text-ink-500 text-sm"></p>
       </div>
     </div>
+    <div id="t-kpis"></div>
     <div id="t-docs" class="mb-4"></div>
     <div id="t-general"></div>
     <h2 class="font-display text-2xl tracking-wide mb-3">CATEGORÍAS</h2>
@@ -94,6 +95,7 @@ tailwind.config={theme:{extend:{
     <button onclick="volverDeCategoria()" class="text-sm text-ink-500 mb-3 font-semibold" id="bc-torneo"></button>
     <h1 id="c-nombre" class="font-display text-4xl tracking-wide mb-4"></h1>
     <div id="c-docs"></div>
+    <div id="c-kpis"></div>
     <div class="flex gap-1.5 mb-5" id="c-tabs"></div>
     <div id="tab-tabla" class="ctab"></div>
     <div id="tab-fixture" class="ctab hidden"></div>
@@ -432,6 +434,8 @@ async function irTorneo(){
         <span class="text-xs text-ink-400">Modalidad ${c.modalidad}</span>
       </span><span class="text-ink-400">→</span>
     </button>`).join('') || '<p class="text-ink-400 text-sm">Sin categorías aún.</p>';
+  renderKPIs('t-kpis',cs.map(c=>c.id));
+  renderKPIs('t-kpis',cs.map(c=>c.id));
   renderTablaGeneral('t-general',TORNEO,cs);
   show('s-categorias');
 }
@@ -490,6 +494,25 @@ async function irCategoriaId(id){
 }
 let TORNEO_UNICAT=false;
 function volverDeCategoria(){ if(TORNEO_UNICAT) irMarca(); else irTorneo(); }
+/* ---- 📊 KPIs de cabecera (torneo y categoría): clubes, equipos, jugadores,
+   partidos jugados y goles — en vivo desde la BD ---- */
+async function renderKPIs(contId,catIds){
+  const el=document.getElementById(contId); if(!el) return;
+  if(!catIds||!catIds.length){el.innerHTML='';return;}
+  el.innerHTML='';
+  const [eqs,jug,pjs]=await Promise.all([
+    sb.from('equipo').select('id,club_id').in('categoria_id',catIds).eq('estado','activo'),
+    sb.from('vista_lbf_publica').select('inscripcion_id',{count:'exact',head:true}).in('categoria_id',catIds),
+    sb.from('partido').select('goles_local,goles_visita').in('categoria_id',catIds).in('estado',['finalizado','walkover'])
+  ]);
+  const equipos=(eqs.data||[]).length, clubes=new Set((eqs.data||[]).map(e=>e.club_id)).size;
+  const pj=(pjs.data||[]).length, goles=(pjs.data||[]).reduce((s,m)=>s+(m.goles_local||0)+(m.goles_visita||0),0);
+  const tile=(v,l,cls)=>`<div class="bg-white border border-line rounded-2xl px-3 py-3 text-center"><p class="font-display text-3xl ${cls||''}">${v}</p><p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider">${l}</p></div>`;
+  el.innerHTML=`<div class="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
+    ${tile(clubes,'Clubes')}${tile(equipos,'Equipos')}${tile(jug.count||0,'Jugadores')}${tile(pj,'Partidos jugados')}${tile(goles,'Goles','text-brand-600')}
+  </div>`;
+}
+
 async function irCategoria(){
   if(!CAT) return irTorneo();
   err(null);
@@ -497,6 +520,7 @@ async function irCategoria(){
   $('c-nombre').textContent=(TORNEO_UNICAT?TORNEO.nombre:(CAT.nombre_display||('Categoría '+CAT.anio_nacimiento+' / '+CAT.modalidad))).toUpperCase();
   // torneo de una sola categoria: los documentos del torneo se muestran aqui
   if(TORNEO_UNICAT){ sb.from('torneo_documento').select('*').eq('torneo_id',TORNEO.id).order('created_at').then(({data})=>{ $('c-docs').innerHTML=(data&&data.length)?`<div class="flex flex-wrap gap-2 mb-4">${data.map(d=>`<a href="${d.url}" target="_blank" download class="inline-flex items-center gap-1.5 bg-white border border-line rounded-xl px-4 py-2 text-sm font-bold text-ink-700 hover:shadow-md hover:text-brand-600 transition">📄 ${d.titulo} <span class="text-ink-400">⬇</span></a>`).join('')}</div>`:''; }); } else $('c-docs').innerHTML='';
+  renderKPIs('c-kpis',[CAT.id]);
   // equipos + clubes en caché
   const [eqs,cls]=await Promise.all([
     sb.from('equipo').select('*').eq('categoria_id',CAT.id),
