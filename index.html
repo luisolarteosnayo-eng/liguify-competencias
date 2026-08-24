@@ -91,8 +91,9 @@ tailwind.config={theme:{extend:{
 
   <!-- CATEGORÍA: TABLA / FIXTURE / EQUIPOS -->
   <section id="s-categoria" class="screen">
-    <button onclick="irTorneo()" class="text-sm text-ink-500 mb-3 font-semibold" id="bc-torneo"></button>
+    <button onclick="volverDeCategoria()" class="text-sm text-ink-500 mb-3 font-semibold" id="bc-torneo"></button>
     <h1 id="c-nombre" class="font-display text-4xl tracking-wide mb-4"></h1>
+    <div id="c-docs"></div>
     <div class="flex gap-1.5 mb-5" id="c-tabs"></div>
     <div id="tab-tabla" class="ctab"></div>
     <div id="tab-fixture" class="ctab hidden"></div>
@@ -420,6 +421,9 @@ async function irTorneo(){
   });
   const {data:cs,error}=await sb.from('categoria').select('*').eq('torneo_id',TORNEO.id).order('anio_nacimiento',{ascending:false});
   if(error){err(error.message);return;}
+  // Torneo de UNA sola categoria: el publico entra directo al detalle
+  TORNEO_UNICAT=(cs||[]).length===1;
+  if(TORNEO_UNICAT){ CAT=cs[0]; return irCategoria(); }
   $('categorias').innerHTML=cs.map(c=>`
     <button onclick='irCategoriaId("${c.id}")' class="w-full bg-white border border-line rounded-2xl px-5 py-4 flex items-center gap-4 hover:shadow-md transition text-left">
       <span class="w-11 h-11 rounded-xl bg-ink-900 text-white font-display grid place-items-center text-lg">${String(c.anio_nacimiento).slice(2)}</span>
@@ -484,11 +488,15 @@ async function irCategoriaId(id){
   if(error){err(error.message);return;}
   CAT=data; irCategoria();
 }
+let TORNEO_UNICAT=false;
+function volverDeCategoria(){ if(TORNEO_UNICAT) irMarca(); else irTorneo(); }
 async function irCategoria(){
   if(!CAT) return irTorneo();
   err(null);
-  $('bc-torneo').textContent='← '+TORNEO.nombre;
-  $('c-nombre').textContent=(CAT.nombre_display||('Categoría '+CAT.anio_nacimiento+' / '+CAT.modalidad)).toUpperCase();
+  $('bc-torneo').textContent='← '+(TORNEO_UNICAT?MARCA.nombre:TORNEO.nombre);
+  $('c-nombre').textContent=(TORNEO_UNICAT?TORNEO.nombre:(CAT.nombre_display||('Categoría '+CAT.anio_nacimiento+' / '+CAT.modalidad))).toUpperCase();
+  // torneo de una sola categoria: los documentos del torneo se muestran aqui
+  if(TORNEO_UNICAT){ sb.from('torneo_documento').select('*').eq('torneo_id',TORNEO.id).order('created_at').then(({data})=>{ $('c-docs').innerHTML=(data&&data.length)?`<div class="flex flex-wrap gap-2 mb-4">${data.map(d=>`<a href="${d.url}" target="_blank" download class="inline-flex items-center gap-1.5 bg-white border border-line rounded-xl px-4 py-2 text-sm font-bold text-ink-700 hover:shadow-md hover:text-brand-600 transition">📄 ${d.titulo} <span class="text-ink-400">⬇</span></a>`).join('')}</div>`:''; }); } else $('c-docs').innerHTML='';
   // equipos + clubes en caché
   const [eqs,cls]=await Promise.all([
     sb.from('equipo').select('*').eq('categoria_id',CAT.id),
