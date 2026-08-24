@@ -1460,6 +1460,34 @@ async function goleadoresHTML(categoriaId){
     </div>`).join('')}
   </div>`;
 }
+/* 🏅 Ranking de jugadores de la categoría (top 10 → link a top 50) */
+let RK_LIM=10;
+async function rankingHTML(categoriaId,renderFn){
+  const r=await sb.rpc('ranking_categoria',{p_categoria:categoriaId,p_limite:RK_LIM});
+  if(r.error||!r.data||!(r.data.filas||[]).length) return '';
+  const d=r.data;
+  return `<div class="bg-white rounded-2xl border border-line mb-4 overflow-hidden">
+    <div class="px-4 py-3 border-b border-line flex items-center justify-between flex-wrap gap-2">
+      <span class="font-display text-xl tracking-wide">🏅 RANKING</span>
+      <span class="text-[9px] font-bold text-ink-400 uppercase tracking-wider">Actualización semanal${d.actualizado?' · '+d.actualizado.split('-').reverse().join('/'):''}</span></div>
+    <div class="overflow-x-auto"><table class="w-full min-w-[520px]">
+      <thead><tr class="text-[10px] uppercase text-ink-400 border-b border-line tracking-wider">
+        <th class="py-2 w-8">#</th><th class="text-left">Jugador</th><th class="w-16">Puntos</th><th class="w-16">Torneo</th><th class="w-16">Liguify</th></tr></thead>
+      <tbody>${d.filas.map((g,i)=>`<tr class="border-b border-line last:border-0 ${i===0?'bg-amber-50/60':''}">
+        <td class="py-2 pl-2 text-center font-bold text-sm ${i<3?'text-brand-600':'text-ink-400'}">${g.puesto}</td>
+        <td><span class="flex items-center gap-2.5 py-1">
+          <span class="w-9 h-9 rounded-full grid place-items-center text-[10px] font-bold text-white overflow-hidden relative shrink-0" style="background:#2b3550${g.consentimiento?'':';filter:grayscale(1);opacity:.85'}">${g.foto_url?`<img src="${g.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales((g.nombres||'')+' '+(g.apellidos||''))}</span>
+          <span class="min-w-0"><span class="font-semibold text-sm block truncate">${g.nombres} ${g.apellidos}${i===0?' <span class="text-amber-600">👑</span>':''}</span>
+          <span class="text-[10px] text-ink-400 block truncate">${g.equipo||''}</span></span></span></td>
+        <td class="text-center font-display text-xl">${g.puntos}</td>
+        <td class="text-center text-xs font-bold text-ink-500">#${g.puesto_torneo??'—'}</td>
+        <td class="text-center text-xs font-bold text-ink-500">#${g.puesto_liguify??'—'}</td>
+      </tr>`).join('')}</tbody></table></div>
+    ${d.total>10?`<div class="px-4 py-2.5 border-t border-line text-center">
+      <button onclick="RK_LIM=RK_LIM===10?50:10;${renderFn}()" class="text-xs font-bold text-brand-600 hover:underline">${RK_LIM===10?'VER LOS 50 PRIMEROS ↓':'VER SOLO EL TOP 10 ↑'}</button></div>`:''}
+    <p class="px-4 py-2 text-[10px] text-ink-400 border-t border-line">Puntos por partidos jugados, goles, asistencias, figura del partido y equipo ideal según la posición del jugador; las tarjetas restan. TORNEO: puesto en el torneo · LIGUIFY: puesto en todo el sistema.</p>
+  </div>`;
+}
 async function renderTablaEq(){
   const {data,error}=await sb.from('vista_tabla_zona').select('*').eq('categoria_id',EQ.categoria_id);
   if(error){$('tab-tabla').innerHTML='';return;}
@@ -1480,7 +1508,7 @@ async function renderTablaEq(){
         <td class="text-center text-sm text-ink-400">${r.gc}</td></tr>`).join('')}</tbody></table></div>`;
   }).join('')||'<p class="text-ink-400 text-sm bg-white border border-line rounded-2xl p-6 text-center mb-4">Tu equipo aún no está asignado a una zona.</p>';
   // Orden de la pestaña: RESULTADOS (partidos jugados) · TABLA DE POSICIONES · ESTADÍSTICAS DEL TORNEO · GOLEADORES
-  $('tab-tabla').innerHTML=RESULTADOS_HTML+tablaHTML+(STATS_HTML?STATS_HTML.replace('rounded-2xl overflow-hidden mt-4','rounded-2xl overflow-hidden mb-4'):'')+await goleadoresHTML(EQ.categoria_id);
+  $('tab-tabla').innerHTML=RESULTADOS_HTML+tablaHTML+(STATS_HTML?STATS_HTML.replace('rounded-2xl overflow-hidden mt-4','rounded-2xl overflow-hidden mb-4'):'')+await goleadoresHTML(EQ.categoria_id)+await rankingHTML(EQ.categoria_id,'renderTablaEq');
 }
 
 iniciar();
