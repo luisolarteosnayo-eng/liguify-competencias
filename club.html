@@ -84,6 +84,7 @@ tailwind.config={theme:{extend:{
   <section id="s-equipo" class="screen">
     <button onclick="show('s-hub')" class="text-sm text-ink-500 mb-3 font-semibold">← Mis equipos</button>
     <div id="eq-head" class="mb-4"></div>
+    <div id="eq-kpis"></div>
     <div class="flex gap-1.5 mb-5" id="eq-tabs"></div>
     <div id="tab-tabla" class="ctab"></div>
     <div id="tab-plantel" class="ctab hidden"></div>
@@ -509,6 +510,24 @@ async function canjearCodigo(){
 }
 
 /* ============ EQUIPO ============ */
+/* ---- 📊 KPIs de cabecera: clubes, equipos, jugadores, partidos jugados y
+   goles — en vivo desde la BD (mismo componente que el público) ---- */
+async function renderKPIs(contId,catIds){
+  const el=document.getElementById(contId); if(!el) return;
+  if(!catIds||!catIds.length){el.innerHTML='';return;}
+  el.innerHTML='';
+  const [eqs,jug,pjs]=await Promise.all([
+    sb.from('equipo').select('id,club_id').in('categoria_id',catIds).eq('estado','activo'),
+    sb.from('vista_lbf_publica').select('inscripcion_id',{count:'exact',head:true}).in('categoria_id',catIds),
+    sb.from('partido').select('goles_local,goles_visita').in('categoria_id',catIds).in('estado',['finalizado','walkover'])
+  ]);
+  const equipos=(eqs.data||[]).length, clubes=new Set((eqs.data||[]).map(e=>e.club_id)).size;
+  const pj=(pjs.data||[]).length, goles=(pjs.data||[]).reduce((s,m)=>s+(m.goles_local||0)+(m.goles_visita||0),0);
+  const tile=(v,l,cls)=>`<div class="bg-white border border-line rounded-2xl px-3 py-3 text-center"><p class="font-display text-3xl ${cls||''}">${v}</p><p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider">${l}</p></div>`;
+  el.innerHTML=`<div class="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
+    ${tile(clubes,'Clubes')}${tile(equipos,'Equipos')}${tile(jug.count||0,'Jugadores')}${tile(pj,'Partidos jugados')}${tile(goles,'Goles','text-brand-600')}
+  </div>`;
+}
 function tabs(act){
   $('eq-tabs').innerHTML=[['tabla','Resultados y estadísticas'],['plantel','Plantel (LBF)'],['partidos','Programación']].map(([t,l])=>
     `<button onclick="tabs('${t}')" class="tabbtn ${t===act?'active':''} text-sm font-bold px-4 py-2 rounded-xl border border-line bg-white">${l}</button>`).join('');
@@ -525,6 +544,7 @@ async function abrirEquipo(id){
     <span class="text-[10px] font-bold bg-white/10 border border-white/20 rounded-full px-3 py-1 uppercase">${EQ.rol}</span>
   </div>`;
   tabs('tabla');
+  renderKPIs('eq-kpis',[EQ.categoria_id]);
   EQ_LISTO=false;
   await Promise.all([renderPlantel(),renderPartidos()]);   // dejan listas las secciones de resultados y estadísticas
   await renderTablaEq();

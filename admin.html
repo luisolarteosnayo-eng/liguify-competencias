@@ -85,6 +85,7 @@ tailwind.config={theme:{extend:{
         <button onclick="modalCategoria()" class="bg-brand-500 text-white font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-brand-600">+ NUEVA CATEGORÍA</button>
       </div>
     </div>
+    <div id="t-kpis-adm"></div>
     <div id="t-general-adm"></div>
     <div class="space-y-2" id="lista-categorias"></div>
   </section>
@@ -94,6 +95,7 @@ tailwind.config={theme:{extend:{
     <button onclick="show('s-torneo')" class="text-sm text-ink-500 mb-3 font-semibold" id="bc-t"></button>
     <h1 id="c-titulo" class="font-display text-4xl tracking-wide mb-4"></h1>
     <div class="flex gap-1.5 mb-5" id="c-tabs"></div>
+    <div id="c-kpis-adm"></div>
     <div id="tab-equipos" class="ctab"></div>
     <div id="tab-fixture" class="ctab hidden"></div>
     <div id="tab-tabla" class="ctab hidden"></div>
@@ -1553,6 +1555,24 @@ async function crearTorneo(){
 }
 
 /* ============ TORNEO → CATEGORÍAS ============ */
+/* ---- 📊 KPIs de cabecera: clubes, equipos, jugadores, partidos jugados y
+   goles — en vivo desde la BD (mismo componente que el público) ---- */
+async function renderKPIs(contId,catIds){
+  const el=document.getElementById(contId); if(!el) return;
+  if(!catIds||!catIds.length){el.innerHTML='';return;}
+  el.innerHTML='';
+  const [eqs,jug,pjs]=await Promise.all([
+    sb.from('equipo').select('id,club_id').in('categoria_id',catIds).eq('estado','activo'),
+    sb.from('vista_lbf_publica').select('inscripcion_id',{count:'exact',head:true}).in('categoria_id',catIds),
+    sb.from('partido').select('goles_local,goles_visita').in('categoria_id',catIds).in('estado',['finalizado','walkover'])
+  ]);
+  const equipos=(eqs.data||[]).length, clubes=new Set((eqs.data||[]).map(e=>e.club_id)).size;
+  const pj=(pjs.data||[]).length, goles=(pjs.data||[]).reduce((s,m)=>s+(m.goles_local||0)+(m.goles_visita||0),0);
+  const tile=(v,l,cls)=>`<div class="bg-white border border-line rounded-2xl px-3 py-3 text-center"><p class="font-display text-3xl ${cls||''}">${v}</p><p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider">${l}</p></div>`;
+  el.innerHTML=`<div class="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
+    ${tile(clubes,'Clubes')}${tile(equipos,'Equipos')}${tile(jug.count||0,'Jugadores')}${tile(pj,'Partidos jugados')}${tile(goles,'Goles','text-brand-600')}
+  </div>`;
+}
 async function abrirTorneo(t){
   TORNEO=t;
   $('t-titulo').textContent=t.nombre.toUpperCase();
@@ -1564,6 +1584,7 @@ async function abrirTorneo(t){
       <span class="flex-1"><span class="font-bold block">${c.nombre_display||('Categoría '+c.anio_nacimiento+' / '+c.modalidad)}</span>
       <span class="text-xs text-ink-400">Modalidad ${c.modalidad}</span></span>
       <span class="text-ink-400">→</span></button>`).join('') || '<p class="text-ink-400 text-sm">Sin categorías — crea la primera.</p>';
+  renderKPIs('t-kpis-adm',(cs||[]).map(c=>c.id));
   renderTablaGeneral('t-general-adm',t,cs);
   show('s-torneo');
 }
@@ -1747,6 +1768,7 @@ async function abrirCategoria(c){
   $('bc-t').textContent='← '+TORNEO.nombre;
   const durEf=c.duracion_partido||TORNEO.duracion_partido||90;
   $('c-titulo').innerHTML=`${(c.nombre_display||('Categoría '+c.anio_nacimiento+' / '+c.modalidad)).toUpperCase()}${esAdmin()?` <button onclick="modalDuracionCat()" title="Duración del partido de esta categoría (base de %participación y por-90)" class="align-middle text-xs font-sans font-bold bg-white border border-line rounded-full px-3 py-1.5 text-ink-500 hover:bg-paper">⏱ ${durEf}'${c.duracion_partido?'':' · torneo'}</button>`:''}`;
+  renderKPIs('c-kpis-adm',[c.id]);
   const [cls,eqs,fs]=await Promise.all([
     sb.from('club').select('*').eq('marca_id',MARCA.id),
     sb.from('equipo').select('*').eq('categoria_id',c.id),
