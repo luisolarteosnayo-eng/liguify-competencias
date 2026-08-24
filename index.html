@@ -838,7 +838,7 @@ async function irEquipoId(id){
       <span class="flex-1 font-semibold text-sm">${j.nombres} ${j.apellidos} ${j.capitan?'<span class="text-[9px] bg-ink-900 text-white rounded px-1.5 py-0.5 ml-1 font-bold">C</span>':''}
         ${(j.posicion||j.pie_habil)?`<span class="block text-[10px] text-ink-400 font-normal">${[j.posicion,j.pie_habil].filter(Boolean).join(' · ')}</span>`:''}</span>
       <span class="text-xs text-ink-400">nac. ${j.mes_nacimiento?String(j.mes_nacimiento).padStart(2,'0')+'/':''}${j.anio_nacimiento}</span>
-      ${j.perfil_token?`<a href="/jugador/${j.perfil_token}" target="_blank" rel="noopener" title="Ver el perfil del jugador" class="shrink-0 inline-flex items-center gap-1 bg-amber-400 hover:bg-amber-500 text-ink-900 text-[10px] font-bold rounded-full px-2.5 py-1">⭐ PERFIL</a>`:''}
+      ${j.perfil_token?`<a href="/jugador/${j.perfil_token}" target="_blank" rel="noopener" title="${j.perfil_activo?'Perfil activo (administrado por su familia)':'Perfil disponible — su familia aún no lo administra'}" class="shrink-0 inline-flex items-center gap-1 ${j.perfil_activo?'bg-amber-400 hover:bg-amber-500 text-ink-900':'bg-ink-400/20 hover:bg-ink-400/30 text-ink-500'} text-[10px] font-bold rounded-full px-2.5 py-1">⭐ PERFIL</a>`:''}
     </div>`).join(''):'<p class="px-5 py-8 text-sm text-ink-400 text-center">Este equipo aún no publica su plantel.</p>';
   show('s-equipo');
 }
