@@ -159,20 +159,22 @@ function render(){
     <p class="font-bold text-sm">${P.scout_vistas===1?'1 scout de equipo profesional vio este perfil':(P.scout_vistas||0)+' scouts de equipos profesionales vieron este perfil'}</p>
   </div>
 
-  ${P.ranking?`<div class="bg-ink-900 text-white rounded-2xl px-5 py-4 mb-4 shadow-sm">
+  ${P.ranking?(rk=>`<div class="bg-ink-900 text-white rounded-2xl px-5 py-4 mb-4 shadow-sm">
     <div class="flex items-center justify-between flex-wrap gap-3">
       <p class="font-display text-xl tracking-wide">🏅 RANKING LIGUIFY</p>
       <div class="flex items-center gap-4">
-        <span class="text-center"><span class="font-display text-3xl text-amber-400 block leading-none">${P.ranking.puntos}</span><span class="text-[9px] font-bold text-white/50 uppercase tracking-wider">Puntos</span></span>
-        <span class="text-center"><span class="font-display text-3xl block leading-none">#${P.ranking.puesto}</span><span class="text-[9px] font-bold text-white/50 uppercase tracking-wider">de ${P.ranking.total} jugadores</span></span>
+        <span class="text-center"><span class="font-display text-3xl text-amber-400 block leading-none">${rk.puntos}</span><span class="text-[9px] font-bold text-white/50 uppercase tracking-wider">Puntos</span></span>
+        ${rk.cat0?`<span class="text-center"><span class="font-display text-3xl block leading-none">#${rk.cat0.puesto}</span><span class="text-[9px] font-bold text-white/50 uppercase tracking-wider">de ${rk.cat0.total} · ${esc(rk.cat0.categoria)}</span></span>`
+                 :`<span class="text-center"><span class="font-display text-3xl block leading-none">#${rk.puesto}</span><span class="text-[9px] font-bold text-white/50 uppercase tracking-wider">de ${rk.total} jugadores</span></span>`}
       </div>
     </div>
-    ${(P.ranking.torneos||[]).length||(P.ranking.categorias||[]).length?`<div class="flex flex-wrap gap-2 mt-3">
-      ${(P.ranking.categorias||[]).map(r=>`<span class="bg-white/10 rounded-xl px-3 py-1.5 text-[11px] font-bold">${esc(r.categoria)} <span class="text-white/50 font-semibold">· ${esc(r.torneo)}</span> <span class="text-amber-400">#${r.puesto}</span><span class="text-white/50 font-semibold"> de ${r.total}</span></span>`).join('')}
-      ${(P.ranking.torneos||[]).map(r=>`<span class="bg-white/10 rounded-xl px-3 py-1.5 text-[11px] font-bold">${esc(r.torneo)} <span class="text-amber-400">#${r.puesto}</span><span class="text-white/50 font-semibold"> de ${r.total}</span></span>`).join('')}
-    </div>`:''}
-    <p class="text-[10px] text-white/40 font-semibold mt-2">Puntos por partidos, goles, asistencias, figura y equipo ideal según su posición; las tarjetas restan. Actualización semanal${P.ranking.actualizado?' · '+P.ranking.actualizado.split('-').reverse().join('/'):''}.</p>
-  </div>`:''}
+    <div class="flex flex-wrap gap-2 mt-3">
+      ${(rk.categorias||[]).slice(rk.cat0?1:0).map(r=>`<span class="bg-white/10 rounded-xl px-3 py-1.5 text-[11px] font-bold">${esc(r.categoria)} <span class="text-white/50 font-semibold">· ${esc(r.torneo)}</span> <span class="text-amber-400">#${r.puesto}</span><span class="text-white/50 font-semibold"> de ${r.total}</span></span>`).join('')}
+      ${(rk.torneos||[]).map(r=>`<span class="bg-white/10 rounded-xl px-3 py-1.5 text-[11px] font-bold">${esc(r.torneo)} <span class="text-amber-400">#${r.puesto}</span><span class="text-white/50 font-semibold"> de ${r.total}</span></span>`).join('')}
+      ${rk.cat0?`<span class="bg-white/10 rounded-xl px-3 py-1.5 text-[11px] font-bold">SISTEMA LIGUIFY <span class="text-amber-400">#${rk.puesto}</span><span class="text-white/50 font-semibold"> de ${rk.total} jugadores</span></span>`:''}
+    </div>
+    <p class="text-[10px] text-white/40 font-semibold mt-2">Puntos por partidos, goles, asistencias, figura y equipo ideal según su posición; las tarjetas restan. Actualización semanal${rk.actualizado?' · '+rk.actualizado.split('-').reverse().join('/'):''}.</p>
+  </div>`)({...P.ranking,cat0:(P.ranking.categorias||[])[0]}):''}
 
   <!-- TOTALES OFICIALES -->
   <div class="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-5">
