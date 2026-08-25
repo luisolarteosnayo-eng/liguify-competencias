@@ -548,19 +548,21 @@ async function renderTablaGeneral(contId,torneo,cats){
   const lista=Object.values(acc).map(a=>({...a,dg:a.gf-a.gc,ncat:a.cats.size}))
     .sort((a,b)=>b.pts-a.pts||b.dg-a.dg||b.gf-a.gf||a.pj-b.pj||a.nombre.localeCompare(b.nombre,'es'));
   const escudo=cl=>`<span class="inline-grid place-items-center w-7 h-7 rounded-lg text-white text-[10px] font-bold overflow-hidden relative shrink-0" style="background:${cl.escudo_url?'#fff':(cl.color||'#334155')}">${cl.escudo_url?`<img src="${cl.escudo_url}" class="absolute inset-0 w-full h-full object-contain"/>`:(cl.nombre||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}</span>`;
-  const th=t=>`<th class="px-2 py-2 text-[10px] font-bold text-ink-400 text-center">${t}</th>`;
+  // en móvil solo #, equipo, PJ, DG y PTS (el resto aparece desde sm:)
+  const th=(t,mov)=>`<th class="px-2 py-2 text-[10px] font-bold text-ink-400 text-center ${mov?'':'hidden sm:table-cell'}">${t}</th>`;
+  const tdo=v=>`<td class="px-2 py-2 text-center hidden sm:table-cell">${v}</td>`;
   el.innerHTML=`<div class="bg-white border border-line rounded-2xl overflow-hidden mb-6">
     <div class="px-5 py-3 border-b border-line flex items-center justify-between flex-wrap gap-2">
       <span class="font-display text-xl tracking-wide">🏆 TABLA GENERAL</span>
       <span class="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Acumulado de todas las categorías · ${lista.length} equipos</span>
     </div>
     <div class="overflow-x-auto"><table class="w-full text-sm">
-      <thead><tr class="bg-paper"><th class="px-3 py-2 text-[10px] font-bold text-ink-400 text-left">#</th><th class="px-2 py-2 text-[10px] font-bold text-ink-400 text-left">EQUIPO</th>${th('PJ')}${th('PG')}${th('PE')}${th('PP')}${th('GF')}${th('GC')}${th('DG')}${th('PTS')}</tr></thead>
+      <thead><tr class="bg-paper"><th class="px-3 py-2 text-[10px] font-bold text-ink-400 text-left">#</th><th class="px-2 py-2 text-[10px] font-bold text-ink-400 text-left">EQUIPO</th>${th('PJ',1)}${th('PG')}${th('PE')}${th('PP')}${th('GF')}${th('GC')}${th('DG',1)}${th('PTS',1)}</tr></thead>
       <tbody>${lista.map((a,i)=>`<tr class="border-t border-line ${i<3?'bg-amber-50/40':''}">
         <td class="px-3 py-2 font-display text-base ${i<3?'text-brand-600':'text-ink-400'}">${i+1}</td>
         <td class="px-2 py-2"><span class="inline-flex items-center gap-2 font-bold">${escudo(a.club)}<span>${a.nombre}<span class="block text-[10px] text-ink-400 font-semibold">${a.ncat} categoría${a.ncat!==1?'s':''}</span></span></span></td>
-        <td class="px-2 py-2 text-center">${a.pj}</td><td class="px-2 py-2 text-center">${a.pg}</td><td class="px-2 py-2 text-center">${a.pe}</td><td class="px-2 py-2 text-center">${a.pp}</td>
-        <td class="px-2 py-2 text-center">${a.gf}</td><td class="px-2 py-2 text-center">${a.gc}</td><td class="px-2 py-2 text-center font-semibold">${a.dg>0?'+':''}${a.dg}</td>
+        <td class="px-2 py-2 text-center">${a.pj}</td>${tdo(a.pg)}${tdo(a.pe)}${tdo(a.pp)}
+        ${tdo(a.gf)}${tdo(a.gc)}<td class="px-2 py-2 text-center font-semibold">${a.dg>0?'+':''}${a.dg}</td>
         <td class="px-2 py-2 text-center font-display text-lg">${a.pts}</td></tr>`).join('')}</tbody>
     </table></div>
     <p class="px-5 py-2 text-[10px] text-ink-400 border-t border-line">Suma de los resultados de cada equipo en todas las categorías del torneo. Orden: puntos, diferencia de gol, goles a favor.</p>
@@ -655,7 +657,7 @@ async function rankingHTML(categoriaId,renderFn){
     <div class="px-4 py-3 border-b border-line flex items-center justify-between flex-wrap gap-2">
       <span class="font-display text-xl tracking-wide">🏅 RANKING</span>
       <span class="text-[9px] font-bold text-ink-400 uppercase tracking-wider">Actualización semanal${d.actualizado?' · '+d.actualizado.split('-').reverse().join('/'):''}</span></div>
-    <div class="overflow-x-auto"><table class="w-full min-w-[520px]">
+    <div class="overflow-x-auto"><table class="w-full sm:min-w-[520px]">
       <thead><tr class="text-[10px] uppercase text-ink-400 border-b border-line tracking-wider">
         <th class="py-2 w-8">#</th><th class="text-left">Jugador</th><th class="w-16">Puntos</th><th class="w-16">Torneo</th><th class="w-16">Liguify</th></tr></thead>
       <tbody>${d.filas.map((g,i)=>`<tr class="border-b border-line last:border-0 ${i===0?'bg-amber-50/60':''}">
@@ -682,7 +684,10 @@ async function renderTabla(){
   const criterios=orden.filter(k=>k!=='PJ');   // PJ es informativa
   const cmp=(a,b)=>{ for(const k of criterios){ const f=COLDEF[k].f; const d=(k==='GC')?(a[f]-b[f]):(b[f]-a[f]); if(d) return d; } return String(a.equipo).localeCompare(b.equipo); };
   const zonas=[...new Set(data.map(r=>r.zona))].sort();
-  const celdas=r=>orden.map(k=>{const v=r[COLDEF[k].f];return `<td class="text-center text-sm ${k==='PUNTOS'?'font-extrabold':k==='DIF_GOL'?(v>0?'text-emerald-600 font-semibold':v<0?'text-brand-600 font-semibold':'text-ink-400'):'text-ink-400'}">${k==='DIF_GOL'&&v>0?'+':''}${v}</td>`;}).join('');
+  // en móvil solo PJ, DG y PTS; el resto de columnas aparece desde sm:
+  const OCULTA_MOVIL={PG:1,PE:1,PP:1,GF:1,GC:1};
+  const thz=k=>`<th class="w-10 ${OCULTA_MOVIL[k]?'hidden sm:table-cell':''}">${COLDEF[k].h}</th>`;
+  const celdas=r=>orden.map(k=>{const v=r[COLDEF[k].f];return `<td class="text-center text-sm ${OCULTA_MOVIL[k]?'hidden sm:table-cell ':''}${k==='PUNTOS'?'font-extrabold':k==='DIF_GOL'?(v>0?'text-emerald-600 font-semibold':v<0?'text-brand-600 font-semibold':'text-ink-400'):'text-ink-400'}">${k==='DIF_GOL'&&v>0?'+':''}${v}</td>`;}).join('');
   const toggle=zonas.length>1?`<div class="flex gap-2 mb-3">
     ${[['zonas','POR ZONA'],['puestos','⚖ MEJORES POR PUESTO']].map(([m,l])=>`<button onclick="setTablaModo('${m}')" class="text-xs font-bold px-4 py-2 rounded-xl border ${TABLA_MODO===m?'bg-ink-900 text-white border-ink-900':'bg-white border-line text-ink-500 hover:bg-paper'}">${l}</button>`).join('')}
   </div>`:'';
@@ -698,10 +703,10 @@ async function renderTabla(){
         const rows=porPuesto[p].sort(cmp);
         return `<div class="bg-white rounded-2xl border border-line mb-4 overflow-x-auto">
           <div class="px-4 py-3 border-b border-line font-display text-xl tracking-wide">${ORD[p]||p+'°'} DE CADA ZONA</div>
-          <table class="w-full min-w-[520px]">
+          <table class="w-full sm:min-w-[520px]">
             <thead><tr class="text-[10px] uppercase text-ink-400 border-b border-line tracking-wider">
               <th class="py-2 w-8"></th><th class="text-left">Equipo</th><th class="w-14">Zona</th>
-              ${orden.map(k=>`<th class="w-10">${COLDEF[k].h}</th>`).join('')}
+              ${orden.map(thz).join('')}
             </tr></thead>
             <tbody>${rows.map((r,i)=>`<tr class="border-b border-line last:border-0 ${i===0?'bg-emerald-50/60':'hover:bg-paper'}">
               <td class="py-2.5 pl-2 text-ink-400 font-bold text-center">${i+1}</td>
@@ -716,10 +721,10 @@ async function renderTabla(){
     const rows=data.filter(r=>r.zona===z).sort(cmp);
     return `<div class="bg-white rounded-2xl border border-line mb-4 overflow-x-auto">
       <div class="px-4 py-3 border-b border-line font-display text-xl tracking-wide">ZONA ${z}</div>
-      <table class="w-full min-w-[480px]">
+      <table class="w-full sm:min-w-[480px]">
         <thead><tr class="text-[10px] uppercase text-ink-400 border-b border-line tracking-wider">
           <th class="py-2 w-8"></th><th class="text-left">Equipo</th>
-          ${orden.map(k=>`<th class="w-10">${COLDEF[k].h}</th>`).join('')}
+          ${orden.map(thz).join('')}
         </tr></thead>
         <tbody>${rows.map((r,i)=>`<tr class="border-b border-line last:border-0 hover:bg-paper">
           <td class="py-2.5 pl-2 text-ink-400 font-bold text-center">${i+1}</td>
