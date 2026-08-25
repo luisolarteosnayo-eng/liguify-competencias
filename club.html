@@ -1460,32 +1460,38 @@ async function goleadoresHTML(categoriaId){
     </div>`).join('')}
   </div>`;
 }
-/* 🏅 Ranking de jugadores de la categoría (top 10 → link a top 50) */
-let RK_LIM=10;
+/* 🏅 Ranking de la categoría (POR TORNEO): pestañas TODOS / ARQ / DEF / MED / DEL,
+   top 10 con link a top 50. El # es el puesto en la categoría (o en su línea). */
+let RK_LIM=10, RK_LINEA=null;
 async function rankingHTML(categoriaId,renderFn){
-  const r=await sb.rpc('ranking_categoria',{p_categoria:categoriaId,p_limite:RK_LIM});
-  if(r.error||!r.data||!(r.data.filas||[]).length) return '';
-  const d=r.data;
+  const r=await sb.rpc('ranking_categoria',{p_categoria:categoriaId,p_limite:RK_LIM,p_linea:RK_LINEA});
+  if(r.error||!r.data) return '';
+  const d=r.data, filas=d.filas||[];
+  if(!filas.length&&RK_LINEA===null) return '';
+  const TABS=[[null,'TODOS'],['ARQ','ARQUEROS'],['DEF','DEFENSAS'],['MED','MEDIOCAMPISTAS'],['DEL','DELANTEROS']];
+  const tabs=`<div class="flex flex-wrap gap-1.5 px-4 py-2.5 border-b border-line bg-paper/60">${TABS.map(([v,l])=>
+    `<button onclick="RK_LINEA=${v?`'${v}'`:'null'};RK_LIM=10;${renderFn}()" class="text-[10px] font-bold rounded-lg px-2.5 py-1.5 border transition ${RK_LINEA===v?'bg-ink-900 text-white border-ink-900':'bg-white border-line text-ink-500 hover:bg-paper'}">${l}</button>`).join('')}</div>`;
   return `<div class="bg-white rounded-2xl border border-line mb-4 overflow-hidden">
     <div class="px-4 py-3 border-b border-line flex items-center justify-between flex-wrap gap-2">
       <span class="font-display text-xl tracking-wide">🏅 RANKING</span>
       <span class="text-[9px] font-bold text-ink-400 uppercase tracking-wider">Actualización semanal${d.actualizado?' · '+d.actualizado.split('-').reverse().join('/'):''}</span></div>
-    <div class="overflow-x-auto"><table class="w-full min-w-[520px]">
+    ${tabs}
+    ${filas.length?`<div class="overflow-x-auto"><table class="w-full sm:min-w-[480px]">
       <thead><tr class="text-[10px] uppercase text-ink-400 border-b border-line tracking-wider">
-        <th class="py-2 w-8">#</th><th class="text-left">Jugador</th><th class="w-16">Puntos</th><th class="w-16">Torneo</th><th class="w-16">Liguify</th></tr></thead>
-      <tbody>${d.filas.map((g,i)=>`<tr ${g.perfil_token?`onclick="window.open('/jugador/${g.perfil_token}','_blank')" title="Ver el perfil del jugador"`:''} class="border-b border-line last:border-0 ${i===0?'bg-amber-50/60':''} ${g.perfil_token?'cursor-pointer hover:bg-paper transition':''}">
+        <th class="py-2 w-8">#</th><th class="text-left">Jugador</th><th class="w-16">Puntos</th><th class="w-16">Torneo</th></tr></thead>
+      <tbody>${filas.map((g,i)=>`<tr ${g.perfil_token?`onclick="window.open('/jugador/${g.perfil_token}','_blank')" title="Ver el perfil del jugador"`:''} class="border-b border-line last:border-0 ${i===0?'bg-amber-50/60':''} ${g.perfil_token?'cursor-pointer hover:bg-paper transition':''}">
         <td class="py-2 pl-2 text-center font-bold text-sm ${i<3?'text-brand-600':'text-ink-400'}">${g.puesto}</td>
         <td><span class="flex items-center gap-2.5 py-1">
           <span class="w-9 h-9 rounded-full grid place-items-center text-[10px] font-bold text-white overflow-hidden relative shrink-0" style="background:#2b3550${g.consentimiento?'':';filter:grayscale(1);opacity:.85'}">${g.foto_url?`<img src="${g.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales((g.nombres||'')+' '+(g.apellidos||''))}</span>
           <span class="min-w-0"><span class="font-semibold text-sm block truncate">${g.nombres} ${g.apellidos}${i===0?' <span class="text-amber-600">👑</span>':''}</span>
-          <span class="text-[10px] text-ink-400 block truncate">${g.equipo||''}</span></span></span></td>
+          <span class="text-[10px] text-ink-400 block truncate">${g.equipo||''}${!RK_LINEA&&g.linea?' · '+({ARQ:'Arquero',DEF:'Defensa',MED:'Mediocampista',DEL:'Delantero'})[g.linea]:''}</span></span></span></td>
         <td class="text-center font-display text-xl">${g.puntos}</td>
         <td class="text-center text-xs font-bold text-ink-500">#${g.puesto_torneo??'—'}</td>
-        <td class="text-center text-xs font-bold text-ink-500">#${g.puesto_liguify??'—'}</td>
-      </tr>`).join('')}</tbody></table></div>
+      </tr>`).join('')}</tbody></table></div>`
+      :'<p class="px-4 py-6 text-xs text-ink-400 text-center">Sin jugadores con puntos en esta línea (según la posición registrada en la LBF).</p>'}
     ${d.total>10?`<div class="px-4 py-2.5 border-t border-line text-center">
       <button onclick="RK_LIM=RK_LIM===10?50:10;${renderFn}()" class="text-xs font-bold text-brand-600 hover:underline">${RK_LIM===10?'VER LOS 50 PRIMEROS ↓':'VER SOLO EL TOP 10 ↑'}</button></div>`:''}
-    <p class="px-4 py-2 text-[10px] text-ink-400 border-t border-line">Puntos por partidos jugados, goles, asistencias, figura del partido y equipo ideal según la posición del jugador; las tarjetas restan. TORNEO: puesto en el torneo · LIGUIFY: puesto en todo el sistema.</p>
+    <p class="px-4 py-2 text-[10px] text-ink-400 border-t border-line">Ranking del torneo. Puntos por partidos jugados, goles, asistencias, figura del partido y equipo ideal según la posición del jugador; las tarjetas restan. # = puesto en ${RK_LINEA?'su línea dentro de la categoría':'la categoría'} · TORNEO = puesto en todo el torneo.</p>
   </div>`;
 }
 async function renderTablaEq(){
