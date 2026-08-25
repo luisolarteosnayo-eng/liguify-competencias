@@ -47,7 +47,7 @@ tailwind.config={theme:{extend:{
   </div>
 </header>
 
-<main class="max-w-5xl mx-auto px-4 py-6">
+<main class="max-w-5xl mx-auto px-4 py-6 pb-24 md:pb-8">
   <div id="err" class="hidden bg-brand-50 border border-brand-100 text-brand-600 text-sm font-semibold rounded-2xl px-4 py-3 mb-4"></div>
 
   <!-- CATÁLOGO DE MARCAS -->
@@ -77,30 +77,41 @@ tailwind.config={theme:{extend:{
   <!-- CATEGORÍAS DEL TORNEO -->
   <section id="s-categorias" class="screen">
     <button onclick="irMarca()" class="text-sm text-ink-500 mb-4 font-semibold" id="bc-marca"></button>
-    <div class="flex items-end justify-between flex-wrap gap-2 mb-4">
-      <div>
-        <h1 id="t-nombre" class="font-display text-4xl tracking-wide"></h1>
-        <p id="t-meta" class="text-ink-500 text-sm"></p>
+    <div class="rounded-2xl bg-ink-900 text-white p-6 sm:p-8 mb-4 relative overflow-hidden">
+      <div class="absolute inset-0 opacity-25" style="background:radial-gradient(circle at 82% 18%, #d9232e 0%, transparent 55%)"></div>
+      <div class="relative">
+        <p id="t-meta" class="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider"></p>
+        <h1 id="t-nombre" class="font-display text-4xl sm:text-6xl tracking-wide mt-2"></h1>
       </div>
     </div>
     <div id="t-kpis"></div>
     <div id="t-docs" class="mb-4"></div>
     <div id="t-general"></div>
     <h2 class="font-display text-2xl tracking-wide mb-3">CATEGORÍAS</h2>
-    <div class="space-y-2" id="categorias"></div>
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-3" id="categorias"></div>
   </section>
 
   <!-- CATEGORÍA: TABLA / FIXTURE / EQUIPOS -->
   <section id="s-categoria" class="screen">
     <button onclick="volverDeCategoria()" class="text-sm text-ink-500 mb-3 font-semibold" id="bc-torneo"></button>
-    <h1 id="c-nombre" class="font-display text-4xl tracking-wide mb-4"></h1>
+    <div class="rounded-2xl bg-ink-900 text-white p-5 sm:p-7 mb-4 relative overflow-hidden">
+      <div class="absolute inset-0 opacity-25" style="background:radial-gradient(circle at 82% 18%, #d9232e 0%, transparent 55%)"></div>
+      <div class="relative">
+        <p id="c-sup" class="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider hidden"></p>
+        <h1 id="c-nombre" class="font-display text-4xl sm:text-5xl tracking-wide"></h1>
+      </div>
+    </div>
     <div id="c-docs"></div>
     <div id="c-kpis"></div>
-    <div class="flex gap-1.5 mb-5" id="c-tabs"></div>
+    <div class="hidden md:flex gap-1.5 mb-5" id="c-tabs"></div>
     <div id="tab-tabla" class="ctab"></div>
     <div id="tab-fixture" class="ctab hidden"></div>
     <div id="tab-llaves" class="ctab hidden"></div>
     <div id="tab-equipos" class="ctab hidden"></div>
+    <!-- barra inferior (solo móvil): pestañas de la categoría -->
+    <nav class="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-white/95 backdrop-blur md:hidden">
+      <div class="mx-auto grid max-w-md grid-cols-4" id="c-tabs-mov"></div>
+    </nav>
   </section>
 
   <!-- MODAL: DETALLE DEL PARTIDO -->
@@ -426,15 +437,16 @@ async function irTorneo(){
   // Torneo de UNA sola categoria: el publico entra directo al detalle
   TORNEO_UNICAT=(cs||[]).length===1;
   if(TORNEO_UNICAT){ CAT=cs[0]; return irCategoria(); }
+  // conteo de equipos activos por categoría (para las tarjetas)
+  const eqx=await sb.from('equipo').select('categoria_id').in('categoria_id',cs.map(c=>c.id)).eq('estado','activo');
+  const NEQ={}; (eqx.data||[]).forEach(e=>{NEQ[e.categoria_id]=(NEQ[e.categoria_id]||0)+1;});
   $('categorias').innerHTML=cs.map(c=>`
-    <button onclick='irCategoriaId("${c.id}")' class="w-full bg-white border border-line rounded-2xl px-5 py-4 flex items-center gap-4 hover:shadow-md transition text-left">
-      <span class="w-11 h-11 rounded-xl bg-ink-900 text-white font-display grid place-items-center text-lg">${String(c.anio_nacimiento).slice(2)}</span>
-      <span class="flex-1">
-        <span class="font-bold block">${c.nombre_display||('Categoría '+c.anio_nacimiento+' / '+c.modalidad)}</span>
-        <span class="text-xs text-ink-400">Modalidad ${c.modalidad}</span>
-      </span><span class="text-ink-400">→</span>
-    </button>`).join('') || '<p class="text-ink-400 text-sm">Sin categorías aún.</p>';
-  renderKPIs('t-kpis',cs.map(c=>c.id));
+    <button onclick='irCategoriaId("${c.id}")' class="group relative overflow-hidden bg-white border border-line rounded-2xl p-4 hover:border-brand-500/40 hover:-translate-y-0.5 hover:shadow-md transition text-left">
+      <span class="block text-[10px] uppercase tracking-wider text-ink-400 font-semibold">CAT ${c.anio_nacimiento}</span>
+      <span class="block font-display text-3xl text-brand-600 leading-tight">${c.nombre_display||('Categoría '+String(c.anio_nacimiento).slice(2))}</span>
+      <span class="block mt-1.5 text-xs text-ink-500 font-semibold">Modalidad ${c.modalidad}${NEQ[c.id]?' · '+NEQ[c.id]+' equipos':''}</span>
+      <span class="absolute -right-6 -bottom-6 w-20 h-20 rounded-full bg-brand-500/10 group-hover:bg-brand-500/20 transition"></span>
+    </button>`).join('') || '<p class="text-ink-400 text-sm col-span-full">Sin categorías aún.</p>';
   renderKPIs('t-kpis',cs.map(c=>c.id));
   renderTablaGeneral('t-general',TORNEO,cs);
   show('s-categorias');
@@ -518,6 +530,8 @@ async function irCategoria(){
   err(null);
   $('bc-torneo').textContent='← '+(TORNEO_UNICAT?MARCA.nombre:TORNEO.nombre);
   $('c-nombre').textContent=(TORNEO_UNICAT?TORNEO.nombre:(CAT.nombre_display||('Categoría '+CAT.anio_nacimiento+' / '+CAT.modalidad))).toUpperCase();
+  const sup=TORNEO_UNICAT?`${MARCA.nombre} · Temporada ${TORNEO.anio}`:TORNEO.nombre;
+  $('c-sup').textContent=sup; $('c-sup').classList.toggle('hidden',!sup);
   // torneo de una sola categoria: los documentos del torneo se muestran aqui
   if(TORNEO_UNICAT){ sb.from('torneo_documento').select('*').eq('torneo_id',TORNEO.id).order('created_at').then(({data})=>{ $('c-docs').innerHTML=(data&&data.length)?`<div class="flex flex-wrap gap-2 mb-4">${data.map(d=>`<a href="${d.url}" target="_blank" download class="inline-flex items-center gap-1.5 bg-white border border-line rounded-xl px-4 py-2 text-sm font-bold text-ink-700 hover:shadow-md hover:text-brand-600 transition">📄 ${d.titulo} <span class="text-ink-400">⬇</span></a>`).join('')}</div>`:''; }); } else $('c-docs').innerHTML='';
   renderKPIs('c-kpis',[CAT.id]);
@@ -535,8 +549,12 @@ async function irCategoria(){
   show('s-categoria');
 }
 function renderTabs(act){
-  $('c-tabs').innerHTML=[['tabla','Tabla'],['fixture','Fixture'],['llaves','Llaves'],['equipos','Equipos']].map(([t,l])=>
+  const TABS=[['tabla','Tabla','📊'],['fixture','Fixture','📅'],['llaves','Llaves','🏆'],['equipos','Equipos','🛡️']];
+  $('c-tabs').innerHTML=TABS.map(([t,l])=>
     `<button onclick="renderTabs('${t}')" class="tabbtn ${t===act?'active':''} rounded-xl px-4 py-2 text-sm font-bold border border-line ${t===act?'':'text-ink-500 bg-white'}">${l}</button>`).join('');
+  const mov=$('c-tabs-mov'); if(mov) mov.innerHTML=TABS.map(([t,l,ic])=>
+    `<button onclick="renderTabs('${t}');window.scrollTo({top:0})" class="flex flex-col items-center gap-0.5 px-2 pt-2 pb-2.5 text-[10px] font-bold ${t===act?'text-brand-600':'text-ink-400'}">
+      <span class="text-lg leading-none ${t===act?'':'grayscale opacity-70'}">${ic}</span>${l}</button>`).join('');
   document.querySelectorAll('.ctab').forEach(x=>x.classList.add('hidden'));
   $('tab-'+act).classList.remove('hidden');
 }
@@ -692,14 +710,15 @@ function filaPartidoPublico(m){
     :`<span class="italic text-ink-400">${etiquetaCupo(ori)}</span>`;
   const gL=fin&&(m.penales?(m.penales_local??0)>(m.penales_visita??0):m.goles_local>m.goles_visita);
   const gV=fin&&(m.penales?(m.penales_visita??0)>(m.penales_local??0):m.goles_visita>m.goles_local);
-  return `<div onclick="abrirDetallePartido('${m.id}')" class="px-3 sm:px-4 py-3 border-b border-line last:border-0 cursor-pointer hover:bg-paper" title="Ver detalle del partido">
+  const est=vivo?`<span class="flex items-center justify-center gap-1 text-[9px] font-bold text-brand-600"><span class="live-dot"></span>EN VIVO</span>`
+    :`<span class="block text-[9px] font-bold uppercase tracking-wider ${fin?'text-emerald-600':'text-ink-400'}">${(!m.local_id||!m.visita_id)?'por definir':(m.estado==='finalizado'?'final':m.estado==='walkover'?'w.o.':m.estado)}</span>`;
+  return `<div onclick="abrirDetallePartido('${m.id}')" class="px-3 sm:px-4 py-3 border-b border-line last:border-0 cursor-pointer hover:bg-paper transition" title="Ver detalle del partido">
     <div class="flex items-center gap-1 sm:gap-2">
       <div class="flex-1 min-w-0 flex items-center justify-end gap-1.5 sm:gap-2 text-xs sm:text-sm ${gL?'font-bold':''}">${lado(L,m.local_origen,false)}</div>
       <div class="w-24 sm:w-28 text-center shrink-0">
-        ${vivo?`<span class="flex items-center justify-center gap-1 text-[9px] font-bold text-brand-600"><span class="live-dot"></span>EN VIVO</span>`
-          :`<span class="block text-[9px] font-bold uppercase ${fin?'text-emerald-600':'text-ink-400'}">${(!m.local_id||!m.visita_id)?'por definir':m.estado}</span>`}
-        <span class="font-display text-2xl">${m.goles_local??'–'} : ${m.goles_visita??'–'}</span>
-        ${m.penales?`<span class="block text-[11px] text-ink-400 -mt-0.5">penales ${m.penales_local} x ${m.penales_visita}</span>`:''}
+        ${est}
+        <span class="font-display text-3xl leading-none"><span class="${gL?'text-brand-600':''}">${m.goles_local??'–'}</span><span class="text-ink-400 mx-1">:</span><span class="${gV?'text-brand-600':''}">${m.goles_visita??'–'}</span></span>
+        ${m.penales?`<span class="block text-[11px] text-ink-400 mt-0.5">penales ${m.penales_local} x ${m.penales_visita}</span>`:''}
       </div>
       <div class="flex-1 min-w-0 flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm ${gV?'font-bold':''}">${lado(V,m.visita_origen,true)}</div>
     </div>
