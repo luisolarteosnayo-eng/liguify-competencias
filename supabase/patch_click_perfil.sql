@@ -5,8 +5,9 @@
 -- El token del perfil es público por diseño (es el enlace que se comparte).
 -- ============================================================================
 
--- 1) Goleadores con token del perfil
-create or replace view competencias.vista_goleadores as
+-- 1) Goleadores con token del perfil (drop y recrear: la columna nueva va al medio)
+drop view if exists competencias.vista_goleadores;
+create view competencias.vista_goleadores as
 select i.categoria_id, i.equipo_id, i.id as inscripcion_id,
        jp.nombres, jp.apellidos,
        case when jp.consentimiento_imagen
