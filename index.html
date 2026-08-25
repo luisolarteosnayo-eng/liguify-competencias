@@ -638,7 +638,7 @@ async function goleadoresHTML(categoriaId){
   if(error||!data||!data.length) return '';
   return `<div class="bg-white rounded-2xl border border-line mb-4 overflow-hidden">
     <div class="px-4 py-3 border-b border-line font-display text-xl tracking-wide">⚽ GOLEADORES</div>
-    ${data.map((g,i)=>`<div class="flex items-center gap-3 px-4 py-2 border-b border-line last:border-0 ${i===0?'bg-amber-50/60':''}">
+    ${data.map((g,i)=>`<div ${g.perfil_token?`onclick="window.open('/jugador/${g.perfil_token}','_blank')" title="Ver el perfil del jugador"`:''} class="flex items-center gap-3 px-4 py-2 border-b border-line last:border-0 ${i===0?'bg-amber-50/60':''} ${g.perfil_token?'cursor-pointer hover:bg-paper transition':''}">
       <span class="w-5 text-ink-400 font-bold text-sm text-center shrink-0">${i+1}</span>
       <span class="w-9 h-9 rounded-full grid place-items-center text-[10px] font-bold text-white overflow-hidden relative shrink-0" style="background:#2b3550;${g.consentimiento_imagen?'':'filter:grayscale(1);opacity:.85'}">${g.foto_url?`<img src="${g.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(g.nombres+' '+g.apellidos)}</span>
       <span class="flex-1 min-w-0"><span class="font-semibold text-sm block truncate">${g.nombres} ${g.apellidos}${i===0?' <span class="text-amber-600">👑</span>':''}</span>
@@ -660,7 +660,7 @@ async function rankingHTML(categoriaId,renderFn){
     <div class="overflow-x-auto"><table class="w-full sm:min-w-[520px]">
       <thead><tr class="text-[10px] uppercase text-ink-400 border-b border-line tracking-wider">
         <th class="py-2 w-8">#</th><th class="text-left">Jugador</th><th class="w-16">Puntos</th><th class="w-16">Torneo</th><th class="w-16">Liguify</th></tr></thead>
-      <tbody>${d.filas.map((g,i)=>`<tr class="border-b border-line last:border-0 ${i===0?'bg-amber-50/60':''}">
+      <tbody>${d.filas.map((g,i)=>`<tr ${g.perfil_token?`onclick="window.open('/jugador/${g.perfil_token}','_blank')" title="Ver el perfil del jugador"`:''} class="border-b border-line last:border-0 ${i===0?'bg-amber-50/60':''} ${g.perfil_token?'cursor-pointer hover:bg-paper transition':''}">
         <td class="py-2 pl-2 text-center font-bold text-sm ${i<3?'text-brand-600':'text-ink-400'}">${g.puesto}</td>
         <td><span class="flex items-center gap-2.5 py-1">
           <span class="w-9 h-9 rounded-full grid place-items-center text-[10px] font-bold text-white overflow-hidden relative shrink-0" style="background:#2b3550${g.consentimiento?'':';filter:grayscale(1);opacity:.85'}">${g.foto_url?`<img src="${g.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales((g.nombres||'')+' '+(g.apellidos||''))}</span>
