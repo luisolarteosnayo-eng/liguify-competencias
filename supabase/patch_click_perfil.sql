@@ -35,6 +35,7 @@ group by i.categoria_id, i.equipo_id, i.id,
          jp.nombres, jp.apellidos, jp.consentimiento_imagen, jp.foto_url, ft.url,
          e.nombre, c.nombre, pp.token
 having sum(p.goles) > 0 or sum(p.amarillas) > 0 or sum(p.rojas) > 0;
+grant select on competencias.vista_goleadores to anon, authenticated;   -- el drop borra los grants
 
 -- 2) Ranking con token del perfil
 create or replace function competencias.ranking_categoria(p_categoria uuid, p_limite int default 10)
