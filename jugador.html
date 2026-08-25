@@ -394,8 +394,10 @@ async function enviarCodigoSMS(){
   $('rp-sms-btn').disabled=true; $('rp-sms-btn').textContent='Enviando…';
   try{
     const r=await sb.functions.invoke('enviar-sms-padre',{body:{telefono:tel}});
-    const d=r.data||{};
-    if(r.error||d.error) throw new Error(d.error||(d.msg)||r.error.message||'No se pudo enviar el SMS');
+    let d=r.data||{};
+    if(r.error){ try{const b=await r.error.context.json(); if(b) d=b;}catch(_){}
+      if(!d.error&&!d.msg) d.error=r.error.message||'No se pudo enviar el SMS'; }
+    if(d.error) throw new Error(d.error+(d.detalle?' — '+d.detalle:''));
     if(!d.ok) throw new Error(d.msg||'No se pudo enviar el SMS');
     $('rp-sms-fila').classList.remove('hidden');
     $('rp-sms-msg').textContent='📨 Código enviado a '+tel+'. Vence en 10 minutos.';
