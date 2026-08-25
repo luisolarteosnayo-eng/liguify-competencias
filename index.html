@@ -729,7 +729,7 @@ async function renderTabla(){
         <tbody>${rows.map((r,i)=>`<tr class="border-b border-line last:border-0 hover:bg-paper">
           <td class="py-2.5 pl-2 text-ink-400 font-bold text-center">${i+1}</td>
           <td><button onclick='irEquipoId("${r.equipo_id}")' class="flex items-center gap-2.5 font-semibold text-sm hover:text-brand-600">${EQUIPOS[r.equipo_id]?badge(EQUIPOS[r.equipo_id]):''}<span>${r.equipo}</span></button></td>
-          ${orden.map(k=>{const v=r[COLDEF[k].f];return `<td class="text-center text-sm ${k==='PUNTOS'?'font-extrabold':k==='DIF_GOL'?(v>0?'text-emerald-600 font-semibold':v<0?'text-brand-600 font-semibold':'text-ink-400'):'text-ink-400'}">${k==='DIF_GOL'&&v>0?'+':''}${v}</td>`;}).join('')}
+          ${celdas(r)}
         </tr>`).join('')}</tbody></table></div>`;
   }).join('')+ultHTML+golHTML+rkHTML || '<p class="text-ink-400 text-sm">Sin equipos en zonas todavía.</p>';
 }
