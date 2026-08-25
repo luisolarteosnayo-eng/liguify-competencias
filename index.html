@@ -64,11 +64,14 @@ tailwind.config={theme:{extend:{
   <!-- TORNEOS DE LA MARCA -->
   <section id="s-torneos" class="screen">
     <button onclick="irCatalogo()" class="text-sm text-ink-500 mb-4 font-semibold">← Campeonatos</button>
-    <div class="rounded-2xl bg-ink-900 text-white p-8 mb-6 relative overflow-hidden">
+    <div class="rounded-2xl bg-ink-900 text-white p-6 sm:p-8 mb-6 relative overflow-hidden">
+      <div class="absolute inset-0 opacity-25" style="background:radial-gradient(circle at 82% 18%, #d9232e 0%, transparent 55%)"></div>
       <div id="m-wm" class="absolute -right-6 -top-10 font-display text-[150px] opacity-[.07] tracking-wide"></div>
-      <p id="m-meta" class="text-brand-500 font-bold text-xs tracking-widest"></p>
-      <h1 id="m-nombre" class="font-display text-6xl tracking-wide mt-1"></h1>
-      <p id="m-sub" class="text-white/60 text-sm mt-1"></p>
+      <div class="relative">
+        <p id="m-meta" class="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider"></p>
+        <h1 id="m-nombre" class="font-display text-5xl sm:text-6xl tracking-wide mt-2"></h1>
+        <p id="m-sub" class="text-white/60 text-sm mt-1"></p>
+      </div>
     </div>
     <h2 class="font-display text-2xl tracking-wide mb-3">TORNEOS</h2>
     <div class="space-y-2" id="torneos"></div>
@@ -85,6 +88,7 @@ tailwind.config={theme:{extend:{
       </div>
     </div>
     <div id="t-kpis"></div>
+    <div id="t-home"></div>
     <div id="t-docs" class="mb-4"></div>
     <div id="t-general"></div>
     <h2 class="font-display text-2xl tracking-wide mb-3">CATEGORÍAS</h2>
@@ -233,18 +237,26 @@ async function abrirDetallePartido(id){
     }
   }
   const ctx=m.etapa?`🏆 ${m.etapa}`:(m.jornada&&m.jornada.numero?`Fecha ${m.jornada.numero}`:'');
+  const gLd=fin&&(m.penales?(m.penales_local??0)>(m.penales_visita??0):m.goles_local>m.goles_visita);
+  const gVd=fin&&(m.penales?(m.penales_visita??0)>(m.penales_local??0):m.goles_visita>m.goles_local);
   abrirModal(`<div class="flex items-center justify-between mb-3"><h3 class="font-display text-2xl tracking-wide">DETALLE DEL PARTIDO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
-    <div class="flex items-center justify-center gap-4 mb-1">
-      <div class="text-center flex-1 min-w-0">${L?badge(L,9):''}<p class="text-xs font-bold mt-1 truncate">${L?nomEq(L):'Por definir'}</p></div>
-      <div class="text-center shrink-0">
-        ${vivo?'<p class="text-[10px] font-bold text-brand-600"><span class="live-dot"></span> EN VIVO</p>':`<p class="text-[10px] font-bold uppercase ${fin?'text-emerald-600':'text-ink-400'}">${m.estado}</p>`}
-        <p class="font-display text-5xl tracking-wider">${m.goles_local??'–'} : ${m.goles_visita??'–'}</p>
-        ${m.penales?`<p class="text-[10px] text-ink-400">penales ${m.penales_local} x ${m.penales_visita}</p>`:''}
+    <div class="bg-ink-900 text-white rounded-2xl p-4 sm:p-5 mb-4 relative overflow-hidden">
+      <div class="absolute inset-0 opacity-25" style="background:radial-gradient(circle at 85% 15%, #d9232e 0%, transparent 55%)"></div>
+      <div class="relative">
+        <p class="text-center mb-2">${vivo?'<span class="inline-flex items-center gap-1.5 text-[10px] font-bold text-white bg-brand-500 rounded-full px-2.5 py-1"><span class="live-dot" style="background:#fff"></span>EN VIVO</span>'
+          :`<span class="inline-flex text-[10px] font-bold uppercase tracking-wider rounded-full px-2.5 py-1 ${fin?'bg-emerald-500/20 text-emerald-300':'bg-white/10 text-white/60'}">${fin?(m.estado==='walkover'?'W.O.':'FINAL'):m.estado}</span>`}</p>
+        <div class="flex items-center justify-center gap-3 sm:gap-4">
+          <div class="text-center flex-1 min-w-0">${L?badge(L,9):''}<p class="text-xs font-bold mt-1.5 truncate">${L?nomEq(L):'Por definir'}</p></div>
+          <div class="text-center shrink-0">
+            <p class="font-display text-6xl leading-none tracking-wider"><span class="${gLd?'text-brand-500':''}">${m.goles_local??'–'}</span><span class="text-white/30 mx-1.5">:</span><span class="${gVd?'text-brand-500':''}">${m.goles_visita??'–'}</span></p>
+            ${m.penales?`<p class="text-[10px] text-white/50 mt-1">penales ${m.penales_local} x ${m.penales_visita}</p>`:''}
+          </div>
+          <div class="text-center flex-1 min-w-0">${V?badge(V,9):''}<p class="text-xs font-bold mt-1.5 truncate">${V?nomEq(V):'Por definir'}</p></div>
+        </div>
+        <p class="text-[10px] text-white/50 text-center mt-2.5 font-semibold">${ctx}${m.fecha?' · '+m.fecha:''}${m.hora?' '+m.hora.slice(0,5):''}${m.sede?' · 📍 '+m.sede:''}</p>
+        ${m.video_url?`<div class="text-center mt-3"><a href="${m.video_url}" target="_blank" rel="noopener" class="inline-flex items-center gap-2 bg-brand-500 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-brand-600">📺 VER VIDEO DEL PARTIDO</a></div>`:''}
       </div>
-      <div class="text-center flex-1 min-w-0">${V?badge(V,9):''}<p class="text-xs font-bold mt-1 truncate">${V?nomEq(V):'Por definir'}</p></div>
     </div>
-    <p class="text-[10px] text-ink-400 text-center mb-4">${ctx}${m.fecha?' · '+m.fecha:''}${m.hora?' '+m.hora.slice(0,5):''}${m.sede?' · '+m.sede:''}</p>
-    ${m.video_url?`<div class="text-center mb-4"><a href="${m.video_url}" target="_blank" rel="noopener" class="inline-flex items-center gap-2 bg-brand-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-brand-600">📺 VER VIDEO DEL PARTIDO</a></div>`:''}
     <div class="grid sm:grid-cols-2 gap-x-6 gap-y-3">${col(m.local_id,L?nomEq(L):'')+col(m.visita_id,V?nomEq(V):'')}</div>
     ${figHTML}`);
 }
@@ -343,12 +355,13 @@ async function irCatalogo(){
   const {data,error}=await sb.from('marca').select('*').order('created_at');
   if(error){err(error.message);return;} err(null);
   $('catalogo').innerHTML=data.map(m=>`
-    <button onclick='irMarcaId("${m.id}")' class="bg-white border border-line rounded-2xl p-5 text-left hover:shadow-md hover:-translate-y-0.5 transition">
+    <button onclick='irMarcaId("${m.id}")' class="group relative overflow-hidden bg-white border border-line rounded-2xl p-5 text-left hover:border-brand-500/40 hover:shadow-md hover:-translate-y-0.5 transition">
       <div class="w-16 h-16 rounded-2xl grid place-items-center text-white font-display text-2xl mb-3 overflow-hidden relative" style="background:#d9232e">
         ${m.logo_url?`<img src="${m.logo_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(m.nombre)}
       </div>
       <p class="font-bold text-sm leading-tight">${m.nombre}</p>
       <p class="text-xs text-ink-400 mt-1">${m.ciudad||''} · liguify.com/${m.slug}</p>
+      <span class="absolute -right-6 -bottom-6 w-20 h-20 rounded-full bg-brand-500/10 group-hover:bg-brand-500/20 transition"></span>
     </button>`).join('') || '<p class="text-ink-400 text-sm">Aún no hay campeonatos publicados.</p>';
   show('s-catalogo');
 }
@@ -390,12 +403,13 @@ async function irMarca(){
 let PUB_TORNEOS=[], PUB_VER_ANTERIORES=false;
 function renderTorneosPub(){
   const filaT=t=>`
-    <button onclick='irTorneoId("${t.id}")' class="w-full bg-white border border-line rounded-2xl px-5 py-4 flex items-center gap-4 hover:shadow-md transition text-left">
-      <span class="w-11 h-11 rounded-xl grid place-items-center text-white font-display text-sm overflow-hidden relative" style="background:#171e2e">${t.logo_url?`<img src="${t.logo_url}" class="absolute inset-0 w-full h-full object-cover"/>`:(t.nombre.replace(MARCA.nombre,'').trim().slice(0,4)||iniciales(t.nombre))}</span>
-      <span class="flex-1">
-        <span class="font-bold block">${t.nombre}</span>
-        <span class="text-xs text-ink-400">Temporada ${t.anio} · ${t.estado==='en_curso'?'<b class="text-emerald-600">EN CURSO</b>':t.estado}</span>
-      </span><span class="text-ink-400">→</span>
+    <button onclick='irTorneoId("${t.id}")' class="group relative overflow-hidden w-full bg-white border border-line rounded-2xl px-5 py-4 flex items-center gap-4 hover:border-brand-500/40 hover:shadow-md hover:-translate-y-0.5 transition text-left">
+      <span class="w-11 h-11 rounded-xl grid place-items-center text-white font-display text-sm overflow-hidden relative shrink-0" style="background:#171e2e">${t.logo_url?`<img src="${t.logo_url}" class="absolute inset-0 w-full h-full object-cover"/>`:(t.nombre.replace(MARCA.nombre,'').trim().slice(0,4)||iniciales(t.nombre))}</span>
+      <span class="flex-1 min-w-0">
+        <span class="font-display text-xl tracking-wide block truncate">${t.nombre.toUpperCase()}</span>
+        <span class="text-xs text-ink-400 font-semibold">Temporada ${t.anio} · ${t.estado==='en_curso'?'<b class="text-emerald-600">EN CURSO</b>':t.estado}</span>
+      </span><span class="text-ink-400 group-hover:text-brand-600 transition">→</span>
+      <span class="absolute -right-6 -bottom-6 w-16 h-16 rounded-full bg-brand-500/10 group-hover:bg-brand-500/20 transition"></span>
     </button>`;
   const enCurso=PUB_TORNEOS.filter(t=>t.estado==='en_curso');
   let anteriores=PUB_TORNEOS.filter(t=>t.estado==='finalizado');
@@ -437,6 +451,8 @@ async function irTorneo(){
   // Torneo de UNA sola categoria: el publico entra directo al detalle
   TORNEO_UNICAT=(cs||[]).length===1;
   if(TORNEO_UNICAT){ CAT=cs[0]; return irCategoria(); }
+  TORNEO_CATS=cs;
+  renderHomeTorneo(cs);   // "se está jugando" / próximos / últimos (todas las categorías)
   // conteo de equipos activos por categoría (para las tarjetas)
   const eqx=await sb.from('equipo').select('categoria_id').in('categoria_id',cs.map(c=>c.id)).eq('estado','activo');
   const NEQ={}; (eqx.data||[]).forEach(e=>{NEQ[e.categoria_id]=(NEQ[e.categoria_id]||0)+1;});
@@ -450,6 +466,59 @@ async function irTorneo(){
   renderKPIs('t-kpis',cs.map(c=>c.id));
   renderTablaGeneral('t-general',TORNEO,cs);
   show('s-categorias');
+}
+
+/* ---- 🏠 HOME DEL TORNEO: se está jugando · próximos · últimos resultados
+   (mezcla todas las categorías; al tocar un partido se entra a su categoría
+   y se abre el detalle) ---- */
+let TORNEO_CATS=[], TH_CN={};
+async function renderHomeTorneo(cs){
+  const el=$('t-home'); if(!el) return; el.innerHTML='';
+  const catIds=cs.map(c=>c.id);
+  TH_CN=Object.fromEntries(cs.map(c=>[c.id,(c.nombre_display||('Cat '+c.anio_nacimiento)).toUpperCase()]));
+  const [ms,clsx]=await Promise.all([
+    sb.from('partido').select('*, jornada:jornada_id(numero,horarios_publicados)').in('categoria_id',catIds).order('fecha').order('hora'),
+    sb.from('club').select('*').eq('marca_id',MARCA.id)
+  ]);
+  (clsx.data||[]).forEach(c=>{CLUBES[c.id]=c;});
+  const vis=(ms.data||[]).filter(m=>!(m.jornada&&m.jornada.horarios_publicados===false));
+  const eqIds=[...new Set(vis.flatMap(m=>[m.local_id,m.visita_id]).filter(Boolean))];
+  if(eqIds.length){const {data:eqs}=await sb.from('equipo').select('*').in('id',eqIds);(eqs||[]).forEach(e=>{EQUIPOS[e.id]=e;});}
+  const vivo=vis.filter(m=>m.estado==='en_vivo');
+  const hoy=new Date(Date.now()-5*3600e3).toISOString().slice(0,10);   // Perú UTC-5
+  const prox=vis.filter(m=>m.estado==='programado'&&m.local_id&&m.visita_id&&m.fecha&&m.fecha>=hoy).slice(0,6);
+  const fins=vis.filter(m=>['finalizado','walkover'].includes(m.estado))
+    .sort((a,b)=>String(b.fecha||'').localeCompare(a.fecha||'')||String(b.hora||'').localeCompare(a.hora||'')).slice(0,6);
+  const fmtF=f=>{const [y,mo,d]=f.split('-');return d+'/'+mo;};
+  const tarjeta=m=>{
+    const L=EQUIPOS[m.local_id],V=EQUIPOS[m.visita_id];
+    const fin=['finalizado','walkover'].includes(m.estado), esVivo=m.estado==='en_vivo';
+    const gL=fin&&(m.penales?(m.penales_local??0)>(m.penales_visita??0):m.goles_local>m.goles_visita);
+    const gV=fin&&(m.penales?(m.penales_visita??0)>(m.penales_local??0):m.goles_visita>m.goles_local);
+    const lado=(e,der)=>e?`<span class="flex items-center ${der?'':'justify-end'} gap-1.5 min-w-0">${der?badge(e,6)+' ':''}<span class="truncate text-xs font-semibold">${nomEq(e)}</span>${der?'':' '+badge(e,6)}</span>`:'<span class="text-xs italic text-ink-400">Por definir</span>';
+    return `<div onclick="irPartidoHome('${m.categoria_id}','${m.id}')" class="bg-white border border-line rounded-2xl p-3 cursor-pointer hover:border-brand-500/40 hover:-translate-y-0.5 hover:shadow-md transition">
+      <div class="mb-2 flex items-center justify-between gap-2 text-[10px] uppercase tracking-wider font-bold">
+        <span class="rounded-md bg-paper border border-line px-1.5 py-0.5 text-ink-500 truncate">${TH_CN[m.categoria_id]||''}</span>
+        ${esVivo?'<span class="flex items-center gap-1 text-brand-600 shrink-0"><span class="live-dot"></span>EN VIVO</span>'
+          :fin?'<span class="text-emerald-600 shrink-0">FINAL</span>'
+          :`<span class="text-ink-400 shrink-0">${m.fecha?fmtF(m.fecha):''}${m.hora?' · '+m.hora.slice(0,5):''}</span>`}
+      </div>
+      <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+        ${lado(L,false)}
+        <span class="font-display text-2xl leading-none text-center"><span class="${gL?'text-brand-600':''}">${m.goles_local??'–'}</span><span class="text-ink-400 mx-0.5">:</span><span class="${gV?'text-brand-600':''}">${m.goles_visita??'–'}</span></span>
+        ${lado(V,true)}
+      </div>
+    </div>`;
+  };
+  const secc=(titulo,lista)=>lista.length?`<div class="mb-5">
+    <h2 class="font-display text-2xl tracking-wide mb-2">${titulo}</h2>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">${lista.map(tarjeta).join('')}</div>
+  </div>`:'';
+  el.innerHTML=secc('🔴 SE ESTÁ JUGANDO',vivo)+secc('📅 PRÓXIMOS PARTIDOS',prox)+secc('⚽ ÚLTIMOS RESULTADOS',fins);
+}
+async function irPartidoHome(catId,mid){
+  const c=TORNEO_CATS.find(x=>x.id===catId); if(!c) return;
+  CAT=c; await irCategoria(); abrirDetallePartido(mid);
 }
 
 /* ---- 🏆 TABLA GENERAL del torneo (config "Mostrar tabla general") ----
@@ -828,10 +897,13 @@ async function irEquipoId(id){
   EQUIPO=EQUIPOS[id]; if(!EQUIPO) return;
   err(null);
   $('bc-cat').textContent='← '+(CAT.nombre_display||'Categoría');
-  $('eq-head').innerHTML=`<div class="bg-ink-900 text-white rounded-2xl p-5 flex items-center gap-4">
-    ${badge(EQUIPO,9)}
-    <div><h1 class="font-display text-3xl tracking-wide">${nomEq(EQUIPO).toUpperCase()}</h1>
-    <p class="text-white/50 text-sm">${(CLUBES[EQUIPO.club_id]||{}).nombre||''} · ${TORNEO.nombre}</p></div>
+  $('eq-head').innerHTML=`<div class="bg-ink-900 text-white rounded-2xl p-5 sm:p-6 flex items-center gap-4 relative overflow-hidden">
+    <div class="absolute inset-0 opacity-25" style="background:radial-gradient(circle at 85% 15%, #d9232e 0%, transparent 55%)"></div>
+    <div class="relative flex items-center gap-4 min-w-0">
+      ${badge(EQUIPO,9)}
+      <div class="min-w-0"><h1 class="font-display text-3xl sm:text-4xl tracking-wide truncate">${nomEq(EQUIPO).toUpperCase()}</h1>
+      <p class="text-white/50 text-xs sm:text-sm truncate">${(CLUBES[EQUIPO.club_id]||{}).nombre||''} · ${TORNEO.nombre}</p></div>
+    </div>
   </div>`;
   // Partidos del equipo: resultados y programados (mockup: ficha completa)
   const {data:pms}=await sb.from('partido')
@@ -855,9 +927,9 @@ async function irEquipoId(id){
         <div class="flex-1 min-w-0 flex items-center justify-end gap-1.5 sm:gap-2 text-xs sm:text-sm ${gL?'font-bold':''}">${lado(L,m.local_origen,false)}</div>
         <div class="w-24 sm:w-28 text-center shrink-0">
           ${vivo?`<span class="flex items-center justify-center gap-1 text-[9px] font-bold text-brand-600"><span class="live-dot"></span>EN VIVO</span>`
-            :`<span class="block text-[9px] font-bold uppercase ${fin?'text-emerald-600':'text-ink-400'}">${m.estado}</span>`}
-          <span class="font-display text-2xl">${m.goles_local??'–'} : ${m.goles_visita??'–'}</span>
-          ${m.penales?`<span class="block text-[11px] text-ink-400 -mt-0.5">penales ${m.penales_local} x ${m.penales_visita}</span>`:''}
+            :`<span class="block text-[9px] font-bold uppercase tracking-wider ${fin?'text-emerald-600':'text-ink-400'}">${fin?(m.estado==='walkover'?'w.o.':'final'):m.estado}</span>`}
+          <span class="font-display text-3xl leading-none"><span class="${gL?'text-brand-600':''}">${m.goles_local??'–'}</span><span class="text-ink-400 mx-1">:</span><span class="${gV?'text-brand-600':''}">${m.goles_visita??'–'}</span></span>
+          ${m.penales?`<span class="block text-[11px] text-ink-400 mt-0.5">penales ${m.penales_local} x ${m.penales_visita}</span>`:''}
         </div>
         <div class="flex-1 min-w-0 flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm ${gV?'font-bold':''}">${lado(V,m.visita_origen,true)}</div>
       </div>
