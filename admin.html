@@ -158,7 +158,7 @@ tailwind.config={theme:{extend:{
       <div class="px-5 py-3 border-b border-line flex items-center justify-between flex-wrap gap-2">
         <p class="font-display text-xl tracking-wide">PLANTEL · LISTA DE BUENA FE</p>
         <div class="flex gap-2 flex-wrap">
-          <button onclick="albumEquipo()" title="Álbum del equipo estilo Panini: cromos con foto y nombre, listo para redes" class="bg-white border border-amber-400 text-amber-700 text-xs font-bold px-4 py-2 rounded-xl hover:bg-amber-50">🖼 ÁLBUM</button>
+          <button onclick="modalAlbum()" title="Álbum del equipo estilo Panini: imagen para redes o PDF en alta para imprenta" class="bg-white border border-amber-400 text-amber-700 text-xs font-bold px-4 py-2 rounded-xl hover:bg-amber-50">🖼 ÁLBUM</button>
           <button onclick="modalImportarPlantel()" class="bg-white border border-emerald-600 text-emerald-700 text-xs font-bold px-4 py-2 rounded-xl hover:bg-emerald-50">⬇ IMPORTAR PLANTEL</button>
           <button onclick="modalJugador()" class="bg-ink-900 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-ink-700">+ AGREGAR JUGADOR/A</button>
         </div>
@@ -3438,7 +3438,24 @@ async function toggleHorarios(jid,mostrar){
    DOS A4: la calle central queda LIBRE (ningún cromo cruza el corte).
    Álbum interno: TODAS las fotos (sin filtro de consentimiento), completas
    (sin recorte) y con el puesto del jugador bajo el nombre. ---- */
-async function albumEquipo(){
+function modalAlbum(){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">🖼 ÁLBUM DEL EQUIPO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-500 mb-4">Elige el formato del álbum A3 (dos mitades A4 con calle de corte).</p>
+    <button onclick="cerrarModal();albumEquipo('png')" class="w-full bg-white border border-line rounded-2xl px-5 py-4 text-left hover:border-brand-500/40 hover:shadow-md transition mb-3">
+      <span class="font-display text-xl tracking-wide block">🖼 GENERAR IMAGEN</span>
+      <span class="text-xs text-ink-500">PNG (2480×1754) — para redes sociales y pantalla.</span></button>
+    <button onclick="cerrarModal();albumEquipo('pdf')" class="w-full bg-white border border-amber-400 rounded-2xl px-5 py-4 text-left hover:shadow-md transition">
+      <span class="font-display text-xl tracking-wide block text-amber-700">📄 GENERAR PDF EN ALTA</span>
+      <span class="text-xs text-ink-500">PDF A3 a 300 DPI (4960×3508) — el archivo que pide la imprenta.</span></button>`);
+}
+async function cargarJsPDF(){
+  if(window.jspdf&&window.jspdf.jsPDF) return true;
+  await new Promise(res=>{const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
+    s.onload=res; s.onerror=res; document.head.appendChild(s);});
+  return !!(window.jspdf&&window.jspdf.jsPDF);
+}
+async function albumEquipo(formato='png'){
   const [insQ,ctQ]=await Promise.all([
     sb.from('inscripcion_lbf').select('id,dorsal,capitan,jugador_id').eq('equipo_id',EQUIPO.id).eq('en_lbf',true).eq('inhabilitado',false).order('dorsal'),
     sb.from('comando_tecnico').select('id,rol,persona_id').eq('equipo_id',EQUIPO.id).eq('inhabilitado',false).order('created_at')
@@ -3446,7 +3463,7 @@ async function albumEquipo(){
   if(insQ.error){toast(errNegocio(insQ.error));return;}
   const ins=insQ.data||[], cts=ctQ.data||[];
   if(!ins.length&&!cts.length){toast('⚠ Este equipo aún no tiene jugadores en la LBF');return;}
-  toast('🖼 Generando álbum A3…');
+  toast(formato==='pdf'?'📄 Generando PDF A3 en alta (300 DPI)…':'🖼 Generando álbum A3…');
   const pids=[...new Set([...ins.map(i=>i.jugador_id),...cts.map(c=>c.persona_id)])];
   const {data:js}=await sb.from('jugador_maestro').select('id,nombres,apellidos,foto_url,posicion').in('id',pids);
   await fotosDelTorneo(js||[]);
@@ -3477,8 +3494,9 @@ async function albumEquipo(){
   const XIZQ=(W-(halfW*2+GUT))/2, XDER=XIZQ+halfW+GUT;
   const gridH=rows*CH+(rows-1)*GAP;
   const Y0=HEAD+30+(Hc-gridH)/2;
-  const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
-  const x=cv.getContext('2d');
+  const S=formato==='pdf'?2:1;   // PDF en alta: mismo diseño rasterizado al doble (A3 @300 DPI)
+  const cv=document.createElement('canvas'); cv.width=W*S; cv.height=H*S;
+  const x=cv.getContext('2d'); x.scale(S,S);
   x.fillStyle='#101626'; x.fillRect(0,0,W,H);
   x.save(); x.globalAlpha=.05; x.strokeStyle='#fff'; x.lineWidth=1;
   for(let i=-H;i<W;i+=52){x.beginPath();x.moveTo(i,0);x.lineTo(i+H,H);x.stroke();}
@@ -3555,15 +3573,25 @@ async function albumEquipo(){
   x.fillText('⚡ Powered by Liguify · liguify.com/'+(MARCA.slug||''),W/2,H-28);
   x.textAlign='left';
   window.__CV=cv;
+  const base=`album-a3-${(nomEq(EQUIPO)||'equipo').replace(/[^\w]+/g,'-').toLowerCase()}`;
   try{
-    cv.toBlob(b=>{
-      const a=document.createElement('a');
-      a.href=URL.createObjectURL(b);
-      a.download=`album-a3-${(nomEq(EQUIPO)||'equipo').replace(/[^\w]+/g,'-').toLowerCase()}.png`;
-      a.click();
-      setTimeout(()=>URL.revokeObjectURL(a.href),5000);
-      toast('🖼 Álbum A3 horizontal descargado ✔ — imprímelo a tamaño A3 o compártelo en redes');
-    },'image/png');
+    if(formato==='pdf'){
+      if(!(await cargarJsPDF())){toast('⚠ No se pudo cargar el generador de PDF — revisa tu conexión e inténtalo de nuevo');return;}
+      const {jsPDF}=window.jspdf;
+      const pdf=new jsPDF({orientation:'landscape',unit:'mm',format:'a3',compress:true});
+      pdf.addImage(cv.toDataURL('image/jpeg',0.95),'JPEG',0,0,420,297);
+      pdf.save(base+'-alta-300dpi.pdf');
+      toast('📄 PDF A3 en alta descargado ✔ — 300 DPI, listo para la imprenta');
+    }else{
+      cv.toBlob(b=>{
+        const a=document.createElement('a');
+        a.href=URL.createObjectURL(b);
+        a.download=base+'.png';
+        a.click();
+        setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+        toast('🖼 Álbum A3 horizontal descargado ✔ — imprímelo a tamaño A3 o compártelo en redes');
+      },'image/png');
+    }
   }catch(e){toast('⚠ No se pudo exportar el álbum: '+(e.message||e));}
 }
 
