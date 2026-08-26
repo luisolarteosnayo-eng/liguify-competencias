@@ -188,8 +188,6 @@ function render(){
   ${(()=>{   // ⏱ dashboard de participación (minutos y % sobre el tiempo posible)
     const min=tot('minutos'), pj=tot('pj');
     if(!pj) return '';
-    if(!min) return `<div class="bg-white border border-line rounded-2xl px-5 py-4 mb-5 flex items-center gap-3">
-      <span class="text-2xl">⏱</span><p class="text-sm text-ink-500 font-semibold">El club aún no ha subido la información de minutos por jugador.</p></div>`;
     const den=ts.reduce((s,t)=>s+(+t.pj||0)*(+t.duracion||90),0);
     const pct=den>0?Math.min(100,Math.round(min/den*100)):0;
     const R=34, C=2*Math.PI*R, col=pct>=60?'#059669':pct>=30?'#f59e0b':'#d9232e';
@@ -198,18 +196,19 @@ function render(){
       <div class="flex items-center gap-6 flex-wrap">
         <div class="relative w-24 h-24 shrink-0">
           <svg viewBox="0 0 80 80" class="w-24 h-24 -rotate-90">
-            <circle cx="40" cy="40" r="${R}" fill="none" stroke="#e9e6e0" stroke-width="8"/>
-            <circle cx="40" cy="40" r="${R}" fill="none" stroke="${col}" stroke-width="8" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-pct/100)}"/>
+            <circle cx="40" cy="40" r="${R}" fill="none" stroke="${min?'#e9e6e0':'#fde3e3'}" stroke-width="8"/>
+            ${min?`<circle cx="40" cy="40" r="${R}" fill="none" stroke="${col}" stroke-width="8" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-pct/100)}"/>`:''}
           </svg>
-          <span class="absolute inset-0 grid place-items-center font-display text-2xl">${pct}%</span>
+          <span class="absolute inset-0 grid place-items-center font-display text-2xl ${min?'':'text-brand-600'}">${pct}%</span>
         </div>
         <div class="flex gap-6 flex-wrap">
-          <div class="text-center"><p class="font-display text-3xl">${min}</p><p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Minutos jugados</p></div>
-          <div class="text-center"><p class="font-display text-3xl">${Math.round(min/pj)}</p><p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Min por partido</p></div>
+          <div class="text-center"><p class="font-display text-3xl ${min?'':'text-brand-600'}">${min}</p><p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Minutos jugados</p></div>
+          <div class="text-center"><p class="font-display text-3xl ${min?'':'text-brand-600'}">${pj?Math.round(min/pj):0}</p><p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Min por partido</p></div>
           <div class="text-center"><p class="font-display text-3xl text-ink-400">${den}</p><p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Minutos posibles</p></div>
         </div>
       </div>
-      <p class="text-[10px] text-ink-400 mt-2">% participación = minutos jugados ÷ (partidos jugados × duración del partido de su categoría).</p>
+      ${min?`<p class="text-[10px] text-ink-400 mt-2">% participación = minutos jugados ÷ (partidos jugados × duración del partido de su categoría).</p>`
+           :`<p class="flex items-center gap-2 text-xs font-bold text-brand-600 bg-brand-50 border border-brand-100 rounded-xl px-3 py-2 mt-3">⚠ El club aún no ha subido la información de minutos por jugador.</p>`}
     </div>`;})()}
 
   ${(P.equipo_ideal||[]).length?`<div class="bg-gradient-to-r from-amber-400 to-amber-300 rounded-2xl px-5 py-4 mb-5 shadow-sm">
