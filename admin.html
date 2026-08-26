@@ -4330,7 +4330,7 @@ async function generarImagenEquipoIdeal(ctx){
     // jugadores dentro de la franja: foto centrada (márgenes iguales arriba y
     // abajo) y la píldora del nombre se traslapa por delante de la foto
     const r=Math.min(86,Math.round(sh*0.37));
-    const cy=sy+sh/2, pillY=sy+sh-50;
+    const cy=sy+sh/2, pillY=sy+sh-62;
     lista.forEach((p,i)=>{
       const cx=sx+sw*(i+1)/(lista.length+1);
       // foto con aro
@@ -4346,19 +4346,22 @@ async function generarImagenEquipoIdeal(ctx){
       const nom=primerNombre(p).toUpperCase();
       const catTxt=(ctx.conCategoria&&(p.catCorta||p.cat))?String(p.catCorta||p.cat):'';
       const maxW=sw/(lista.length)-24;
-      x.font=fitF(nom,'28px "Bebas Neue"',maxW-88,16); const fN=x.font; const wN=x.measureText(nom).width;
+      const clubN=String(p.club.nombre||'').toUpperCase();
+      x.font=fitF(nom,'28px "Bebas Neue"',maxW-92,16); const fN=x.font; const wN=x.measureText(nom).width;
       x.font='700 15px Inter'; const wC=catTxt?x.measureText(catTxt).width+10:0;
-      const br=18, pw=Math.min(maxW,28+br*2+wN+wC+10), ph=44;
+      x.font=fitF(clubN,'700 12px Inter',maxW-92,8); const fC=x.font; const wClub=x.measureText(clubN).width;
+      const br=18, pw=Math.min(maxW,28+br*2+Math.max(wN+wC,wClub)+10), ph=56;
       x.save(); x.shadowColor='rgba(0,0,0,0.45)'; x.shadowBlur=10;
-      x.fillStyle='rgba(9,16,38,0.92)'; x.beginPath(); x.roundRect(cx-pw/2,pillY,pw,ph,22); x.fill(); x.restore();
+      x.fillStyle='rgba(9,16,38,0.92)'; x.beginPath(); x.roundRect(cx-pw/2,pillY,pw,ph,24); x.fill(); x.restore();
       const esc2=escudos[p.club.id]||null, bx=cx-pw/2+8+br, by=pillY+ph/2;
       x.save(); x.beginPath(); x.arc(bx,by,br,0,Math.PI*2); x.clip();
       if(esc2){ x.fillStyle='#fff'; x.fillRect(bx-br,by-br,br*2,br*2); const s=br*1.85; x.drawImage(esc2,bx-s/2,by-s/2,s,s); }
       else { x.fillStyle=p.club.color||'#334155'; x.fillRect(bx-br,by-br,br*2,br*2); x.fillStyle='#fff'; x.font='700 15px Inter'; x.textAlign='center'; x.textBaseline='middle'; x.fillText(iniciales(p.club.nombre||'?').slice(0,2),bx,by+1); }
       x.restore();
       x.textAlign='left'; x.textBaseline='middle';
-      x.fillStyle='#fff'; x.font=fN; x.fillText(nom,bx+br+9,by+2);
-      if(catTxt){ x.fillStyle='#fbbf24'; x.font='700 15px Inter'; x.fillText(catTxt,bx+br+9+wN+9,by+1); }
+      x.fillStyle='#fff'; x.font=fN; x.fillText(nom,bx+br+9,pillY+18);
+      if(catTxt){ x.fillStyle='#fbbf24'; x.font='700 15px Inter'; x.fillText(catTxt,bx+br+9+wN+8,pillY+17); }
+      x.fillStyle='rgba(255,255,255,0.65)'; x.font=fC; x.fillText(clubN,bx+br+9,pillY+41);
     });
   });
   x.textBaseline='alphabetic';
