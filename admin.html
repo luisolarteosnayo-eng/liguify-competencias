@@ -649,18 +649,18 @@ async function modalPadresMarca(){
 function renderPadresMarca(){
   const q=($('pm-q')?.value||'').toLowerCase().trim();
   const norm=s=>String(s||'').toLowerCase();
-  const lista=PADRES_MARCA.filter(p=>!q||[p.nombre,p.email,p.telefono,p.jugador,p.documento,p.clubes].some(v=>norm(v).includes(q)));
+  const lista=PADRES_MARCA.filter(p=>!q||[p.nombre,p.email,p.telefono,p.dni,p.parentesco,p.jugador,p.documento,p.clubes].some(v=>norm(v).includes(q)));
   const f=d=>d?new Date(d).toLocaleDateString('es-PE',{day:'2-digit',month:'2-digit',year:'numeric'}):'—';
   $('pm-lista').innerHTML=`<p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-2">${lista.length} de ${PADRES_MARCA.length} registro(s)</p>`+
     (lista.map(p=>`<div class="border border-line rounded-xl px-4 py-3 mb-2">
       <div class="flex items-start gap-3 flex-wrap">
         <div class="flex-1 min-w-48">
-          <p class="font-bold">${p.nombre||'<span class="text-ink-400">(sin nombre)</span>'} <span class="text-[9px] font-bold rounded-full px-2 py-0.5 ml-1 ${p.origen==='auto'?'bg-emerald-100 text-emerald-700':'bg-paper text-ink-500'}">${p.origen==='auto'?'AUTOSERVICIO':'ASIGNADO'}</span>${p.estado==='pendiente'?' <span class="text-[9px] font-bold rounded-full px-2 py-0.5 bg-amber-100 text-amber-700">⏳ PENDIENTE</span>':''}</p>
+          <p class="font-bold">${p.nombre||'<span class="text-ink-400">(sin nombre)</span>'}${p.parentesco?` <span class="text-[9px] font-bold rounded-full px-2 py-0.5 bg-ink-900 text-white">${p.parentesco.toUpperCase()}</span>`:''} <span class="text-[9px] font-bold rounded-full px-2 py-0.5 ml-1 ${p.origen==='auto'?'bg-emerald-100 text-emerald-700':'bg-paper text-ink-500'}">${p.origen==='auto'?'AUTOSERVICIO':'ASIGNADO'}</span>${p.estado==='pendiente'?' <span class="text-[9px] font-bold rounded-full px-2 py-0.5 bg-amber-100 text-amber-700">⏳ PENDIENTE</span>':''}</p>
           ${p.estado==='pendiente'?`<div class="flex gap-2 mt-1.5">
             <button onclick="resolverPadreMarca('${p.usuario_id}','${p.jugador_id}',true)" class="bg-emerald-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg hover:bg-emerald-700">APROBAR</button>
             <button onclick="resolverPadreMarca('${p.usuario_id}','${p.jugador_id}',false)" class="border border-line text-ink-500 text-[10px] font-bold px-3 py-1.5 rounded-lg hover:bg-brand-50 hover:text-brand-600">RECHAZAR</button>
           </div>`:''}
-          <p class="text-xs text-ink-500">${p.email||''}${p.telefono?' · 📞 '+p.telefono:''}</p>
+          <p class="text-xs text-ink-500">${p.dni?'🧾 DNI '+p.dni+' · ':''}${p.email||''}${p.telefono?' · 📞 '+p.telefono:''}</p>
           <p class="text-[11px] text-ink-400 mt-1">Registrado ${f(p.registrado_at)} · Términos ${p.terminos_at?'✔ '+f(p.terminos_at):'<span class="text-amber-600 font-bold">sin aceptar</span>'}</p>
         </div>
         <div class="flex-1 min-w-48">
