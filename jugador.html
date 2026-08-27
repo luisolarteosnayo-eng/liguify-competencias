@@ -80,6 +80,19 @@ async function iniciar(){
   render();
   // Si quien mira es un SCOUT, su visita queda registrada (no-op para el resto)
   if(SESION){try{const r=await sb.rpc('registrar_vista_scout',{p_token:TOKEN});if(r.data===true)recargar();}catch(e){}}
+  // 🔭 SCOUT: botón SEGUIR en el banner (P.jugador_id solo llega si es scout)
+  if(SESION&&P&&P.jugador_id){try{
+    const ids=await sb.rpc('seguimiento_ids');
+    const yo=new Set(ids.data||[]);
+    window.__pintarSeg=()=>{const el=$('sc-seg'); if(!el) return; const on=yo.has(P.jugador_id);
+      el.innerHTML=`<button onclick="segPerfil()" class="shrink-0 text-[10px] font-bold rounded-full px-3 py-1.5 transition ${on?'bg-emerald-100 text-emerald-700 border border-emerald-300':'bg-ink-900 text-white hover:bg-ink-700'}">${on?'✔ SIGUIENDO':'➕ SEGUIR'}</button>`;};
+    window.segPerfil=async()=>{const on=yo.has(P.jugador_id);
+      const r=await sb.rpc('seguir_jugador',{p_jugador:P.jugador_id,p_seguir:!on});
+      if(r.error){toast('⚠ '+r.error.message);return;}
+      if(on) yo.delete(P.jugador_id); else yo.add(P.jugador_id);
+      window.__pintarSeg();};
+    window.__pintarSeg();
+  }catch(e){}}
 }
 
 /* Sin token: si es un padre logueado, sus hijos; si no, invitación a entrar */
@@ -157,6 +170,7 @@ function render(){
   <div class="${+P.scout_vistas?'bg-gradient-to-r from-amber-400 to-amber-300 text-ink-900':'bg-white border border-line text-ink-500'} rounded-2xl px-5 py-3.5 mb-4 flex items-center gap-3 shadow-sm">
     <span class="text-2xl">🔭</span>
     <p class="font-bold text-sm">${P.scout_vistas===1?'1 scout de equipo profesional vio este perfil':(P.scout_vistas||0)+' scouts de equipos profesionales vieron este perfil'}</p>
+    <span id="sc-seg" class="ml-auto"></span>
   </div>
 
   ${P.ranking?(rk=>`<div class="bg-ink-900 text-white rounded-2xl px-5 py-4 mb-4 shadow-sm">
