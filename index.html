@@ -132,6 +132,20 @@ tailwind.config={theme:{extend:{
       <p class="px-5 py-3 border-b border-line font-display text-xl tracking-wide">PLANTEL · LISTA DE BUENA FE</p>
       <div id="eq-lbf"></div>
     </div>
+    <div id="eq-stats"></div>
+  </section>
+
+  <!-- 🔭 SCOUT: SEGUIMIENTOS -->
+  <section id="s-scout" class="screen">
+    <button onclick="irCatalogo()" class="text-sm text-ink-500 mb-3 font-semibold">← Campeonatos</button>
+    <div class="rounded-2xl bg-ink-900 text-white p-5 sm:p-7 mb-4 relative overflow-hidden">
+      <div class="absolute inset-0 opacity-25" style="background:radial-gradient(circle at 82% 18%, #f59e0b 0%, transparent 55%)"></div>
+      <div class="relative">
+        <p class="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider">🔭 Modo Scout</p>
+        <h1 class="font-display text-4xl sm:text-5xl tracking-wide mt-2">SEGUIMIENTOS</h1>
+      </div>
+    </div>
+    <div id="scout-lista"></div>
   </section>
 </main>
 
@@ -372,11 +386,150 @@ async function irMarcaId(id){
   if(error){err(error.message);return;}
   MARCA=data; irMarca();
 }
+/* ============ 🔭 SCOUT (acceso por invitación · liguify.com/scout) ============ */
+let SCOUT=false, SEG_SET=new Set();
+async function initScout(){
+  try{
+    const {data:{session}}=await sb.auth.getSession();
+    if(!session) return false;
+    const r=await sb.rpc('es_scout');
+    if(r.data!==true) return false;
+    SCOUT=true;
+    const ids=await sb.rpc('seguimiento_ids');
+    SEG_SET=new Set(ids.data||[]);
+    renderScoutChrome(session.user.email);
+    return true;
+  }catch(e){return false;}
+}
+function renderScoutChrome(email){
+  if($('sc-chrome')) return;
+  const nav=document.querySelector('header nav'); if(!nav) return;
+  const w=document.createElement('span'); w.id='sc-chrome'; w.className='flex items-center gap-1.5';
+  w.innerHTML=`<button onclick="irScout()" title="${email||''}" class="flex items-center gap-1.5 bg-amber-400 text-ink-900 rounded-xl px-3 py-2 text-xs font-bold hover:bg-amber-300">🔭 <span class="hidden sm:inline">SEGUIMIENTOS</span><span id="sc-n" class="bg-ink-900 text-amber-300 rounded-full px-1.5 text-[10px]">${SEG_SET.size}</span></button>
+    <button onclick="scoutSalir()" class="border border-line rounded-xl px-2.5 py-2 text-xs font-semibold text-ink-500 hover:bg-paper">Salir</button>`;
+  nav.prepend(w);
+}
+async function scoutSalir(){await sb.auth.signOut({scope:'local'});location.href='/';}
+async function scoutEntrada(){
+  history.replaceState(null,'','/scout');
+  if(await initScout()){ irCatalogo(); return; }
+  const {data:{session}}=await sb.auth.getSession();
+  if(session){
+    const inv=await sb.rpc('mis_invitaciones_marca');
+    const pend=((inv.data)||[]).filter(i=>i.rol==='scout');
+    irCatalogo();
+    if(pend.length){
+      abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">🔭 INVITACIÓN SCOUT</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+        <p class="text-xs text-ink-500 mb-4">Tienes una invitación como scout. Acéptala para activar tu acceso.</p>
+        ${pend.map(i=>`<button onclick="aceptarInvScout('${i.id}')" class="w-full bg-ink-900 text-white font-bold py-2.5 rounded-xl mb-2 hover:bg-ink-700">ACEPTAR · ${i.marca}</button>`).join('')}`);
+    }else{
+      err('Tu cuenta ('+(session.user.email||'')+') no tiene el rol SCOUT. Pide al organizador que te invite y vuelve a entrar por liguify.com/scout.');
+    }
+    return;
+  }
+  irCatalogo(); modalLoginScout();
+}
+async function aceptarInvScout(id){
+  const r=await sb.rpc('aceptar_invitacion_marca',{p_id:id});
+  if(r.error||!r.data||!r.data.ok){err((r.data&&r.data.msg)||(r.error&&r.error.message)||'No se pudo aceptar la invitación');return;}
+  cerrarModal(); location.href='/scout';
+}
+function modalLoginScout(){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">🔭 ACCESO SCOUT</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-500 mb-4">Acceso solo por invitación del organizador. Entra con el email al que recibiste la invitación.</p>
+    <button onclick="scoutGoogle()" class="w-full border border-line rounded-xl py-2.5 font-bold text-sm hover:bg-paper mb-3">Entrar con Google</button>
+    <div class="flex items-center gap-2 text-[10px] text-ink-400 font-bold mb-3"><span class="flex-1 border-t border-line"></span>O CON TU CORREO<span class="flex-1 border-t border-line"></span></div>
+    <input id="sl-email" type="email" placeholder="correo@ejemplo.com" class="w-full border-b border-line py-2 font-semibold bg-transparent mb-2"/>
+    <input id="sl-pass" type="password" placeholder="contraseña" class="w-full border-b border-line py-2 font-semibold bg-transparent mb-3"/>
+    <button onclick="scoutLogin()" class="w-full bg-ink-900 text-white font-bold py-2.5 rounded-xl hover:bg-ink-700">ENTRAR</button>
+    <button onclick="scoutRegistro()" class="w-full text-xs font-bold text-ink-500 mt-2 hover:underline">¿Primera vez? Crea tu contraseña con el email invitado</button>
+    <p id="sl-msg" class="text-xs text-brand-600 font-bold mt-2"></p>`);
+}
+async function scoutGoogle(){const {error}=await sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+'/scout'}});if(error)$('sl-msg').textContent='⚠ '+error.message;}
+async function scoutLogin(){
+  const {error}=await sb.auth.signInWithPassword({email:$('sl-email').value.trim(),password:$('sl-pass').value});
+  if(error){$('sl-msg').textContent='⚠ '+error.message;return;}
+  location.href='/scout';
+}
+async function scoutRegistro(){
+  const email=$('sl-email').value.trim(), pass=$('sl-pass').value;
+  if(!email||pass.length<6){$('sl-msg').textContent='Escribe tu email y una contraseña de 6+ caracteres.';return;}
+  const {data,error}=await sb.auth.signUp({email,password:pass,options:{emailRedirectTo:location.origin+'/scout'}});
+  if(error){$('sl-msg').textContent='⚠ '+error.message;return;}
+  $('sl-msg').className='text-xs text-emerald-700 font-bold mt-2';
+  if(data&&data.session){location.href='/scout';return;}
+  $('sl-msg').textContent='📨 Te enviamos un correo de confirmación: ábrelo y vuelve a liguify.com/scout';
+}
+const btnSeguirCls=on=>'shrink-0 text-[10px] font-bold rounded-full px-2.5 py-1 transition '+(on?'bg-emerald-100 text-emerald-700 border border-emerald-300':'bg-ink-900 text-white hover:bg-ink-700');
+async function toggleSeguir(jid,desde){
+  const sig=!SEG_SET.has(jid);
+  const r=await sb.rpc('seguir_jugador',{p_jugador:jid,p_seguir:sig});
+  if(r.error){err(r.error.message);return;}
+  if(sig) SEG_SET.add(jid); else SEG_SET.delete(jid);
+  document.querySelectorAll(`[data-jid="${jid}"]`).forEach(b=>{
+    b.textContent=SEG_SET.has(jid)?'✔ SIGUIENDO':'➕ SEGUIR';
+    b.className=btnSeguirCls(SEG_SET.has(jid));
+  });
+  const n=$('sc-n'); if(n) n.textContent=SEG_SET.size;
+  if(desde==='lista') irScout();
+}
+async function irScout(){
+  const r=await sb.rpc('mis_seguimientos');
+  if(r.error){err(r.error.message);return;}
+  const d=r.data||[];
+  $('scout-lista').innerHTML=d.length?d.map(s=>`
+    <div class="bg-white border border-line rounded-2xl px-4 py-3 mb-2 flex items-center gap-3 flex-wrap">
+      <span class="w-12 h-12 rounded-full grid place-items-center text-xs font-bold text-white overflow-hidden relative shrink-0" style="background:#2b3550">${s.foto_url?`<img src="${s.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(s.nombres+' '+s.apellidos)}</span>
+      <span class="flex-1 min-w-44">
+        <span class="font-bold block">${s.nombres} ${s.apellidos}</span>
+        <span class="text-[11px] text-ink-500 font-semibold block">${s.clubes||''}${s.categorias?' · '+s.categorias:''}</span>
+        <span class="text-[10px] text-ink-400 font-semibold">${[s.posicion,s.pie_habil].filter(Boolean).join(' · ')||'Sin posición registrada'}</span>
+      </span>
+      <span class="text-center shrink-0"><span class="font-display text-2xl block leading-none">${s.puntos??0}</span><span class="text-[9px] font-bold text-ink-400 uppercase">pts</span></span>
+      <span class="text-center shrink-0 max-w-28"><span class="font-display text-2xl block leading-none">${s.puesto?'#'+s.puesto:'—'}</span><span class="text-[9px] font-bold text-ink-400 uppercase block truncate">${s.ranking_cat||'ranking'}</span></span>
+      ${s.perfil_token?`<a href="/jugador/${s.perfil_token}" target="_blank" rel="noopener" class="shrink-0 bg-amber-400 text-ink-900 text-[10px] font-bold rounded-full px-3 py-1.5 hover:bg-amber-300">⭐ VER PERFIL</a>`:''}
+      <button data-jid="${s.jugador_id}" onclick="toggleSeguir('${s.jugador_id}','lista')" class="${btnSeguirCls(true)}">✔ SIGUIENDO</button>
+    </div>`).join('')
+   :'<p class="text-sm text-ink-400 bg-white border border-line rounded-2xl p-8 text-center">Aún no sigues a ningún jugador.<br>Entra a un equipo y usa <b>➕ SEGUIR</b> en su lista de buena fe.</p>';
+  show('s-scout');
+}
+function statsScoutHTML(st){
+  if(!(st||[]).length) return '';
+  const DUR=st[0].duracion||90;
+  const fila=(s,i)=>{const pct=s.pj>0?Math.min(100,Math.round(s.minutos/(s.pj*DUR)*100)):0;
+    return `<tr class="border-b border-line last:border-0 hover:bg-paper">
+      <td class="py-2 pl-3 text-ink-400 font-bold text-center">${s.dorsal??''}</td>
+      <td class="font-semibold text-sm whitespace-nowrap">${s.nombres} ${s.apellidos}</td>
+      <td class="text-center text-xs text-ink-500">${s.posicion||'—'}</td>
+      <td class="text-center text-xs text-ink-500">${s.pie_habil||'—'}</td>
+      <td class="text-center font-bold">${s.pj}</td>
+      <td class="text-center">${s.minutos}</td>
+      <td class="text-center font-bold ${+s.goles?'text-brand-600':''}">${s.goles}</td>
+      <td class="text-center">${s.asistencias}</td>
+      <td class="text-center">${+s.amarillas?'🟨'+s.amarillas:''}</td>
+      <td class="text-center">${+s.rojas?'🟥'+s.rojas:''}</td>
+      <td class="text-center font-bold ${pct>=60?'text-emerald-600':pct>0?'text-amber-600':'text-ink-400'}">${s.minutos>0?pct+'%':'—'}</td>
+      <td class="text-center"><button data-jid="${s.jugador_id}" onclick="toggleSeguir('${s.jugador_id}')" class="${btnSeguirCls(SEG_SET.has(s.jugador_id))}">${SEG_SET.has(s.jugador_id)?'✔ SIGUIENDO':'➕ SEGUIR'}</button></td>
+    </tr>`;};
+  return `<div class="bg-white rounded-2xl border border-line mt-4 overflow-hidden">
+    <div class="px-5 py-3 border-b border-line flex items-center justify-between flex-wrap gap-2">
+      <p class="font-display text-xl tracking-wide">🔭 ESTADÍSTICAS · VISTA SCOUT <span class="text-xs font-sans text-ink-400 font-semibold">partido de ${DUR}'</span></p>
+      <span class="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1 uppercase tracking-wider">Solo visible para scouts</span></div>
+    <div class="overflow-x-auto"><table class="w-full min-w-[760px] text-sm">
+      <thead><tr class="text-[10px] uppercase text-ink-400 border-b border-line tracking-wider">
+        <th class="py-2 w-8">N°</th><th class="text-left">Jugador</th><th>Pos</th><th>Pie</th><th class="w-9">PJ</th><th class="w-10">Min</th><th class="w-9">⚽</th><th class="w-9">A</th><th class="w-9">🟨</th><th class="w-9">🟥</th><th class="w-12" title="minutos ÷ (PJ × ${DUR}')">%Part</th><th class="w-24"></th></tr></thead>
+      <tbody>${st.map(fila).join('')}</tbody></table></div>
+    <p class="text-[10px] text-ink-400 px-5 py-2 bg-paper">PJ y minutos provienen de la planilla oficial. %Part = minutos ÷ (PJ × ${DUR}').</p>
+  </div>`;
+}
+
 /* liguify.com/<slug> abre esa marca directamente (es la dirección que se
    publica en los flyers y en el catálogo). Vercel sirve index.html para
    cualquier ruta de un segmento que no sea un archivo real. */
 async function abrirPorRuta(){
   const slug=decodeURIComponent(location.pathname.replace(/^\/+|\/+$/g,'')).toLowerCase();
+  if(slug==='scout') return scoutEntrada();
+  await initScout();   // un scout logueado conserva su modo en cualquier ruta
   if(!slug) return irCatalogo();
   const {data}=await sb.from('marca').select('*').ilike('slug',slug).limit(1);
   if(data&&data.length){ MARCA=data[0]; return irMarca(); }
@@ -961,6 +1114,14 @@ async function irEquipoId(id){
       <p class="px-5 py-3 border-b border-line font-display text-xl tracking-wide">RESULTADOS</p>
       ${jugados.map(filaP).join('')}
     </div>`:''}`:'';
+  // 🔭 scout: estadísticas completas del equipo (también dan el jugador_id
+  // de cada inscripción para el botón SEGUIR de la LBF)
+  let SCST=[]; const J_INS={};
+  if(SCOUT){
+    const q=await sb.rpc('stats_equipo_scout',{p_equipo:id});
+    SCST=q.data||[]; SCST.forEach(s=>{J_INS[s.inscripcion_id]=s.jugador_id;});
+  }
+  $('eq-stats').innerHTML=SCOUT?statsScoutHTML(SCST):'';
   const {data,error}=await sb.from('vista_lbf_publica').select('*').eq('equipo_id',id).order('dorsal');
   if(error){err(error.message);return;}
   $('eq-lbf').innerHTML=data.length?data.map(j=>`
@@ -973,6 +1134,7 @@ async function irEquipoId(id){
         ${(j.posicion||j.pie_habil)?`<span class="block text-[10px] text-ink-400 font-normal">${[j.posicion,j.pie_habil].filter(Boolean).join(' · ')}</span>`:''}</span>
       <span class="text-xs text-ink-400">nac. ${j.mes_nacimiento?String(j.mes_nacimiento).padStart(2,'0')+'/':''}${j.anio_nacimiento}</span>
       ${j.perfil_token?`<a href="/jugador/${j.perfil_token}" target="_blank" rel="noopener" title="${j.perfil_activo?'Perfil activo (administrado por su familia)':'Perfil disponible — su familia aún no lo administra'}" class="shrink-0 inline-flex items-center gap-1 ${j.perfil_activo?'bg-amber-400 hover:bg-amber-500 text-ink-900':'bg-ink-400/20 hover:bg-ink-400/30 text-ink-500'} text-[10px] font-bold rounded-full px-2.5 py-1">⭐ PERFIL</a>`:''}
+      ${SCOUT&&J_INS[j.inscripcion_id]?`<button data-jid="${J_INS[j.inscripcion_id]}" onclick="toggleSeguir('${J_INS[j.inscripcion_id]}')" class="${btnSeguirCls(SEG_SET.has(J_INS[j.inscripcion_id]))}">${SEG_SET.has(J_INS[j.inscripcion_id])?'✔ SIGUIENDO':'➕ SEGUIR'}</button>`:''}
     </div>`).join(''):'<p class="px-5 py-8 text-sm text-ink-400 text-center">Este equipo aún no publica su plantel.</p>';
   show('s-equipo');
 }
