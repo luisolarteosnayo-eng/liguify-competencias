@@ -742,7 +742,8 @@ async function agregarUsuarioMarca(){
   // el rol se asigna recién cuando la persona ACEPTA desde su sesión.
   const r=await sb.rpc('invitar_usuario_marca',{p_marca:MARCA.id,p_email:e,p_rol:rol});
   if(r.error){toast(errNegocio(r.error));return;}
-  const destino=rol==='mesa_control'?'https://www.liguify.com/mesa':'https://www.liguify.com/admin';
+  const destino=rol==='scout'?'https://www.liguify.com/scout'
+               :rol==='mesa_control'?'https://www.liguify.com/mesa':'https://www.liguify.com/admin';
   const em=await enviarAccesoEmail(e,null,destino);
   toast(em?'Invitación creada, pero el email no pudo enviarse: '+em.message:'Invitación enviada 📨 — al abrir su email y aceptar, tendrá el rol');
   $('um-e').value='';
