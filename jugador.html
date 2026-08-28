@@ -232,8 +232,9 @@ function render(){
   </div>`:''}
 
   ${fotos.length?`<h2 class="font-display text-2xl tracking-wide mb-2">📸 GALERÍA</h2>
-  <div class="grid grid-cols-3 gap-2 mb-5">${fotos.map(f=>`
-    <a href="${esc(f.url)}" target="_blank" class="block aspect-square rounded-2xl overflow-hidden border border-line bg-white"><img src="${esc(f.url)}" class="w-full h-full object-cover"/></a>`).join('')}</div>`:''}
+  ${(window.FOTOS_GAL=fotos.map(f=>f.url),'')}
+  <div class="grid grid-cols-3 gap-2 mb-5">${fotos.map((f,i)=>`
+    <button onclick="verFoto(${i})" class="block aspect-square rounded-2xl overflow-hidden border border-line bg-white cursor-zoom-in hover:opacity-90 transition"><img src="${esc(f.url)}" class="w-full h-full object-cover"/></button>`).join('')}</div>`:''}
 
   ${videos.length?`<h2 class="font-display text-2xl tracking-wide mb-2">🎬 MIS VIDEOS</h2>
   <div class="grid sm:grid-cols-2 gap-3 mb-5">${videos.map(v=>tarjetaVideo(v.url,v.titulo)).join('')}</div>`:''}
@@ -281,6 +282,48 @@ function render(){
   <p class="text-center text-[10px] text-ink-400 font-bold tracking-widest pb-8">⚡ POWERED BY LIGUIFY · liguify.com</p>`;
 }
 function normRed(v,dom){v=String(v).trim();if(/^https?:\/\//i.test(v))return v;return 'https://www.'+dom.replace(/\/@$/,'/@')+(dom.endsWith('@')?'':'/')+v.replace(/^@/,dom.endsWith('@')?'':'@').replace(/^@/,'');}
+
+/* ============ 📸 VISOR DE FOTOS: flechas y deslizar, estilo Facebook ============ */
+let FG_I=0;
+function verFoto(i){
+  FG_I=i;
+  let v=$('foto-visor');
+  if(!v){
+    v=document.createElement('div'); v.id='foto-visor'; v.style.zIndex='70';
+    v.className='fixed inset-0 bg-black/90 hidden items-center justify-center select-none';
+    v.innerHTML=`
+      <button onclick="cerrarFoto()" class="absolute top-4 right-4 text-white/70 hover:text-white text-3xl font-bold w-10 h-10" style="z-index:71">✕</button>
+      <span id="fg-num" class="absolute top-5 left-1/2 -translate-x-1/2 text-white/60 text-xs font-bold"></span>
+      <button id="fg-prev" onclick="navFoto(-1)" class="absolute left-2 sm:left-5 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 hover:bg-white/25 text-white text-2xl grid place-items-center" style="z-index:71">‹</button>
+      <button id="fg-next" onclick="navFoto(1)" class="absolute right-2 sm:right-5 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 hover:bg-white/25 text-white text-2xl grid place-items-center" style="z-index:71">›</button>
+      <img id="fg-img" class="max-h-[88vh] max-w-[92vw] object-contain rounded-xl" draggable="false"/>`;
+    v.onclick=e=>{if(e.target===v)cerrarFoto();};
+    let x0=null;   // deslizar en el celular
+    v.addEventListener('touchstart',e=>{x0=e.touches[0].clientX;},{passive:true});
+    v.addEventListener('touchend',e=>{if(x0===null)return;const dx=e.changedTouches[0].clientX-x0;if(Math.abs(dx)>40)navFoto(dx<0?1:-1);x0=null;},{passive:true});
+    document.body.appendChild(v);
+    document.addEventListener('keydown',e=>{
+      const vv=$('foto-visor'); if(!vv||vv.classList.contains('hidden'))return;
+      if(e.key==='Escape')cerrarFoto();
+      if(e.key==='ArrowRight')navFoto(1);
+      if(e.key==='ArrowLeft')navFoto(-1);
+    });
+  }
+  v.classList.remove('hidden'); v.classList.add('flex');
+  pintaFoto();
+}
+function pintaFoto(){
+  const fs=window.FOTOS_GAL||[];
+  $('fg-img').src=fs[FG_I]||'';
+  $('fg-num').textContent=(FG_I+1)+' / '+fs.length;
+  $('fg-prev').style.visibility=fs.length>1?'visible':'hidden';
+  $('fg-next').style.visibility=fs.length>1?'visible':'hidden';
+}
+function navFoto(d){
+  const fs=window.FOTOS_GAL||[]; if(fs.length<2)return;
+  FG_I=(FG_I+d+fs.length)%fs.length; pintaFoto();
+}
+function cerrarFoto(){const v=$('foto-visor'); if(v){v.classList.add('hidden');v.classList.remove('flex');}}
 
 /* ============ LOGIN (padres) ============ */
 /* ============ COMPARTIR EL PERFIL ============ */
