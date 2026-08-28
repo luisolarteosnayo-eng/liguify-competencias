@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Guía para padres · Perfil de Jugador — Liguify</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<script>tailwind.config={theme:{extend:{colors:{brand:{50:'#fdf2f2',100:'#fbe3e4',500:'#d9232e',600:'#c11e28'},ink:{400:'#8b93a7',500:'#5b6478',700:'#2b3550',900:'#171e2e'},paper:'#faf9f7',line:'#e9e6e0'},fontFamily:{display:['"Bebas Neue"','sans-serif'],sans:['Inter','sans-serif']}}}}</script>
+<style>
+  body{font-family:Inter,sans-serif}
+  .font-display{font-family:"Bebas Neue",sans-serif}
+  .hl{position:relative}
+  .hl::after{content:'';position:absolute;inset:-6px;border:3px solid #d9232e;border-radius:14px;animation:pulso 1.4s infinite}
+  @keyframes pulso{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(1.04)}}
+  .slide{animation:entra .45s ease}
+  @keyframes entra{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  #barra{transition:width .2s linear}
+</style>
+</head>
+<body class="bg-ink-900 min-h-screen flex flex-col">
+
+<header class="text-white">
+  <div class="max-w-3xl mx-auto px-4 py-4 flex items-center gap-3">
+    <span class="w-9 h-9 rounded-xl bg-brand-500 grid place-items-center font-display text-xl">L</span>
+    <div class="flex-1"><p class="font-display text-2xl tracking-wide leading-none">GUÍA PARA PADRES</p>
+      <p class="text-[10px] uppercase tracking-widest text-white/50 font-bold">Perfil de Jugador · Liguify</p></div>
+    <a href="/" class="bg-white/10 border border-white/20 text-xs font-bold px-4 py-2 rounded-xl hover:bg-white/20">IR A LIGUIFY →</a>
+  </div>
+</header>
+
+<main class="flex-1 flex flex-col max-w-3xl w-full mx-auto px-4 pb-6">
+  <div class="h-1 bg-white/10 rounded-full overflow-hidden mb-3"><div id="barra" class="h-full bg-brand-500" style="width:0%"></div></div>
+
+  <div class="bg-paper rounded-2xl flex-1 flex flex-col overflow-hidden">
+    <div class="px-5 pt-4 flex items-center justify-between gap-2">
+      <span id="capitulo" class="text-[10px] font-bold uppercase tracking-widest text-brand-600"></span>
+      <span id="contador" class="text-[10px] font-bold text-ink-400"></span>
+    </div>
+    <div id="stage" class="flex-1 px-5 py-4 overflow-y-auto"></div>
+  </div>
+
+  <div class="flex items-center justify-center gap-2 mt-4">
+    <button onclick="ir(0)" class="text-white/60 hover:text-white text-lg px-2" title="Inicio">⏮</button>
+    <button onclick="ant()" class="bg-white/10 border border-white/20 text-white font-bold px-5 py-2.5 rounded-xl hover:bg-white/20">◀ ANTERIOR</button>
+    <button id="btn-auto" onclick="toggleAuto()" class="bg-brand-500 text-white font-bold px-5 py-2.5 rounded-xl hover:bg-brand-600">⏸ PAUSA</button>
+    <button onclick="sig()" class="bg-white/10 border border-white/20 text-white font-bold px-5 py-2.5 rounded-xl hover:bg-white/20">SIGUIENTE ▶</button>
+  </div>
+  <div id="puntos" class="flex items-center justify-center gap-1.5 mt-3 flex-wrap"></div>
+  <p class="text-center text-[10px] text-white/40 mt-3">¿Diriges un club? Mira la <a href="/guia" class="underline hover:text-white/70">guía del Modo Club</a>.</p>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+const chip=(t,c)=>`<span class="text-[10px] font-bold px-2 py-1 rounded-full ${c}">${t}</span>`;
+const btn=(t,c,hl)=>`<span class="${hl?'hl ':''}inline-block ${c} text-xs font-bold px-4 py-2.5 rounded-xl">${t}</span>`;
+const card=h=>`<div class="bg-white border border-line rounded-2xl p-5 shadow-sm">${h}</div>`;
+
+const SLIDES=[
+// ── PORTADA ──────────────────────────────────────────────────
+{cap:'Guía para padres', html:`
+  <div class="text-center py-8">
+    <p class="text-6xl mb-4">👨‍👩‍👦</p>
+    <h2 class="font-display text-5xl tracking-wide mb-3">EL PERFIL DE TU HIJO(A)</h2>
+    <p class="text-ink-500 text-sm max-w-md mx-auto">Cada jugador del torneo tiene su <b>perfil deportivo digital</b>: estadísticas oficiales, ranking, fotos, videos y su historial de partidos. Como papá, mamá o apoderado, tú lo administras. Es <b>gratis</b> y registrarte toma 5 minutos. Esta guía avanza sola — o navega con los botones.</p>
+  </div>`},
+
+// ── CAP 1 · ENCUENTRA EL PERFIL ─────────────────────────────
+{cap:'Capítulo 1 · Encuentra el perfil', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">1. BUSCA A TU HIJO(A) EN LIGUIFY.COM</h3>
+  ${card(`<p class="text-xs text-ink-400 mb-2">liguify.com → tu campeonato → su categoría → pestaña <b>Equipos</b> → su equipo</p>
+  <div class="flex items-center gap-3 border-t border-line pt-3">
+    <span class="w-9 h-9 rounded-full bg-ink-700 grid place-items-center text-[10px] font-bold text-white">JP</span>
+    <span class="w-5 text-ink-400 font-bold text-sm">9</span>
+    <span class="flex-1 font-semibold text-sm">JUAN PÉREZ</span>
+    <span class="hl inline-flex items-center gap-1 bg-ink-400/20 text-ink-500 text-[10px] font-bold rounded-full px-2.5 py-1">⭐ PERFIL</span>
+  </div>`)}
+  <p class="text-sm text-ink-500 mt-4">Entra a <b>liguify.com</b> desde tu celular, navega hasta el <b>equipo de tu hijo(a)</b> y en su lista de jugadores toca <b>⭐ PERFIL</b>. Si el club o el organizador te compartió el <b>enlace directo</b>, entra por ahí.</p>`},
+{cap:'Capítulo 1 · Encuentra el perfil', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">2. ¿QUÉ SIGNIFICA LA ESTRELLA?</h3>
+  <div class="grid sm:grid-cols-2 gap-3">
+    ${card(`<span class="inline-flex items-center gap-1 bg-ink-400/20 text-ink-500 text-[10px] font-bold rounded-full px-2.5 py-1 mb-2">⭐ PERFIL</span>
+      <p class="text-xs text-ink-500"><b>Ploma:</b> el perfil existe pero su familia <b>aún no lo administra</b>. ¡Ese es tu caso — regístrate!</p>`)}
+    ${card(`<span class="inline-flex items-center gap-1 bg-amber-400 text-ink-900 text-[10px] font-bold rounded-full px-2.5 py-1 mb-2">⭐ PERFIL</span>
+      <p class="text-xs text-ink-500"><b>Dorada:</b> la familia ya administra el perfil: tiene fotos, videos y presentación al día.</p>`)}
+  </div>
+  <p class="text-sm text-ink-500 mt-4">Tu meta: que la estrella de tu hijo(a) se ponga <b>dorada</b>. 🌟</p>`},
+
+// ── CAP 2 · TU CUENTA ───────────────────────────────────────
+{cap:'Capítulo 2 · Crea tu cuenta', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">3. TOCA "REGISTRO DE PADRES"</h3>
+  ${card(`<div class="bg-ink-900 rounded-2xl p-4">
+    <p class="text-[10px] font-bold text-white/40 uppercase tracking-widest">Perfil de jugador</p>
+    <p class="font-display text-3xl text-white tracking-wide">JUAN PÉREZ</p>
+    <div class="mt-3">${btn('👨‍👩‍👦 REGISTRO DE PADRES','bg-white/10 border border-white/30 text-white',true)}</div>
+  </div>`)}
+  <p class="text-sm text-ink-500 mt-4">Dentro del perfil verás el botón <b>REGISTRO DE PADRES</b>. Tócalo para empezar.</p>`},
+{cap:'Capítulo 2 · Crea tu cuenta', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">4. ENTRA CON GOOGLE O CREA TU CUENTA</h3>
+  ${card(`<div class="flex flex-col gap-2 max-w-xs">
+    ${btn('Entrar con Google','bg-white border border-line text-ink-700',true)}
+    <p class="text-center text-[10px] text-ink-400 font-bold">— O CON TU CORREO —</p>
+    <p class="border-b border-line pb-1 text-sm font-bold text-ink-400">tucorreo@gmail.com</p>
+    <p class="border-b border-line pb-1 text-sm font-bold text-ink-400">contraseña</p>
+    ${btn('CREAR CUENTA / ENTRAR','bg-brand-500 text-white')}
+  </div>`)}
+  <p class="text-sm text-ink-500 mt-4">Lo más fácil: <b>Entrar con Google</b>. Si prefieres correo y contraseña, te llegará un <b>email de confirmación</b>: ábrelo, toca el enlace y vuelve a la página del perfil. ⚠ Recuerda con qué correo entraste — <b>siempre usarás el mismo</b>.</p>`},
+
+// ── CAP 3 · REGISTRO EN 3 PASOS ─────────────────────────────
+{cap:'Capítulo 3 · Regístrate (3 pasos)', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">5. PASO 1 — VALIDA A TU HIJO(A)</h3>
+  ${card(`<p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-2">👨‍👩‍👦 Acceso padres · paso 1 de 3</p>
+    <p class="text-xs text-ink-400 mb-1">N° de documento del jugador (DNI)</p>
+    <p class="hl border-b border-line pb-1 text-sm font-bold mb-3 inline-block px-1">7 8 9 4 5 6 1 2</p>
+    <p class="text-xs text-ink-400 mb-1">Fecha de nacimiento del jugador</p>
+    <p class="border-b border-line pb-1 text-sm font-bold mb-3 inline-block px-1">15 / 03 / 2016</p>
+    <div>${btn('VALIDAR','bg-brand-500 text-white')}</div>`)}
+  <p class="text-sm text-ink-500 mt-4">Escribe el <b>DNI</b> y la <b>fecha de nacimiento</b> de tu hijo(a). Deben coincidir <b>exactamente</b> con lo que registró su club — así nadie más puede reclamar su perfil.</p>`},
+{cap:'Capítulo 3 · Regístrate (3 pasos)', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">6. PASO 2 — ACEPTA LOS TÉRMINOS</h3>
+  ${card(`<p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-2">📄 Términos y condiciones · paso 2 de 3</p>
+    <p class="text-xs text-ink-500 mb-3">Declaras ser el padre, madre o tutor; autorizas la publicación de las fotos y videos <b>que tú subas</b>; tus datos personales son privados y solo verifican tu identidad; puedes pedir la desactivación cuando quieras.</p>
+    <p class="hl inline-block text-sm font-bold">☑ He leído y acepto los términos y condiciones</p>`)}
+  <p class="text-sm text-ink-500 mt-4">Léelos con calma — están escritos en simple. Marca la casilla y continúa.</p>`},
+{cap:'Capítulo 3 · Regístrate (3 pasos)', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">7. PASO 3 — TUS DATOS</h3>
+  ${card(`<p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-2">📝 Tus datos · paso 3 de 3</p>
+    <div class="grid sm:grid-cols-2 gap-3">
+      <div><p class="text-xs text-ink-400">Nombre y apellido *</p><p class="border-b border-line pb-1 text-sm font-bold">María Torres</p></div>
+      <div><p class="text-xs text-ink-400">Soy su... *</p><p class="hl border-b border-line pb-1 text-sm font-bold inline-block px-1">Madre ▾</p></div>
+      <div><p class="text-xs text-ink-400">Tu N° de DNI *</p><p class="border-b border-line pb-1 text-sm font-bold">45678912</p></div>
+      <div><p class="text-xs text-ink-400">Foto de TU DNI *</p><p class="text-sm font-bold">📄 frontal + reverso</p></div>
+    </div>`)}
+  <p class="text-sm text-ink-500 mt-4">Completa tu nombre, indica si eres <b>Padre, Madre u Otro</b> responsable, tu <b>DNI</b>, y sube la <b>foto de tu documento por ambos lados</b> (puedes tomarla con la cámara). 🔒 Esas fotos van a almacenamiento <b>privado</b> — nunca se publican.</p>`},
+{cap:'Capítulo 3 · Regístrate (3 pasos)', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">8. VERIFICA TU CELULAR POR SMS</h3>
+  ${card(`<p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-2">📲 Para finalizar: verifica tu celular</p>
+    <div class="flex items-end gap-2 mb-3">
+      <div class="flex-1"><p class="text-xs text-ink-400">Celular (9 dígitos)</p><p class="border-b border-line pb-1 text-sm font-bold">987 654 321</p></div>
+      ${btn('ENVIAR CÓDIGO','bg-white border border-brand-100 text-brand-600',true)}
+    </div>
+    <div class="flex items-end gap-2">
+      <div class="flex-1"><p class="text-xs text-ink-400">Código recibido por SMS</p><p class="border-b border-line pb-1 text-sm font-bold tracking-[0.3em]">4 8 2 9 1 5</p></div>
+      ${btn('VERIFICAR','bg-brand-500 text-white')}
+    </div>`)}
+  <p class="text-sm text-ink-500 mt-4">Escribe tu celular y toca <b>ENVIAR CÓDIGO</b>: te llegará un SMS de <b>LIGUIFY</b> con un código de 6 dígitos (vence en 10 minutos). Digítalo, toca <b>VERIFICAR</b> y luego <b>COMPLETAR REGISTRO</b>.</p>`},
+{cap:'Capítulo 3 · Regístrate (3 pasos)', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">9. ¡ACCESO APROBADO!</h3>
+  ${card(`<div class="text-center py-4">
+    <p class="text-5xl mb-2">✅</p>
+    <p class="font-display text-3xl tracking-wide mb-1">ACCESO APROBADO</p>
+    <p class="text-xs text-ink-500">Ya puedes administrar el perfil de <b>Juan Pérez</b>. Te enviamos un email de confirmación.</p>
+  </div>`)}
+  <p class="text-sm text-ink-500 mt-4">El <b>primer responsable</b> se aprueba automáticamente. Si otro familiar ya estaba registrado, tu solicitud queda <b>pendiente</b> hasta que esa persona o el organizador la apruebe (máximo <b>2 responsables</b> por jugador). El organizador siempre recibe aviso de cada registro.</p>`},
+
+// ── CAP 4 · EDITAR EL PERFIL ────────────────────────────────
+{cap:'Capítulo 4 · Edita el perfil', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">10. TOCA "EDITAR PERFIL"</h3>
+  ${card(`<div class="bg-ink-900 rounded-2xl p-4 flex items-center gap-3 flex-wrap">
+    <span class="font-display text-2xl text-white tracking-wide flex-1">JUAN PÉREZ</span>
+    ${btn('🔗 COMPARTIR','bg-white text-ink-900')}
+    ${btn('✏️ EDITAR PERFIL','bg-brand-500 text-white',true)}
+  </div>`)}
+  <p class="text-sm text-ink-500 mt-4">Entra al perfil con tu correo y toca <b>✏️ EDITAR PERFIL</b>. Desde ahí administras todo el contenido de la familia.</p>`},
+{cap:'Capítulo 4 · Edita el perfil', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">11. LO QUE PUEDES AGREGAR</h3>
+  <div class="grid sm:grid-cols-2 gap-3">
+    ${card(`<p class="text-2xl mb-1">📸</p><p class="font-bold text-sm mb-1">Hasta 3 fotos</p><p class="text-xs text-ink-500">Sus mejores fotos jugando. Se muestran en la galería del perfil.</p>`)}
+    ${card(`<p class="text-2xl mb-1">🎬</p><p class="font-bold text-sm mb-1">Hasta 2 videos</p><p class="text-xs text-ink-500">Links de YouTube u otra plataforma con sus jugadas.</p>`)}
+    ${card(`<p class="text-2xl mb-1">📝</p><p class="font-bold text-sm mb-1">Presentación</p><p class="text-xs text-ink-500">Su posición, experiencia y sueños — lo que un scout debería saber.</p>`)}
+    ${card(`<p class="text-2xl mb-1">📱</p><p class="font-bold text-sm mb-1">Redes sociales</p><p class="text-xs text-ink-500">Instagram, Facebook y TikTok del jugador (opcional).</p>`)}
+  </div>`},
+{cap:'Capítulo 4 · Edita el perfil', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">12. LO OFICIAL LLEGA SOLO</h3>
+  ${card(`<div class="grid grid-cols-3 gap-2 text-center mb-2">
+    <div class="border border-line rounded-xl py-2"><p class="font-display text-2xl">4</p><p class="text-[9px] font-bold text-ink-400 uppercase">Partidos</p></div>
+    <div class="border border-line rounded-xl py-2"><p class="font-display text-2xl text-brand-600">6</p><p class="text-[9px] font-bold text-ink-400 uppercase">Goles</p></div>
+    <div class="border border-line rounded-xl py-2"><p class="font-display text-2xl">90%</p><p class="text-[9px] font-bold text-ink-400 uppercase">Participación</p></div>
+  </div>
+  <div class="flex gap-2 flex-wrap">${chip('🏅 RANKING','bg-ink-900 text-white')}${chip('⭐ EQUIPO IDEAL','bg-amber-100 text-amber-700')}${chip('📅 HISTORIAL','bg-paper text-ink-500 border border-line')}${chip('🔭 VISTAS DE SCOUTS','bg-paper text-ink-500 border border-line')}</div>`)}
+  <p class="text-sm text-ink-500 mt-4">Las <b>estadísticas, el ranking, el equipo ideal y el historial de partidos</b> los carga el torneo automáticamente — esa parte no se edita: es el <b>historial oficial</b> de tu hijo(a). Y cuando un <b>scout de equipo profesional</b> vea el perfil, lo verás en el contador.</p>`},
+{cap:'Capítulo 4 · Edita el perfil', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">13. COMPARTE SU PERFIL</h3>
+  ${card(`<div class="flex gap-2 flex-wrap">${btn('🔗 COMPARTIR','bg-white border border-line text-ink-700',true)}${chip('WhatsApp','bg-emerald-100 text-emerald-700')}${chip('Facebook','bg-sky-100 text-sky-700')}${chip('Instagram','bg-pink-100 text-pink-700')}${chip('Copiar enlace','bg-paper text-ink-500 border border-line')}</div>`)}
+  <p class="text-sm text-ink-500 mt-4">Con el botón <b>COMPARTIR</b> envías el perfil por WhatsApp o redes: el enlace muestra su foto y nombre en la vista previa. Compártelo con la familia — ¡y que suba ese contador de visitas!</p>`},
+
+// ── CAP 5 · SEGURIDAD ───────────────────────────────────────
+{cap:'Capítulo 5 · Seguridad y privacidad', html:`
+  <h3 class="font-display text-3xl tracking-wide mb-3">14. ASÍ PROTEGEMOS SUS DATOS</h3>
+  <div class="grid sm:grid-cols-2 gap-3">
+    ${card(`<p class="text-2xl mb-1">🔒</p><p class="text-xs text-ink-500"><b>Tus datos y tu DNI son privados</b>: solo sirven para verificar que eres el responsable. Nunca se publican.</p>`)}
+    ${card(`<p class="text-2xl mb-1">👥</p><p class="text-xs text-ink-500"><b>Máximo 2 responsables</b> por jugador; el segundo necesita aprobación del primero o del organizador.</p>`)}
+    ${card(`<p class="text-2xl mb-1">🙈</p><p class="text-xs text-ink-500">Por seguridad, el <b>nombre público</b> del niño se muestra abreviado (un nombre y un apellido).</p>`)}
+    ${card(`<p class="text-2xl mb-1">✉️</p><p class="text-xs text-ink-500">Entra <b>siempre con el mismo correo</b>. Puedes pedir al organizador desactivar el perfil o tu acceso cuando quieras.</p>`)}
+  </div>`},
+
+// ── FINAL ────────────────────────────────────────────────────
+{cap:'¡Eso es todo!', html:`
+  <div class="text-center py-8">
+    <p class="text-6xl mb-4">🌟</p>
+    <h2 class="font-display text-5xl tracking-wide mb-3">¡SU PERFIL TE ESPERA!</h2>
+    <p class="text-ink-500 text-sm max-w-md mx-auto mb-6">Ya sabes registrarte, completar el perfil de tu hijo(a) y compartirlo. Cada partido que juegue seguirá sumando a su historial oficial. Cualquier duda, contacta al organizador de tu torneo.</p>
+    <a href="/" class="inline-block bg-brand-500 text-white font-bold px-8 py-3 rounded-xl hover:bg-brand-600">⚽ IR A LIGUIFY.COM</a>
+  </div>`},
+];
+
+let IDX=0, AUTO=true, TIMER=null, T0=0;
+const DUR=9000;
+function render(){
+  const s=SLIDES[IDX];
+  $('stage').innerHTML=`<div class="slide">${s.html}</div>`;
+  $('capitulo').textContent=s.cap;
+  $('contador').textContent=`${IDX+1} / ${SLIDES.length}`;
+  $('puntos').innerHTML=SLIDES.map((x,i)=>`<button onclick="ir(${i})" class="w-2.5 h-2.5 rounded-full ${i===IDX?'bg-brand-500':'bg-white/25 hover:bg-white/50'}"></button>`).join('');
+  reiniciarBarra();
+}
+function reiniciarBarra(){ T0=Date.now(); $('barra').style.width='0%'; }
+function tick(){
+  if(!AUTO) return;
+  const p=Math.min(100,(Date.now()-T0)/DUR*100);
+  $('barra').style.width=p+'%';
+  if(p>=100){ IDX=(IDX+1)%SLIDES.length; render(); }
+}
+function ir(i){ IDX=i; render(); }
+function sig(){ IDX=Math.min(SLIDES.length-1,IDX+1); render(); }
+function ant(){ IDX=Math.max(0,IDX-1); render(); }
+function toggleAuto(){
+  AUTO=!AUTO;
+  $('btn-auto').textContent=AUTO?'⏸ PAUSA':'▶ AUTO';
+  if(AUTO) reiniciarBarra(); else $('barra').style.width='0%';
+}
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight')sig();
+  if(e.key==='ArrowLeft')ant();
+  if(e.key===' '){e.preventDefault();toggleAuto();}
+});
+render();
+TIMER=setInterval(tick,150);
+</script>
+</body>
+</html>
