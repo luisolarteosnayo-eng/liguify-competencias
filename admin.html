@@ -986,13 +986,23 @@ async function verificarPersona(){
       out.innerHTML=(d2&&!d2.error)?fichaRPC(d2,(d2.rol||'CT')+' · COMANDO TÉCNICO'):banner(false,'CARNET NO ENCONTRADO');
       return;
     }
-    // 2) documento (o NFC como respaldo). Los CEROS A LA IZQUIERDA no cuentan:
-    //    se busca el número tal cual, sin ceros, y (si es DNI corto) rellenado a 8.
+    // 2) documento (o NFC como respaldo). Los CEROS A LA IZQUIERDA no cuentan
+    //    (tal cual, sin ceros y rellenado a 8 para DNI) y el PAÍS es opcional:
+    //    solo se usa para desempatar si el mismo número existe en varios países.
     VF_METODO='dni_scan';
     const sinCeros=raw.replace(/^0+/,'')||raw;
     const cands=[...new Set([raw, sinCeros, (/^\d+$/.test(sinCeros)&&sinCeros.length<8)?sinCeros.padStart(8,'0'):null].filter(Boolean))];
-    const {data:jj}=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,pais_documento,foto_url,verificado').eq('pais_documento',pais).in('nro_documento',cands);
-    let j=(jj||[]).find(x=>x.nro_documento===raw)||(jj||[])[0]||null;
+    const {data:jj}=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,pais_documento,foto_url,verificado').in('nro_documento',cands);
+    let lista=jj||[], j=null;
+    if(lista.length){
+      const paises=[...new Set(lista.map(x=>x.pais_documento))];
+      if(paises.length>1){
+        const filtrada=lista.filter(x=>x.pais_documento===pais);
+        if(!filtrada.length){out.innerHTML=banner(false,`ESE NÚMERO EXISTE EN VARIOS PAÍSES (${paises.join(' · ')}) — ELIGE EL PAÍS CORRECTO Y VALIDA DE NUEVO`);return;}
+        lista=filtrada;
+      }
+      j=lista.find(x=>x.nro_documento===raw)||lista[0];
+    }
     if(!j){
       // ¿NFC? buscar por nfc_uid en inscripciones
       const {data:insN}=await sb.from('inscripcion_lbf').select('jugador_id').eq('nfc_uid',raw).limit(1);
