@@ -986,9 +986,13 @@ async function verificarPersona(){
       out.innerHTML=(d2&&!d2.error)?fichaRPC(d2,(d2.rol||'CT')+' · COMANDO TÉCNICO'):banner(false,'CARNET NO ENCONTRADO');
       return;
     }
-    // 2) documento (o NFC como respaldo)
+    // 2) documento (o NFC como respaldo). Los CEROS A LA IZQUIERDA no cuentan:
+    //    se busca el número tal cual, sin ceros, y (si es DNI corto) rellenado a 8.
     VF_METODO='dni_scan';
-    let {data:j}=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,pais_documento,foto_url,verificado').eq('pais_documento',pais).eq('nro_documento',raw).maybeSingle();
+    const sinCeros=raw.replace(/^0+/,'')||raw;
+    const cands=[...new Set([raw, sinCeros, (/^\d+$/.test(sinCeros)&&sinCeros.length<8)?sinCeros.padStart(8,'0'):null].filter(Boolean))];
+    const {data:jj}=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,pais_documento,foto_url,verificado').eq('pais_documento',pais).in('nro_documento',cands);
+    let j=(jj||[]).find(x=>x.nro_documento===raw)||(jj||[])[0]||null;
     if(!j){
       // ¿NFC? buscar por nfc_uid en inscripciones
       const {data:insN}=await sb.from('inscripcion_lbf').select('jugador_id').eq('nfc_uid',raw).limit(1);
