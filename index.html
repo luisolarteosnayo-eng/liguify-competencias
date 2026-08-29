@@ -170,6 +170,8 @@ function show(id){
   window.scrollTo({top:0,behavior:'smooth'});
 }
 const iniciales=n=>(n||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+/* Orden estándar de jugadores: N° de camiseta ascendente; sin número, al final en orden alfabético */
+const ordCamiseta=(a,b,nomA,nomB)=>((a.dorsal??999)-(b.dorsal??999))||String(nomA||'').localeCompare(String(nomB||''),'es');
 /* Pastilla "VER VIDEO" clicable desde la lista (no abre el detalle del partido) */
 const videoPill=u=>`<div class="flex justify-center mt-1.5"><a href="${u}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Ver el video del partido"
   class="inline-flex items-center gap-1.5 text-[10px] font-bold text-white rounded-full pl-1.5 pr-3 py-1 shadow-md hover:shadow-lg hover:scale-105 transition" style="background:linear-gradient(135deg,#ef4444,#b91c1c)">
@@ -226,7 +228,7 @@ async function abrirDetallePartido(id){
   const L=EQUIPOS[m.local_id], V=EQUIPOS[m.visita_id];
   const fin=['finalizado','walkover'].includes(m.estado), vivo=m.estado==='en_vivo';
   const {data:pl}=await sb.from('vista_planilla_publica').select('*').eq('partido_id',id);
-  const stats=(pl||[]).filter(p=>p.jugo||p.goles||p.amarillas||p.rojas).sort((a,b)=>(a.dorsal??99)-(b.dorsal??99));
+  const stats=(pl||[]).filter(p=>p.jugo||p.goles||p.amarillas||p.rojas).sort((a,b)=>ordCamiseta(a,b,(a.nombres||'')+' '+(a.apellidos||''),(b.nombres||'')+' '+(b.apellidos||'')));
   const filaJ=p=>`<div class="flex items-center gap-2 py-1.5 border-b border-line last:border-0">
     <span class="w-5 text-ink-400 font-bold text-xs text-right shrink-0">${p.dorsal??''}</span>
     <span class="flex-1 min-w-0 text-sm font-semibold truncate">${p.nombres} ${p.apellidos}${p.capitan?' <span class="text-[9px] bg-ink-900 text-white rounded px-1 py-0.5 font-bold">C</span>':''}</span>
@@ -1121,11 +1123,13 @@ async function irEquipoId(id){
   let SCST=[]; const J_INS={};
   if(SCOUT){
     const q=await sb.rpc('stats_equipo_scout',{p_equipo:id});
-    SCST=q.data||[]; SCST.forEach(s=>{J_INS[s.inscripcion_id]=s.jugador_id;});
+    SCST=(q.data||[]).sort((a,b)=>ordCamiseta(a,b,(a.nombres||'')+' '+(a.apellidos||''),(b.nombres||'')+' '+(b.apellidos||'')));
+    SCST.forEach(s=>{J_INS[s.inscripcion_id]=s.jugador_id;});
   }
   $('eq-stats').innerHTML=SCOUT?statsScoutHTML(SCST):'';
   const {data,error}=await sb.from('vista_lbf_publica').select('*').eq('equipo_id',id).order('dorsal');
   if(error){err(error.message);return;}
+  data.sort((a,b)=>ordCamiseta(a,b,(a.nombres||'')+' '+(a.apellidos||''),(b.nombres||'')+' '+(b.apellidos||'')));
   $('eq-lbf').innerHTML=data.length?data.map(j=>`
     <div class="flex items-center gap-3 px-5 py-2.5 border-b border-line last:border-0">
       <span class="w-9 h-9 rounded-full grid place-items-center text-[11px] font-bold text-white overflow-hidden relative" style="background:#2b3550;${j.consentimiento_imagen?'':'filter:grayscale(1);opacity:.75'}">

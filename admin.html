@@ -200,6 +200,8 @@ function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.re
 function cerrarModal(){const m=$('modal');m.classList.add('hidden');m.classList.remove('flex');}
 function abrirModal(html,ancho){const b=$('modal-body');b.innerHTML=html;b.style.maxWidth=ancho?'880px':'';const m=$('modal');m.classList.remove('hidden');m.classList.add('flex');}
 const iniciales=n=>(n||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+/* Orden estándar de jugadores: N° de camiseta ascendente; sin número, al final en orden alfabético */
+const ordCamiseta=(a,b,nomA,nomB)=>((a.dorsal??999)-(b.dorsal??999))||String(nomA||'').localeCompare(String(nomB||''),'es');
 function badgeEq(e,sz=7){const cl=CLUBES[e.club_id]||{};return `<span class="inline-grid place-items-center w-${sz} h-${sz} rounded-lg text-white text-[10px] font-bold align-middle overflow-hidden relative" style="background:${cl.escudo_url?'#fff':(cl.color||'#334155')}">${cl.escudo_url?`<img src="${cl.escudo_url}" class="absolute inset-0 w-full h-full object-contain"/>`:iniciales(cl.nombre)}</span>`;}
 const nomEq=e=>e.nombre||(CLUBES[e.club_id]||{}).nombre||'—';
 // errores de BD → mensajes de negocio
@@ -2439,6 +2441,8 @@ async function renderLBF(){
     await fotosDelTorneo(js.data||[]);
     jug=Object.fromEntries((js.data||[]).map(j=>[j.id,j]));
   }
+  const nomI=i=>{const j=jug[i.jugador_id]||{};return (j.nombres||'')+' '+(j.apellidos||'');};
+  ins.sort((a,b)=>ordCamiseta(a,b,nomI(a),nomI(b)));
   $('lbf-lista').innerHTML=ins.length?ins.map(i=>{const j=jug[i.jugador_id]||{};
     return `<div class="fila-persona flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 border-b border-line last:border-0 ${i.inhabilitado?'bg-red-50/60':''}">
       <span class="w-8 h-8 rounded-full grid place-items-center text-[10px] font-bold text-white overflow-hidden relative shrink-0" style="background:#2b3550">${j.foto_url?`<img src="${j.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales((j.nombres||'')+' '+(j.apellidos||''))}</span>
@@ -3486,8 +3490,9 @@ async function albumEquipo(formato='png'){
   const cl=CLUBES[EQUIPO.club_id]||{};
   await Promise.all([document.fonts.load('80px "Bebas Neue"'),document.fonts.load('700 30px Inter'),document.fonts.load('800 26px Inter')]);
   const [logoT,escudo]=await Promise.all([cargarImg(TORNEO.logo_url||MARCA.logo_url),cargarImg(cl.escudo_url)]);
-  const cards=[
-    ...ins.map(i=>{const j=jm[i.jugador_id]||{};return {tipo:'j',dorsal:i.dorsal,capitan:i.capitan,j,foto:j.foto_url||null,sub:j.posicion||''};}),
+  const cardsJ=ins.map(i=>{const j=jm[i.jugador_id]||{};return {tipo:'j',dorsal:i.dorsal,capitan:i.capitan,j,foto:j.foto_url||null,sub:j.posicion||''};})
+    .sort((a,b)=>ordCamiseta(a,b,(a.j.nombres||'')+' '+(a.j.apellidos||''),(b.j.nombres||'')+' '+(b.j.apellidos||'')));
+  const cards=[...cardsJ,
     ...cts.map(c=>{const j=jm[c.persona_id]||{};return {tipo:'ct',rol:c.rol,j,foto:j.foto_url||null,sub:c.rol};})
   ];
   await Promise.all(cards.map(async c=>{c.img=c.foto?await cargarImg(c.foto):null;}));
@@ -3861,7 +3866,7 @@ async function imprimirPlanillasJornada(jid){
   await fotosDelTorneo(js.data||[]);
   const jmap=Object.fromEntries((js.data||[]).map(x=>[x.id,x]));
   const porEq={}; (ins.data||[]).forEach(i=>{(porEq[i.equipo_id]=porEq[i.equipo_id]||[]).push(i);});
-  Object.values(porEq).forEach(l=>l.sort((a,b)=>(a.dorsal??99)-(b.dorsal??99)));
+  Object.values(porEq).forEach(l=>l.sort((a,b)=>{const ja=jmap[a.jugador_id]||{},jb=jmap[b.jugador_id]||{};return ordCamiseta(a,b,(ja.nombres||'')+' '+(ja.apellidos||''),(jb.nombres||'')+' '+(jb.apellidos||''));}));
   const esc=t=>String(t??'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
   const nom=id=>esc(nomEq(EQUIPOS[id]||{})||'—');
   const colEquipo=eqId=>{
@@ -3998,7 +4003,7 @@ async function imprimirPlanillasTorneo(tipo,valor){
   await fotosDelTorneo(jgs.data||[]);
   const jmap=Object.fromEntries((jgs.data||[]).map(x=>[x.id,x]));
   const porEq={}; (ins.data||[]).forEach(i=>{(porEq[i.equipo_id]=porEq[i.equipo_id]||[]).push(i);});
-  Object.values(porEq).forEach(l=>l.sort((a,b)=>(a.dorsal??99)-(b.dorsal??99)));
+  Object.values(porEq).forEach(l=>l.sort((a,b)=>{const ja=jmap[a.jugador_id]||{},jb=jmap[b.jugador_id]||{};return ordCamiseta(a,b,(ja.nombres||'')+' '+(ja.apellidos||''),(jb.nombres||'')+' '+(jb.apellidos||''));}));
   const esc=t=>String(t??'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
   const nomX=id=>{const e=EQX[id]||{};return esc(e.nombre||(CLX[e.club_id]||{}).nombre||'—');};
   const colEquipo=eqId=>{
@@ -4973,7 +4978,7 @@ async function modalResultado(m){
   const js=jids.length?await sb.from('jugador_maestro').select('id,nombres,apellidos,posicion').in('id',jids):{data:[]};
   const jn=Object.fromEntries((js.data||[]).map(j=>[j.id,(j.nombres||'')+' '+(j.apellidos||'')]));
   const jpos=Object.fromEntries((js.data||[]).map(j=>[j.id,j.posicion||'']));
-  RS_INS=(ins.data||[]).map(i=>({...i,nombre:jn[i.jugador_id]||'—',posicion:jpos[i.jugador_id]||''})).sort((a,b)=>(a.dorsal??99)-(b.dorsal??99));
+  RS_INS=(ins.data||[]).map(i=>({...i,nombre:jn[i.jugador_id]||'—',posicion:jpos[i.jugador_id]||''})).sort((a,b)=>ordCamiseta(a,b,a.nombre,b.nombre));
   RS_PLANILLA=Object.fromEntries((pl.data||[]).map(p=>[p.inscripcion_id,p]));
   // ⭐ equipo ideal de la FECHA: lo ya marcado para estos jugadores en esta jornada
   RS_EI={};
