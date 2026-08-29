@@ -1,6 +1,11 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Liguify — Torneos en vivo</title>
+<link rel="manifest" href="/manifest.json"/>
+<meta name="theme-color" content="#171e2e"/>
+<link rel="apple-touch-icon" href="/icon-512.png"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-title" content="Liguify"/>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -30,6 +35,7 @@ tailwind.config={theme:{extend:{
       </span>
     </button>
     <nav class="ml-auto flex items-center gap-1.5 text-xs font-semibold">
+      <button id="btn-a2hs" onclick="instalarApp()" class="hidden items-center gap-1 border border-line rounded-xl px-2.5 py-2 text-ink-500 hover:text-ink-900 hover:bg-paper transition" title="Pon Liguify en la pantalla de inicio de tu celular, como una app">📲<span class="hidden md:inline"> App</span></button>
       <a href="club.html"
          class="flex items-center gap-1.5 bg-ink-900 text-white rounded-xl px-3 py-2 hover:bg-ink-700 transition" title="Acceso para coordinadores y delegados de club: gestiona tu LBF, mira tus partidos y tu tabla">
         🛡️ <span>Mi Club</span>
@@ -388,6 +394,23 @@ async function irMarcaId(id){
   if(error){err(error.message);return;}
   MARCA=data; irMarca();
 }
+/* ============ 📲 LIGUIFY EN TU CELULAR (acceso directo tipo app) ============ */
+let A2HS=null;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();A2HS=e;});
+if(!window.matchMedia('(display-mode: standalone)').matches){
+  document.addEventListener('DOMContentLoaded',()=>{const b=$('btn-a2hs');if(b){b.classList.remove('hidden');b.classList.add('flex');}});
+}
+function instalarApp(){
+  if(A2HS){A2HS.prompt();A2HS.userChoice.then(()=>{A2HS=null;});return;}
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">📲 LIGUIFY EN TU CELULAR</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-500 mb-4">Crea el acceso directo y Liguify se abrirá desde tu pantalla de inicio, con su propio ícono, como una app.</p>
+    <div class="space-y-3 text-sm">
+      <div class="bg-paper border border-line rounded-xl p-3"><p class="font-bold mb-1"> iPhone (Safari)</p><p class="text-xs text-ink-500">Toca el botón <b>Compartir</b> <span class="border border-line rounded px-1.5">⬆</span> (abajo al centro) y elige <b>“Añadir a pantalla de inicio”</b>.</p></div>
+      <div class="bg-paper border border-line rounded-xl p-3"><p class="font-bold mb-1">🤖 Android (Chrome)</p><p class="text-xs text-ink-500">Toca el menú <b>⋮</b> (arriba a la derecha) y elige <b>“Añadir a pantalla de inicio”</b> o <b>“Instalar app”</b>.</p></div>
+      <div class="bg-paper border border-line rounded-xl p-3"><p class="font-bold mb-1">💻 Computadora (Chrome/Edge)</p><p class="text-xs text-ink-500">Busca el ícono de <b>instalar</b> <span class="border border-line rounded px-1.5">⊕</span> al final de la barra de direcciones.</p></div>
+    </div>`);
+}
+
 /* ============ 🔭 SCOUT (acceso por invitación · liguify.com/scout) ============ */
 let SCOUT=false, SEG_SET=new Set();
 async function initScout(){
