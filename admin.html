@@ -200,6 +200,20 @@ function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.re
 function cerrarModal(){const m=$('modal');m.classList.add('hidden');m.classList.remove('flex');}
 function abrirModal(html,ancho){const b=$('modal-body');b.innerHTML=html;b.style.maxWidth=ancho?'880px':'';const m=$('modal');m.classList.remove('hidden');m.classList.add('flex');}
 const iniciales=n=>(n||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+/* Foto a pantalla completa en la validación (toca para ampliar / cerrar) */
+function verFotoValidacion(url){
+  let v=document.getElementById('vf-foto-full');
+  if(!v){
+    v=document.createElement('div'); v.id='vf-foto-full'; v.style.zIndex='80';
+    v.className='fixed inset-0 bg-black/92 hidden items-center justify-center';
+    v.innerHTML=`<button class="absolute top-4 right-4 text-white/70 hover:text-white text-3xl font-bold w-10 h-10">✕</button>
+      <img class="max-h-[92vh] max-w-[94vw] object-contain rounded-xl" draggable="false"/>`;
+    v.onclick=()=>{v.classList.add('hidden');v.classList.remove('flex');};
+    document.body.appendChild(v);
+  }
+  v.querySelector('img').src=url;
+  v.classList.remove('hidden'); v.classList.add('flex');
+}
 /* Orden estándar de jugadores: N° de camiseta ascendente; sin número, al final en orden alfabético */
 const ordCamiseta=(a,b,nomA,nomB)=>((a.dorsal??999)-(b.dorsal??999))||String(nomA||'').localeCompare(String(nomB||''),'es');
 function badgeEq(e,sz=7){const cl=CLUBES[e.club_id]||{};return `<span class="inline-grid place-items-center w-${sz} h-${sz} rounded-lg text-white text-[10px] font-bold align-middle overflow-hidden relative" style="background:${cl.escudo_url?'#fff':(cl.color||'#334155')}">${cl.escudo_url?`<img src="${cl.escudo_url}" class="absolute inset-0 w-full h-full object-contain"/>`:iniciales(cl.nombre)}</span>`;}
@@ -1036,8 +1050,8 @@ async function verificarPersona(){
     out.innerHTML=`
       ${banner(okGlobal, okGlobal?'VÁLIDO EN ESTE TORNEO':(ins.length||cts.length?'CON OBSERVACIONES':'NO INSCRITO EN ESTE TORNEO'))}
       <div class="bg-ink-900 text-white rounded-2xl p-4 mb-2">
-        <div class="flex items-center gap-3">
-          ${j.foto_url?`<img src="${j.foto_url}" class="w-16 h-16 rounded-xl object-cover"/>`:`<span class="w-16 h-16 rounded-xl bg-ink-700 grid place-items-center font-bold">${iniciales((j.nombres||'')+' '+(j.apellidos||''))}</span>`}
+        <div class="flex items-center gap-4">
+          ${j.foto_url?`<img src="${j.foto_url}" onclick="verFotoValidacion('${j.foto_url}')" class="w-36 h-36 sm:w-44 sm:h-44 rounded-2xl object-cover ring-4 ring-white/20 cursor-zoom-in shrink-0" title="Toca para ampliar"/>`:`<span class="w-36 h-36 sm:w-44 sm:h-44 rounded-2xl bg-ink-700 grid place-items-center font-bold text-3xl shrink-0">${iniciales((j.nombres||'')+' '+(j.apellidos||''))}</span>`}
           <div class="min-w-0 flex-1">
             <p class="font-bold text-sm">${(j.nombres||'').toUpperCase()} ${(j.apellidos||'').toUpperCase()} ${j.verificado?'<span class="text-emerald-400">✔</span>':''}</p>
             <p class="text-[11px] text-white/60">${j.pais_documento||'PE'} ${j.nro_documento||''}</p>
