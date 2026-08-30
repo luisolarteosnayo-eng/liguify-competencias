@@ -82,6 +82,7 @@ tailwind.config={theme:{extend:{
         <button onclick="modalPlanillasTorneo()" title="Planillas de juego de TODAS las categorías: elige la fecha del torneo o el día calendario" class="bg-white border border-line font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-paper">🖨 PLANILLAS</button>
         <button onclick="modalEquipoIdealTorneo()" title="Equipo ideal de la fecha de TODAS las categorías: una imagen por categoría" class="bg-white border border-amber-300 text-amber-700 font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-amber-50">⭐ EQUIPO IDEAL</button>
         <button onclick="pdfComandoTecnico()" title="Relación del comando técnico de todo el torneo (foto, DNI, nombres) — para torneos sin carnets" class="bg-white border border-line font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-paper">🖨 COMANDO TÉCNICO</button>
+        <button onclick="modalReportes()" title="Reportes del torneo: documentación pendiente por club y categoría, y más" class="bg-white border border-line font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-paper">📊 REPORTES</button>
         <button onclick="modalCategoria()" class="bg-brand-500 text-white font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-brand-600">+ NUEVA CATEGORÍA</button>
       </div>
     </div>
@@ -1545,6 +1546,91 @@ async function buscarDuplicados(){
         <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full ${e.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${e.estado.toUpperCase()}</span></p>`).join('')}
     </div>`).join('')
     :notaOm+`<p class="text-emerald-700 text-sm font-semibold bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">✔ Sin duplicados ${alcance}${mismoClub?'':' (en clubes distintos)'}: ninguna persona está en más de un equipo.</p>`;
+}
+
+/* ============ 📊 REPORTES DEL TORNEO ============ */
+function modalReportes(){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">📊 REPORTES · ${TORNEO.nombre.toUpperCase()}</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">Reportes disponibles de este torneo.</p>
+    <button onclick="reporteDocPendiente()" class="w-full bg-white border border-line rounded-2xl px-5 py-4 text-left hover:border-brand-500/40 hover:shadow-md transition">
+      <span class="font-display text-xl tracking-wide block">📄 DOCUMENTACIÓN PENDIENTE</span>
+      <span class="text-xs text-ink-500">Por club y categoría: jugadores sin autorización de padre/tutor, sin foto de jugador y sin foto del DNI. Con totales y descarga a Excel.</span></button>
+    <p class="text-[10px] text-ink-400 mt-3">💡 Los reportes de <b>🔎 DUPLICADOS</b> y <b>👨‍👩‍👦 PADRES</b> están en la pantalla de la marca (cruzan varios torneos).</p>`);
+}
+async function reporteDocPendiente(){
+  abrirModal(`<p class="text-sm text-ink-500 py-8 text-center">Generando el reporte…</p>`);
+  const cats=(await sb.from('categoria').select('id,nombre_display,anio_nacimiento,modalidad').eq('torneo_id',TORNEO.id).order('anio_nacimiento')).data||[];
+  if(!cats.length){abrirModal('<p class="text-sm text-ink-500 p-6">Este torneo no tiene categorías.</p>');return;}
+  const CN=Object.fromEntries(cats.map(c=>[c.id,{nom:c.nombre_display||(c.anio_nacimiento+' / '+c.modalidad),anio:c.anio_nacimiento}]));
+  const ins=(await sb.from('inscripcion_lbf').select('jugador_id,equipo_id,categoria_id').in('categoria_id',cats.map(c=>c.id)).eq('en_lbf',true).eq('inhabilitado',false)).data||[];
+  const eqIds=[...new Set(ins.map(i=>i.equipo_id))];
+  const eqs=eqIds.length?(await sb.from('equipo').select('id,club_id').in('id',eqIds)).data||[]:[];
+  const EQC=Object.fromEntries(eqs.map(e=>[e.id,e.club_id]));
+  const clIds=[...new Set(eqs.map(e=>e.club_id))];
+  const cls=clIds.length?(await sb.from('club').select('id,nombre').in('id',clIds)).data||[]:[];
+  const CLN=Object.fromEntries(cls.map(c=>[c.id,c.nombre]));
+  const jIds=[...new Set(ins.map(i=>i.jugador_id))], JM={};
+  for(let k=0;k<jIds.length;k+=150){
+    ((await sb.from('jugador_maestro').select('id,autorizacion_url,foto_url,doc_scan_frente_url,doc_scan_reverso_url').in('id',jIds.slice(k,k+150))).data||[]).forEach(j=>JM[j.id]=j);
+  }
+  const stats=set=>{const js=[...set].map(id=>JM[id]||{});
+    return {n:js.length,
+      aut:js.filter(j=>!j.autorizacion_url).length,
+      foto:js.filter(j=>!j.foto_url).length,
+      dni:js.filter(j=>!j.doc_scan_frente_url||!j.doc_scan_reverso_url).length};};
+  const acc={}, porClub={}, todos=new Set();
+  ins.forEach(i=>{
+    const club=CLN[EQC[i.equipo_id]]||'—';
+    const k=club+'|'+i.categoria_id;
+    (acc[k]=acc[k]||{club,cat:CN[i.categoria_id]||{nom:'?',anio:0},set:new Set()}).set.add(i.jugador_id);
+    (porClub[club]=porClub[club]||new Set()).add(i.jugador_id);
+    todos.add(i.jugador_id);
+  });
+  const filas=Object.values(acc).map(a=>({club:a.club,cat:a.cat.nom,anio:a.cat.anio,...stats(a.set)}))
+    .sort((a,b)=>a.club.localeCompare(b.club,'es')||a.anio-b.anio);
+  RDOC_FILAS=filas; RDOC_TOTC=Object.fromEntries(Object.keys(porClub).map(c=>[c,stats(porClub[c])])); RDOC_TOTT=stats(todos);
+  const c4=(s,cls)=>`<td class="px-2 py-1.5 text-center ${cls||''}">${s.n}</td>
+    <td class="px-2 py-1.5 text-center ${s.aut>0?'font-bold text-brand-600':'text-emerald-600'}">${s.aut}</td>
+    <td class="px-2 py-1.5 text-center ${s.foto>0?'font-bold text-brand-600':'text-emerald-600'}">${s.foto}</td>
+    <td class="px-2 py-1.5 text-center ${s.dni>0?'font-bold text-brand-600':'text-emerald-600'}">${s.dni}</td>`;
+  let html='', clubAct=null;
+  filas.forEach(f=>{
+    if(f.club!==clubAct){
+      if(clubAct!==null) html+=`<tr class="bg-paper border-b-2 border-line font-bold"><td class="px-3 py-1.5 text-xs">TOTAL</td>${c4(RDOC_TOTC[clubAct])}</tr>`;
+      clubAct=f.club;
+      html+=`<tr class="bg-ink-900 text-white"><td colspan="5" class="px-3 py-2 font-display text-base tracking-wide">${f.club}</td></tr>`;
+    }
+    html+=`<tr class="border-b border-line"><td class="px-3 py-1.5 text-xs text-ink-600">${f.cat}</td>${c4(f)}</tr>`;
+  });
+  if(clubAct!==null) html+=`<tr class="bg-paper border-b-2 border-line font-bold"><td class="px-3 py-1.5 text-xs">TOTAL</td>${c4(RDOC_TOTC[clubAct])}</tr>`;
+  html+=`<tr class="bg-amber-50 font-bold border-t-2 border-amber-300"><td class="px-3 py-2 text-xs">🏆 TOTAL TORNEO</td>${c4(RDOC_TOTT)}</tr>`;
+  abrirModal(`<div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+      <h3 class="font-display text-2xl tracking-wide">📄 DOCUMENTACIÓN PENDIENTE</h3>
+      <span class="flex items-center gap-2">
+        <button onclick="excelDocPendiente()" class="text-xs font-bold text-emerald-700 border border-emerald-300 rounded-lg px-3 py-1.5 hover:bg-emerald-50">📥 EXCEL</button>
+        <button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></span></div>
+    <p class="text-xs text-ink-400 mb-3">${TORNEO.nombre} · jugadores activos en LBF. En <b class="text-brand-600">rojo</b>, los pendientes por resolver con el club.${TORNEO.requiere_autorizacion?'':' <b>Este torneo no exige autorización</b> (columna solo informativa).'}</p>
+    <div class="overflow-x-auto max-h-[60vh] overflow-y-auto border border-line rounded-xl"><table class="w-full min-w-[520px] text-sm">
+      <thead class="sticky top-0 bg-white"><tr class="text-[10px] uppercase text-ink-400 border-b border-line tracking-wider">
+        <th class="px-3 py-2 text-left">Club / Categoría</th><th class="px-2">Jugadores</th><th class="px-2">Sin autorización</th><th class="px-2">Sin foto</th><th class="px-2">Sin foto DNI</th></tr></thead>
+      <tbody>${html}</tbody></table></div>`,true);
+}
+let RDOC_FILAS=[],RDOC_TOTC={},RDOC_TOTT={};
+function excelDocPendiente(){
+  if(typeof XLSX==='undefined'){toast('⚠ La librería de Excel no cargó — recarga la página');return;}
+  const aoa=[['CLUB','CATEGORÍA','JUGADORES','SIN AUTORIZACIÓN','SIN FOTO','SIN FOTO DNI']];
+  let clubAct=null;
+  RDOC_FILAS.forEach(f=>{
+    if(f.club!==clubAct&&clubAct!==null){const t=RDOC_TOTC[clubAct];aoa.push([clubAct,'TOTAL CLUB',t.n,t.aut,t.foto,t.dni]);}
+    clubAct=f.club;
+    aoa.push([f.club,f.cat,f.n,f.aut,f.foto,f.dni]);
+  });
+  if(clubAct!==null){const t=RDOC_TOTC[clubAct];aoa.push([clubAct,'TOTAL CLUB',t.n,t.aut,t.foto,t.dni]);}
+  aoa.push(['TOTAL TORNEO','',RDOC_TOTT.n,RDOC_TOTT.aut,RDOC_TOTT.foto,RDOC_TOTT.dni]);
+  const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[{wch:32},{wch:22},{wch:11},{wch:16},{wch:10},{wch:13}];
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Doc pendiente');
+  XLSX.writeFile(wb,`doc-pendiente-${(TORNEO.nombre||'torneo').toLowerCase().replace(/[^a-z0-9]+/g,'-')}.xlsx`);
+  toast('📥 Excel descargado ✔');
 }
 
 /* ---- Documentos del torneo (reglamento, bases…) ---- */
