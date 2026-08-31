@@ -1610,6 +1610,11 @@ async function abrirReclamoAdmin(id){
     <p class="text-xs mb-3"><b class="text-ink-400 uppercase text-[10px] tracking-wider">Solicitud del reclamante:</b><br>${(d.solicitud||'—').replace(/</g,'&lt;')}</p>
     <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1">Evidencias y comprobante</p>
     <div id="rca-adj" class="mb-3 text-xs text-ink-400">Cargando…</div>
+    ${d.descargo?`<div class="bg-sky-50 border border-sky-200 rounded-xl p-3 mb-3">
+      <p class="text-[10px] font-bold text-sky-700 uppercase tracking-wider">Descargo del club reclamado (${d.reclamado})${d.descargo_at?' · '+new Date(d.descargo_at).toLocaleString('es-PE'):''}</p>
+      <p class="text-sm">${d.descargo.replace(/</g,'&lt;')}</p>
+      <div id="rca-desc-adj" class="mt-2"></div></div>`
+    :(d.estado==='en_proceso'?'<p class="text-[11px] text-ink-400 mb-3">⏳ El club reclamado aún no registra su descargo.</p>':'')}
     ${d.respuesta?`<div class="bg-paper border border-line rounded-xl p-3 mb-3"><p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Respuesta registrada</p><p class="text-sm">${d.respuesta.replace(/</g,'&lt;')}</p></div>`:''}
     ${acciones?`<label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Respuesta / sustento del organizador (va en el email a los clubes)</span>
       <textarea id="rca-resp" rows="3" class="w-full border border-line rounded-xl p-3 text-sm">${(d.respuesta||'').replace(/</g,'&lt;')}</textarea></label>
@@ -1620,6 +1625,8 @@ async function abrirReclamoAdmin(id){
   if(d.video_url) h+=`<a href="${await urlFirmadaRca(d.video_url)}" target="_blank" class="inline-flex items-center gap-1.5 bg-paper border border-line rounded-xl px-3 py-2 text-xs font-bold text-brand-600 mr-2 mb-2 hover:underline">🎬 VER VIDEO</a>`;
   if(d.pago_url) h+=`<a href="${await urlFirmadaRca(d.pago_url)}" target="_blank" class="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-300 rounded-xl px-3 py-2 text-xs font-bold text-emerald-700 mb-2 hover:underline">💸 COMPROBANTE DE PAGO</a>`;
   const cont=$('rca-adj'); if(cont) cont.innerHTML=h||'<span class="text-[11px] text-ink-400">Sin adjuntos.</span>';
+  const cd=$('rca-desc-adj');
+  if(cd){let hd='';for(const f of (d.descargo_fotos||[])){const u=await urlFirmadaRca(f);hd+=`<a href="${u}" target="_blank"><img src="${u}" class="inline-block w-16 h-16 object-cover rounded-lg border border-sky-200 mr-2 mb-1"/></a>`;}cd.innerHTML=hd;}
 }
 async function estadoReclamo(nuevo){
   const resp=$('rca-resp')?$('rca-resp').value.trim():'';

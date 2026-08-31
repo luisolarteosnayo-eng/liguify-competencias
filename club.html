@@ -1498,6 +1498,7 @@ async function abrirReclamo(id){
   if(error||!data){toast(error?errNegocio(error):'Sin acceso');return;}
   RECL_DET=data; RECL_ID=data.id;
   RECL_ADJ={fotos:data.fotos||[],video:data.video_url||null,pago:data.pago_url||null};
+  RECL_DESC={fotos:data.descargo_fotos||[]};
   if(data.editable) formReclamo(); else vistaReclamo();
 }
 const urlFirmada=async ruta=>{const r=await sb.storage.from('documentos').createSignedUrl(ruta,3600);return (r.data&&r.data.signedUrl)||'#';};
@@ -1594,9 +1595,49 @@ async function vistaReclamo(){
     <p class="text-xs mb-3"><b class="text-ink-400 uppercase text-[10px] tracking-wider">Solicitud:</b><br>${(d.solicitud||'—').replace(/</g,'&lt;')}</p>
     <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1">Evidencias</p>
     <div id="rc-adj" class="mb-3"></div>
+    ${d.descargo||d.puede_descargo?`<div class="bg-sky-50 border border-sky-200 rounded-xl p-3 mb-3">
+      <p class="text-[10px] font-bold text-sky-700 uppercase tracking-wider mb-1.5">Descargo del club reclamado (${d.reclamado})</p>
+      ${d.puede_descargo?`
+        <textarea id="rc-descargo" rows="3" placeholder="Escribe aquí tu descargo sobre el reclamo…" class="w-full border border-line rounded-xl p-3 text-sm mb-2 bg-white">${(d.descargo||'').replace(/</g,'&lt;')}</textarea>
+        <div id="rc-desc-adj" class="mb-2"></div>
+        <div class="flex gap-2 flex-wrap">
+          <label class="text-xs font-bold text-sky-700 border border-sky-300 rounded-xl px-3 py-2 cursor-pointer hover:bg-sky-100 bg-white">📸 AGREGAR IMAGEN (máx. 3)<input id="rc-desc-foto" type="file" accept="image/*" class="hidden" onchange="subirFotoDescargo()"/></label>
+          <button onclick="enviarDescargo()" class="bg-sky-600 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-sky-700">📨 ENVIAR DESCARGO</button>
+        </div>
+        <p class="text-[10px] text-sky-700/70 mt-1.5">Puedes registrar tu descargo mientras el reclamo esté EN PROCESO.${d.descargo_at?' Última actualización: '+new Date(d.descargo_at).toLocaleString('es-PE'):''}</p>`
+      :`<p class="text-sm">${(d.descargo||'—').replace(/</g,'&lt;')}</p><div id="rc-desc-adj" class="mt-2"></div>`}
+    </div>`:''}
     ${d.respuesta?`<div class="bg-paper border border-line rounded-xl p-3 mb-3"><p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Respuesta del organizador</p><p class="text-sm">${d.respuesta.replace(/</g,'&lt;')}</p></div>`:''}
     <p class="text-[10px] text-ink-400">Presentado ${d.enviado_at?new Date(d.enviado_at).toLocaleString('es-PE'):'—'}${d.resuelto_at?' · Resuelto '+new Date(d.resuelto_at).toLocaleString('es-PE'):''}</p>`,true);
-  pintarAdjuntosReclamo();
+  pintarAdjuntosReclamo(); pintarDescargoAdj();
+}
+let RECL_DESC={fotos:[]};
+async function pintarDescargoAdj(){
+  const cont=$('rc-desc-adj'); if(!cont) return;
+  let h='';
+  for(const f of RECL_DESC.fotos){const u=await urlFirmada(f);
+    h+=`<span class="relative inline-block mr-2 mb-1"><a href="${u}" target="_blank"><img src="${u}" class="w-16 h-16 object-cover rounded-lg border border-sky-200"/></a>${RECL_DET&&RECL_DET.puede_descargo?`<button onclick="RECL_DESC.fotos=RECL_DESC.fotos.filter(x=>x!=='${f.replace(/'/g,'')}');pintarDescargoAdj()" class="absolute -top-1.5 -right-1.5 bg-brand-500 text-white rounded-full w-5 h-5 text-[10px] font-bold">✕</button>`:''}</span>`;}
+  cont.innerHTML=h;
+}
+async function subirFotoDescargo(){
+  const inp=$('rc-desc-foto'), file=inp.files&&inp.files[0]; if(!file) return;
+  if(RECL_DESC.fotos.length>=3){toast('⚠ Máximo 3 imágenes');inp.value='';return;}
+  toast('⬆ Subiendo…');
+  try{
+    const f=await redimensionar(file,1600,0.85);
+    const ruta=`reclamos/${RECL_ID}/descargo-${Date.now()}.jpg`;
+    const up=await sb.storage.from('documentos').upload(ruta,f,{contentType:'image/jpeg',upsert:false});
+    if(up.error) throw new Error(up.error.message);
+    RECL_DESC.fotos.push(ruta); inp.value=''; toast('✔ Adjuntada'); pintarDescargoAdj();
+  }catch(e){toast('⚠ '+(e.message||e));inp.value='';}
+}
+async function enviarDescargo(){
+  const txt=$('rc-descargo')?$('rc-descargo').value.trim():'';
+  if(!txt){toast('⚠ Escribe tu descargo');return;}
+  const {data,error}=await sb.rpc('responder_reclamo',{p_id:RECL_ID,p_descargo:txt,p_fotos:RECL_DESC.fotos});
+  if(error){toast(errNegocio(error));return;}
+  RECL_DET=data; toast('📨 Descargo registrado ✔ — el organizador lo verá en el reclamo');
+  vistaReclamo();
 }
 
 /* ---- TABLA (posición del equipo resaltada) + goleadores ---- */
