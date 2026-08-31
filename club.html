@@ -1075,10 +1075,11 @@ async function quitarIns(insId,nombre){
   // trazabilidad: si ya participó en algún partido (asistencia o estadísticas),
   // NO puede eliminarse de la LBF (la BD también lo bloquea con un trigger)
   const [pl,ac]=await Promise.all([
-    sb.from('planilla_partido').select('partido_id').eq('inscripcion_id',insId).limit(1),
+    sb.from('planilla_partido').select('jugo,goles,amarillas,rojas,minutos,asistencias').eq('inscripcion_id',insId),
     sb.from('acreditacion_partido').select('partido_id').eq('inscripcion_id',insId).limit(1)
   ]);
-  if((pl.data&&pl.data.length)||(ac.data&&ac.data.length)){
+  const participo=(pl.data||[]).some(p=>p.jugo||(p.goles||0)>0||(p.amarillas||0)>0||(p.rojas||0)>0||(p.minutos||0)>0||(p.asistencias||0)>0);
+  if(participo||(ac.data&&ac.data.length)){
     toast(`⛔ ${nombre} ya participó en partidos del torneo: no puede eliminarse de la LBF (protege la trazabilidad). Pide al organizador inhabilitarlo si no debe seguir jugando.`);
     return;
   }

@@ -2992,9 +2992,16 @@ async function guardarEditIns(insId,jugadorId){
   cerrarModal(); toast(autActivado?'Autorización subida ✔ — jugador ACTIVO y foto a color':'Jugador actualizado ✔'); renderLBF();
 }
 async function quitarIns(insId,nombre){
-  // trazabilidad: si el jugador tiene participaciones en planilla, NO se quita (se inhabilita)
-  const {data:pl}=await sb.from('planilla_partido').select('partido_id').eq('inscripcion_id',insId).limit(1);
-  if(pl&&pl.length){
+  // trazabilidad: solo bloquea si PARTICIPÓ de verdad (jugó, registró goles,
+  // tarjetas, minutos o asistencias, o tiene asistencia acreditada). Las filas
+  // de planilla en cero (creadas al cargar el resultado) no cuentan.
+  const [pl,ac]=await Promise.all([
+    sb.from('planilla_partido').select('jugo,goles,amarillas,rojas,minutos,asistencias').eq('inscripcion_id',insId),
+    sb.from('acreditacion_partido').select('partido_id').eq('inscripcion_id',insId).limit(1)
+  ]);
+  const participo=(pl.data||[]).some(p=>p.jugo||(p.goles||0)>0||(p.amarillas||0)>0||(p.rojas||0)>0||(p.minutos||0)>0||(p.asistencias||0)>0)
+    ||(ac.data&&ac.data.length);
+  if(participo){
     toast(`⛔ ${nombre} tiene participaciones registradas en partidos: no se puede quitar de la LBF (protege la trazabilidad). Usa ✏️ → Inhabilitado si no debe seguir jugando.`);
     return;
   }
