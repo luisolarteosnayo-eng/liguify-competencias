@@ -83,6 +83,7 @@ tailwind.config={theme:{extend:{
         <button onclick="modalEquipoIdealTorneo()" title="Equipo ideal de la fecha de TODAS las categorías: una imagen por categoría" class="bg-white border border-amber-300 text-amber-700 font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-amber-50">⭐ EQUIPO IDEAL</button>
         <button onclick="pdfComandoTecnico()" title="Relación del comando técnico de todo el torneo (foto, DNI, nombres) — para torneos sin carnets" class="bg-white border border-line font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-paper">🖨 COMANDO TÉCNICO</button>
         <button onclick="modalReportes()" title="Reportes del torneo: documentación pendiente por club y categoría, y más" class="bg-white border border-line font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-paper">📊 REPORTES</button>
+        <button onclick="modalReclamosAdmin()" title="Reclamos de los clubes sobre partidos jugados: revisar, aceptar o rechazar" class="bg-white border border-line font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-paper">⚖ RECLAMOS</button>
         <button onclick="modalCategoria()" class="bg-brand-500 text-white font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-brand-600">+ NUEVA CATEGORÍA</button>
       </div>
     </div>
@@ -1546,6 +1547,88 @@ async function buscarDuplicados(){
         <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full ${e.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${e.estado.toUpperCase()}</span></p>`).join('')}
     </div>`).join('')
     :notaOm+`<p class="text-emerald-700 text-sm font-semibold bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">✔ Sin duplicados ${alcance}${mismoClub?'':' (en clubes distintos)'}: ninguna persona está en más de un equipo.</p>`;
+}
+
+/* ============ ⚖ RECLAMOS (admin) ============ */
+let RCA_ID=null, RCA_DET=null;
+const RCA_ESTADOS={borrador:['BORRADOR','bg-paper text-ink-500 border border-line'],
+  generado:['GENERADO','bg-sky-100 text-sky-700'],en_proceso:['EN PROCESO','bg-amber-100 text-amber-700'],
+  pendiente_devolucion:['PENDIENTE DE DEVOLUCIÓN','bg-violet-100 text-violet-700'],
+  cerrado:['CERRADO','bg-emerald-100 text-emerald-700'],rechazado:['RECHAZADO','bg-brand-50 text-brand-600']};
+const chipRca=e=>{const [l,c]=RCA_ESTADOS[e]||[e,'bg-paper'];return `<span class="text-[9px] font-bold rounded-full px-2 py-0.5 ${c}">${l}</span>`;};
+const urlFirmadaRca=async ruta=>{const r=await sb.storage.from('documentos').createSignedUrl(ruta,3600);return (r.data&&r.data.signedUrl)||'#';};
+async function modalReclamosAdmin(){
+  const {data,error}=await sb.rpc('reclamos_torneo',{p_torneo:TORNEO.id});
+  if(error){toast(errNegocio(error));return;}
+  abrirModal(`<div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+      <h3 class="font-display text-2xl tracking-wide">⚖ RECLAMOS · ${TORNEO.nombre.toUpperCase()}</h3>
+      <span class="flex items-center gap-2">
+        <button onclick="modalTextosReclamo()" title="Editar los textos configurables (indicaciones y datos de pago)" class="text-xs font-bold text-ink-500 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper">⚙ TEXTOS</button>
+        <button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></span></div>
+    <p class="text-xs text-ink-400 mb-3">Flujo: GENERADO → EN PROCESO → PENDIENTE DE DEVOLUCIÓN → CERRADO, o RECHAZADO. Cada cambio avisa por email al organizador y a ambos clubes.</p>
+    ${(data||[]).length?(data||[]).map(r=>`
+      <button onclick="abrirReclamoAdmin('${r.id}')" class="w-full bg-white border border-line rounded-xl px-4 py-2.5 mb-2 text-left hover:bg-paper flex items-center gap-2 flex-wrap">
+        <span class="font-bold text-sm">${r.codigo}</span>${chipRca(r.estado)}
+        <span class="text-[10px] text-ink-400 ml-auto">${r.enviado_at?new Date(r.enviado_at).toLocaleDateString('es-PE'):''}</span>
+        <span class="block w-full text-[11px] text-ink-500">${r.categoria} · <b>${r.reclamante}</b> reclama a <b>${r.reclamado}</b></span>
+      </button>`).join(''):'<p class="text-sm text-ink-400 bg-paper border border-line rounded-xl p-6 text-center">Sin reclamos presentados en este torneo.</p>'}`,true);
+}
+function modalTextosReclamo(){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⚙ TEXTOS DEL RECLAMO</h3><button onclick="modalReclamosAdmin()" class="text-ink-400 text-xl">✕</button></div>
+    <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Indicaciones (aparece al inicio del formulario)</span>
+      <textarea id="rct-intro" rows="5" class="w-full border border-line rounded-xl p-3 text-xs">${(TORNEO.reclamo_texto_intro||'').replace(/</g,'&lt;')}</textarea></label>
+    <label class="block text-sm mb-4"><span class="text-ink-400 font-semibold text-xs">Datos de pago (Yape / cuenta)</span>
+      <textarea id="rct-pago" rows="2" class="w-full border border-line rounded-xl p-3 text-xs">${(TORNEO.reclamo_texto_pago||'').replace(/</g,'&lt;')}</textarea></label>
+    <button onclick="guardarTextosReclamo()" class="w-full bg-ink-900 text-white font-bold py-2.5 rounded-xl hover:bg-ink-700">GUARDAR TEXTOS</button>`);
+}
+async function guardarTextosReclamo(){
+  const intro=$('rct-intro').value.trim(), pago=$('rct-pago').value.trim();
+  const {error}=await sb.from('torneo').update({reclamo_texto_intro:intro,reclamo_texto_pago:pago}).eq('id',TORNEO.id);
+  if(error){toast(errNegocio(error));return;}
+  TORNEO.reclamo_texto_intro=intro; TORNEO.reclamo_texto_pago=pago;
+  toast('⚙ Textos guardados ✔'); modalReclamosAdmin();
+}
+async function abrirReclamoAdmin(id){
+  const {data,error}=await sb.rpc('detalle_reclamo',{p_id:id});
+  if(error||!data){toast(error?errNegocio(error):'Sin acceso');return;}
+  RCA_ID=id; RCA_DET=data;
+  const d=data;
+  const acciones={
+    generado:`<button onclick="estadoReclamo('en_proceso')" class="flex-1 bg-amber-500 text-white font-bold py-2.5 rounded-xl hover:bg-amber-600">▶ INICIAR PROCESO</button>`,
+    en_proceso:`<button onclick="estadoReclamo('pendiente_devolucion')" class="flex-1 bg-violet-600 text-white font-bold py-2.5 rounded-xl hover:bg-violet-700">✔ VÁLIDO — A DEVOLUCIÓN</button>
+      <button onclick="estadoReclamo('rechazado')" class="flex-1 border border-brand-100 text-brand-600 font-bold py-2.5 rounded-xl hover:bg-brand-50">✖ RECHAZAR</button>`,
+    pendiente_devolucion:`<button onclick="estadoReclamo('cerrado')" class="flex-1 bg-emerald-600 text-white font-bold py-2.5 rounded-xl hover:bg-emerald-700">💸 DEVOLUCIÓN REGISTRADA — CERRAR</button>`,
+  }[d.estado]||'';
+  abrirModal(`<div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+      <h3 class="font-display text-2xl tracking-wide">⚖ ${d.codigo}</h3>
+      <span class="flex items-center gap-2">${chipRca(d.estado)}<button onclick="modalReclamosAdmin()" class="text-ink-400 text-xl">✕</button></span></div>
+    <div class="bg-ink-900 text-white rounded-xl px-4 py-2.5 mb-3 text-sm">
+      <b>${d.partido.local} ${d.partido.gl??'–'} : ${d.partido.gv??'–'} ${d.partido.visita}</b>
+      <span class="block text-[11px] text-white/60">${d.categoria} · Fecha ${d.partido.fecha_numero||''} · ${d.partido.fecha||''} — <b>${d.reclamante}</b> reclama a <b>${d.reclamado}</b></span></div>
+    <p class="text-xs mb-2"><b class="text-ink-400 uppercase text-[10px] tracking-wider">Artículo del reglamento:</b><br>${(d.articulo||'—').replace(/</g,'&lt;')}</p>
+    <p class="text-xs mb-2"><b class="text-ink-400 uppercase text-[10px] tracking-wider">Lo sucedido:</b><br>${(d.descripcion||'—').replace(/</g,'&lt;')}</p>
+    <p class="text-xs mb-3"><b class="text-ink-400 uppercase text-[10px] tracking-wider">Solicitud del reclamante:</b><br>${(d.solicitud||'—').replace(/</g,'&lt;')}</p>
+    <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1">Evidencias y comprobante</p>
+    <div id="rca-adj" class="mb-3 text-xs text-ink-400">Cargando…</div>
+    ${d.respuesta?`<div class="bg-paper border border-line rounded-xl p-3 mb-3"><p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Respuesta registrada</p><p class="text-sm">${d.respuesta.replace(/</g,'&lt;')}</p></div>`:''}
+    ${acciones?`<label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Respuesta / sustento del organizador (va en el email a los clubes)</span>
+      <textarea id="rca-resp" rows="3" class="w-full border border-line rounded-xl p-3 text-sm">${(d.respuesta||'').replace(/</g,'&lt;')}</textarea></label>
+    <div class="flex gap-2">${acciones}</div>`:`<p class="text-[10px] text-ink-400">Reclamo en estado final${d.resuelto_at?' · '+new Date(d.resuelto_at).toLocaleString('es-PE'):''}.</p>`}`,true);
+  // adjuntos con URLs firmadas
+  let h='';
+  for(const f of (d.fotos||[])){h+=`<a href="${await urlFirmadaRca(f)}" target="_blank"><img src="${await urlFirmadaRca(f)}" class="inline-block w-20 h-20 object-cover rounded-xl border border-line mr-2 mb-2"/></a>`;}
+  if(d.video_url) h+=`<a href="${await urlFirmadaRca(d.video_url)}" target="_blank" class="inline-flex items-center gap-1.5 bg-paper border border-line rounded-xl px-3 py-2 text-xs font-bold text-brand-600 mr-2 mb-2 hover:underline">🎬 VER VIDEO</a>`;
+  if(d.pago_url) h+=`<a href="${await urlFirmadaRca(d.pago_url)}" target="_blank" class="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-300 rounded-xl px-3 py-2 text-xs font-bold text-emerald-700 mb-2 hover:underline">💸 COMPROBANTE DE PAGO</a>`;
+  const cont=$('rca-adj'); if(cont) cont.innerHTML=h||'<span class="text-[11px] text-ink-400">Sin adjuntos.</span>';
+}
+async function estadoReclamo(nuevo){
+  const resp=$('rca-resp')?$('rca-resp').value.trim():'';
+  if((nuevo==='rechazado'||nuevo==='pendiente_devolucion')&&!resp){toast('⚠ Escribe la respuesta/sustento antes de resolver');return;}
+  const {data,error}=await sb.rpc('cambiar_estado_reclamo',{p_id:RCA_ID,p_estado:nuevo,p_respuesta:resp||null});
+  if(error){toast(errNegocio(error));return;}
+  try{await sb.functions.invoke('enviar-aviso-reclamo',{body:{reclamo_id:RCA_ID}});}catch(_){}
+  toast('⚖ Reclamo → '+((RCA_ESTADOS[nuevo]||[nuevo])[0])+' ✔ — emails enviados');
+  abrirReclamoAdmin(RCA_ID);
 }
 
 /* ============ 📊 REPORTES DEL TORNEO ============ */

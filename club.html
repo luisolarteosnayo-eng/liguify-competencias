@@ -382,11 +382,13 @@ function renderHubLista(){
   const grupoHTML=grupo=>{
     const t=grupo[0];
     const soyCoord=grupo.some(m=>m.rol==='coordinador');
+    RECL_EQS[t.torneo_id]=grupo.filter(m=>m.equipo_estado!=='inactivo').map(m=>({id:m.equipo_id,nombre:m.equipo_nombre,cat:m.categoria}));
     return `<div class="mb-6">
       <div class="bg-ink-900 text-white rounded-2xl px-5 py-3 mb-2 flex items-center gap-3 flex-wrap">
         <span class="font-display text-2xl tracking-wide">${t.torneo.toUpperCase()}</span>
         <span class="text-xs text-white/50">${t.marca}${t.torneo_estado==='finalizado'?' · FINALIZADO':''}</span>
         <button onclick='modalDescargarProgramacion("${t.torneo_id}",${JSON.stringify(t.torneo).replace(/'/g,"&#39;")})' title="PDF de la programación de una fecha: agrupada por categoría y ordenada por hora" class="ml-auto bg-white/10 border border-white/20 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl hover:bg-white/20">🖨 PROGRAMACIÓN</button>
+        <button onclick='modalReclamos("${t.torneo_id}")' title="Reclamos sobre partidos de la última fecha jugada" class="bg-white/10 border border-white/20 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl hover:bg-white/20">⚖ RECLAMOS</button>
         ${soyCoord?`<button onclick='modalSubcoordinador("${t.torneo_id}")' class="bg-white/10 border border-white/20 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl hover:bg-white/20">➕ SUB-COORDINADOR</button>`:''}
       </div>
       <div class="space-y-2">${grupo.map(m=>`
@@ -1442,6 +1444,159 @@ async function guardarStatsClub(partidoId){
   if(r.error){toast(errNegocio(r.error));return;}
   cerrarModal();
   toast(`⏱ Estadísticas guardadas ✔ (${(r.data&&r.data.actualizados)||0} jugador(es)) — ya se reflejan en 📊 del plantel`);
+}
+
+/* ============ ⚖ RECLAMOS (club) ============ */
+let RECL_EQS={}, RECL_ID=null, RECL_DET=null, RECL_ADJ={fotos:[],video:null,pago:null};
+const RECL_ESTADOS={borrador:['BORRADOR','bg-paper text-ink-500 border border-line'],
+  generado:['GENERADO','bg-sky-100 text-sky-700'],en_proceso:['EN PROCESO','bg-amber-100 text-amber-700'],
+  pendiente_devolucion:['PENDIENTE DE DEVOLUCIÓN','bg-violet-100 text-violet-700'],
+  cerrado:['CERRADO','bg-emerald-100 text-emerald-700'],rechazado:['RECHAZADO','bg-brand-50 text-brand-600']};
+const chipReclamo=e=>{const [l,c]=RECL_ESTADOS[e]||[e,'bg-paper'];return `<span class="text-[9px] font-bold rounded-full px-2 py-0.5 ${c}">${l}</span>`;};
+async function modalReclamos(tid){
+  const eqs=RECL_EQS[tid]||[];
+  const {data:lista,error}=await sb.rpc('mis_reclamos',{p_torneo:tid});
+  if(error){toast(errNegocio(error));return;}
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⚖ RECLAMOS</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-3">Los reclamos se presentan sobre partidos <b>jugados de la última fecha</b> jugada o en juego. Elige tu equipo y el partido.</p>
+    <div class="flex gap-2 mb-4">
+      <select id="rc-eq" class="flex-1 border border-line rounded-xl px-3 py-2 text-sm font-semibold bg-white">
+        ${eqs.map(e=>`<option value="${e.id}">${e.nombre} · ${e.cat}</option>`).join('')}
+      </select>
+      <button onclick="nuevoReclamo('${tid}')" class="bg-brand-500 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-brand-600 shrink-0">+ NUEVO</button>
+    </div>
+    <p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-1">Mis reclamos</p>
+    ${(lista||[]).length?(lista||[]).map(r=>`
+      <button onclick="abrirReclamo('${r.id}')" class="w-full bg-white border border-line rounded-xl px-4 py-2.5 mb-2 text-left hover:bg-paper flex items-center gap-2 flex-wrap">
+        <span class="font-bold text-sm">${r.codigo}</span>${chipReclamo(r.estado)}
+        <span class="text-[9px] font-bold rounded-full px-2 py-0.5 ${r.rol==='reclamante'?'bg-ink-900 text-white':'bg-paper text-ink-500 border border-line'}">${r.rol==='reclamante'?'MI RECLAMO':'NOS RECLAMAN'}</span>
+        <span class="block w-full text-[11px] text-ink-500">${r.categoria} · ${r.reclamante} vs ${r.reclamado}</span>
+      </button>`).join(''):'<p class="text-xs text-ink-400">Sin reclamos en este torneo.</p>'}`);
+}
+async function nuevoReclamo(tid){
+  const eq=$('rc-eq')?$('rc-eq').value:null;
+  if(!eq){toast('⚠ Elige tu equipo');return;}
+  const {data:pms,error}=await sb.rpc('partidos_reclamables',{p_equipo:eq});
+  if(error){toast(errNegocio(error));return;}
+  if(!(pms||[]).length){toast('⚠ Tu equipo no tiene partidos jugados en la última fecha de su categoría');return;}
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⚖ ELIGE EL PARTIDO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-3">Partidos de tu equipo en la <b>última fecha jugada</b> (Fecha ${pms[0].fecha_numero}):</p>
+    ${pms.map(p=>`<button onclick="crearReclamo('${p.partido_id}','${eq}')" class="w-full bg-white border border-line rounded-xl px-4 py-3 mb-2 text-left hover:border-brand-500/40 hover:bg-paper">
+      <span class="font-bold text-sm">${p.local} <span class="font-display">${p.gl??'–'} : ${p.gv??'–'}</span> ${p.visita}</span>
+      <span class="block text-[11px] text-ink-500">${p.dia||''} ${p.hora?String(p.hora).slice(0,5):''} · ${p.estado}</span>
+    </button>`).join('')}`);
+}
+async function crearReclamo(pid,eq){
+  const {data,error}=await sb.rpc('crear_reclamo',{p_partido:pid,p_equipo:eq});
+  if(error){toast(errNegocio(error));return;}
+  RECL_DET=data; RECL_ID=data.id;
+  RECL_ADJ={fotos:data.fotos||[],video:data.video_url||null,pago:data.pago_url||null};
+  formReclamo();
+}
+async function abrirReclamo(id){
+  const {data,error}=await sb.rpc('detalle_reclamo',{p_id:id});
+  if(error||!data){toast(error?errNegocio(error):'Sin acceso');return;}
+  RECL_DET=data; RECL_ID=data.id;
+  RECL_ADJ={fotos:data.fotos||[],video:data.video_url||null,pago:data.pago_url||null};
+  if(data.editable) formReclamo(); else vistaReclamo();
+}
+const urlFirmada=async ruta=>{const r=await sb.storage.from('documentos').createSignedUrl(ruta,3600);return (r.data&&r.data.signedUrl)||'#';};
+async function pintarAdjuntosReclamo(){
+  const cont=$('rc-adj'); if(!cont) return;
+  let h='';
+  for(const f of RECL_ADJ.fotos){const u=await urlFirmada(f);
+    h+=`<span class="relative inline-block mr-2 mb-2"><img src="${u}" class="w-20 h-20 object-cover rounded-xl border border-line"/>${RECL_DET.editable?`<button onclick="quitarFotoReclamo('${f.replace(/'/g,'')}')" class="absolute -top-1.5 -right-1.5 bg-brand-500 text-white rounded-full w-5 h-5 text-[10px] font-bold">✕</button>`:''}</span>`;}
+  if(RECL_ADJ.video){const u=await urlFirmada(RECL_ADJ.video);
+    h+=`<span class="inline-flex items-center gap-2 bg-paper border border-line rounded-xl px-3 py-2 text-xs font-bold mr-2 mb-2">🎬 <a href="${u}" target="_blank" class="text-brand-600 hover:underline">Ver video</a>${RECL_DET.editable?`<button onclick="RECL_ADJ.video=null;pintarAdjuntosReclamo()" class="text-ink-400 font-bold">✕</button>`:''}</span>`;}
+  cont.innerHTML=h||'<p class="text-[11px] text-ink-400">Sin evidencias adjuntas.</p>';
+  const pg=$('rc-pago-prev'); if(pg){ pg.innerHTML=RECL_ADJ.pago?`<img src="${await urlFirmada(RECL_ADJ.pago)}" class="w-24 h-24 object-cover rounded-xl border border-emerald-300"/> <span class="text-[10px] font-bold text-emerald-700">Comprobante adjunto ✔</span>`:'<span class="text-[10px] font-bold text-amber-600">— pendiente de adjuntar —</span>'; }
+}
+function quitarFotoReclamo(f){RECL_ADJ.fotos=RECL_ADJ.fotos.filter(x=>x!==f);pintarAdjuntosReclamo();}
+async function subirAdjReclamo(inputId,tipo){
+  const inp=$(inputId), file=inp.files&&inp.files[0]; if(!file) return;
+  if(tipo==='foto'&&RECL_ADJ.fotos.length>=3){toast('⚠ Máximo 3 fotos');inp.value='';return;}
+  toast('⬆ Subiendo…');
+  try{
+    let f=file, ext='jpg', ct='image/jpeg';
+    if(tipo==='video'){ if(file.size>50*1024*1024) throw new Error('El video no debe superar 50 MB'); f=file; ext=(file.name.split('.').pop()||'mp4').toLowerCase(); ct=file.type||'video/mp4'; }
+    else f=await redimensionar(file,1600,0.85);
+    const ruta=`reclamos/${RECL_ID}/${tipo}-${Date.now()}.${ext}`;
+    const up=await sb.storage.from('documentos').upload(ruta,f,{contentType:ct,upsert:false});
+    if(up.error) throw new Error(up.error.message);
+    if(tipo==='foto') RECL_ADJ.fotos.push(ruta);
+    else if(tipo==='video') RECL_ADJ.video=ruta;
+    else RECL_ADJ.pago=ruta;
+    inp.value=''; toast('✔ Adjuntado'); pintarAdjuntosReclamo();
+  }catch(e){toast('⚠ '+(e.message||e));inp.value='';}
+}
+function formReclamo(){
+  const d=RECL_DET;
+  abrirModal(`<div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+      <h3 class="font-display text-2xl tracking-wide">⚖ ${d.codigo}</h3>
+      <span class="flex items-center gap-2">${chipReclamo(d.estado)}<button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></span></div>
+    <p class="text-[11px] text-ink-500 bg-paper border border-line rounded-xl px-3 py-2 mb-3">${d.texto_intro||''}</p>
+    <div class="bg-ink-900 text-white rounded-xl px-4 py-2.5 mb-4 text-sm">
+      <b>${d.partido.local} ${d.partido.gl??'–'} : ${d.partido.gv??'–'} ${d.partido.visita}</b>
+      <span class="block text-[11px] text-white/60">${d.categoria} · Fecha ${d.partido.fecha_numero||''} · ${d.partido.fecha||''} ${d.partido.hora||''} — Reclamas a: <b>${d.reclamado}</b></span></div>
+    <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Indicar claramente el número de artículo del Reglamento al que hace referencia la falta *</span>
+      <input id="rc-art" value="${(d.articulo||'').replace(/"/g,'&quot;')}" class="w-full border-b border-line py-2 font-semibold bg-transparent"/></label>
+    <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Describe con detalle lo sucedido *</span>
+      <textarea id="rc-desc" rows="4" class="w-full border border-line rounded-xl p-3 text-sm">${d.descripcion||''}</textarea></label>
+    <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Indica qué solicitas para solucionar el inconveniente presentado *</span>
+      <textarea id="rc-sol" rows="3" class="w-full border border-line rounded-xl p-3 text-sm">${d.solicitud||''}</textarea></label>
+    <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1">Adjuntar la evidencia de su reclamo <span class="font-normal normal-case">(hasta 3 fotos y 1 video)</span></p>
+    <div id="rc-adj" class="mb-2"></div>
+    <div class="flex gap-2 mb-4 flex-wrap">
+      <label class="text-xs font-bold text-ink-500 border border-line rounded-xl px-3 py-2 cursor-pointer hover:bg-paper">📸 AGREGAR FOTO<input id="rc-foto" type="file" accept="image/*" class="hidden" onchange="subirAdjReclamo('rc-foto','foto')"/></label>
+      <label class="text-xs font-bold text-ink-500 border border-line rounded-xl px-3 py-2 cursor-pointer hover:bg-paper">🎬 AGREGAR VIDEO<input id="rc-video" type="file" accept="video/*" class="hidden" onchange="subirAdjReclamo('rc-video','video')"/></label>
+    </div>
+    <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 mb-4">
+      <p class="text-xs font-bold text-emerald-800 mb-1.5">${d.texto_pago||''}</p>
+      <div class="flex items-center gap-3 flex-wrap">
+        <span id="rc-pago-prev"></span>
+        <label class="text-xs font-bold text-emerald-700 border border-emerald-300 rounded-xl px-3 py-2 cursor-pointer hover:bg-emerald-100 bg-white">📄 SUBIR IMAGEN DEL PAGO<input id="rc-pago" type="file" accept="image/*" class="hidden" onchange="subirAdjReclamo('rc-pago','pago')"/></label>
+      </div></div>
+    <div class="flex gap-2">
+      <button onclick="guardarReclamoClub(false)" class="flex-1 border border-line text-ink-700 font-bold py-2.5 rounded-xl hover:bg-paper">💾 GUARDAR</button>
+      <button onclick="guardarReclamoClub(true)" class="flex-1 bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">📨 ENVIAR</button>
+    </div>
+    <p id="rc-msg" class="text-xs text-brand-600 font-bold mt-2"></p>`,true);
+  pintarAdjuntosReclamo();
+}
+async function guardarReclamoClub(enviar){
+  const g=await sb.rpc('guardar_reclamo',{p_id:RECL_ID,
+    p_articulo:$('rc-art').value.trim(),p_descripcion:$('rc-desc').value.trim(),p_solicitud:$('rc-sol').value.trim(),
+    p_fotos:RECL_ADJ.fotos,p_video:RECL_ADJ.video,p_pago:RECL_ADJ.pago});
+  if(g.error){$('rc-msg').textContent='⚠ '+errNegocio(g.error);return;}
+  RECL_DET=g.data;
+  if(!enviar){toast('💾 Borrador guardado ✔ — puedes completarlo y enviarlo cuando quieras');return;}
+  const e=await sb.rpc('enviar_reclamo',{p_id:RECL_ID});
+  if(e.error){$('rc-msg').textContent='⚠ '+errNegocio(e.error);return;}
+  RECL_DET=e.data;
+  try{await sb.functions.invoke('enviar-aviso-reclamo',{body:{reclamo_id:RECL_ID}});}catch(_){}
+  abrirModal(`<div class="text-center py-6">
+    <p class="text-5xl mb-3">📨</p>
+    <h3 class="font-display text-3xl tracking-wide mb-2">RECLAMO ENVIADO</h3>
+    <p class="text-sm text-ink-500 mb-1"><b>${RECL_DET.codigo}</b> quedó <b>GENERADO</b> y en cola de revisión del organizador.</p>
+    <p class="text-xs text-ink-400 mb-5">Se avisó por email al organizador, a tu club y al club reclamado. Te llegará un correo en cada cambio de estado.</p>
+    <button onclick="cerrarModal()" class="bg-ink-900 text-white font-bold px-8 py-2.5 rounded-xl hover:bg-ink-700">ENTENDIDO</button></div>`);
+}
+async function vistaReclamo(){
+  const d=RECL_DET;
+  abrirModal(`<div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+      <h3 class="font-display text-2xl tracking-wide">⚖ ${d.codigo}</h3>
+      <span class="flex items-center gap-2">${chipReclamo(d.estado)}<button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></span></div>
+    <div class="bg-ink-900 text-white rounded-xl px-4 py-2.5 mb-3 text-sm">
+      <b>${d.partido.local} ${d.partido.gl??'–'} : ${d.partido.gv??'–'} ${d.partido.visita}</b>
+      <span class="block text-[11px] text-white/60">${d.categoria} · Fecha ${d.partido.fecha_numero||''} · ${d.reclamante} reclama a ${d.reclamado}</span></div>
+    <p class="text-xs mb-2"><b class="text-ink-400 uppercase text-[10px] tracking-wider">Artículo del reglamento:</b><br>${d.articulo||'—'}</p>
+    <p class="text-xs mb-2"><b class="text-ink-400 uppercase text-[10px] tracking-wider">Lo sucedido:</b><br>${(d.descripcion||'—').replace(/</g,'&lt;')}</p>
+    <p class="text-xs mb-3"><b class="text-ink-400 uppercase text-[10px] tracking-wider">Solicitud:</b><br>${(d.solicitud||'—').replace(/</g,'&lt;')}</p>
+    <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1">Evidencias</p>
+    <div id="rc-adj" class="mb-3"></div>
+    ${d.respuesta?`<div class="bg-paper border border-line rounded-xl p-3 mb-3"><p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Respuesta del organizador</p><p class="text-sm">${d.respuesta.replace(/</g,'&lt;')}</p></div>`:''}
+    <p class="text-[10px] text-ink-400">Presentado ${d.enviado_at?new Date(d.enviado_at).toLocaleString('es-PE'):'—'}${d.resuelto_at?' · Resuelto '+new Date(d.resuelto_at).toLocaleString('es-PE'):''}</p>`,true);
+  pintarAdjuntosReclamo();
 }
 
 /* ---- TABLA (posición del equipo resaltada) + goleadores ---- */
