@@ -73,7 +73,10 @@ tailwind.config={theme:{extend:{
   <section id="s-torneo" class="screen">
     <button onclick="show('s-torneos')" class="text-sm text-ink-500 mb-3 font-semibold">← Torneos</button>
     <div class="flex items-center justify-between flex-wrap gap-2 mb-4">
-      <h1 id="t-titulo" class="font-display text-4xl tracking-wide"></h1>
+      <div class="flex items-center gap-3 min-w-0">
+        <span id="t-logo-adm" class="w-14 h-14 rounded-2xl grid place-items-center text-white font-display text-lg overflow-hidden relative shrink-0 border border-line" style="background:#171e2e"></span>
+        <h1 id="t-titulo" class="font-display text-4xl tracking-wide"></h1>
+      </div>
       <div class="flex gap-2 flex-wrap">
         <button onclick="modalVerificarPersona()" title="Validar si un jugador o CT está inscrito en ESTE torneo: escanea el QR, digita/escanea el DNI o lee el NFC" class="bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-emerald-800">🪪 VERIFICAR</button>
         <button onclick="modalProgramacion()" title="Pegar la parrilla de una fecha (hora y cancha) y aplicarla a los partidos de este torneo" class="bg-white border border-line font-bold px-4 py-2.5 rounded-xl text-sm hover:bg-paper">📤 SUBIR PROGRAMACIÓN</button>
@@ -95,6 +98,7 @@ tailwind.config={theme:{extend:{
   <!-- CATEGORÍA -->
   <section id="s-categoria" class="screen">
     <button onclick="show('s-torneo')" class="text-sm text-ink-500 mb-3 font-semibold" id="bc-t"></button>
+    <div id="c-torneo-band" class="mb-3"></div>
     <h1 id="c-titulo" class="font-display text-4xl tracking-wide mb-4"></h1>
     <div class="flex gap-1.5 mb-5" id="c-tabs"></div>
     <div id="c-kpis-adm"></div>
@@ -1799,9 +1803,14 @@ async function renderKPIs(contId,catIds){
     ${tile(clubes,'Clubes')}${tile(equipos,'Equipos')}${tile(jug.count||0,'Jugadores')}${tile(pj,'Partidos jugados')}${tile(goles,'Goles','text-brand-600')}
   </div>`;
 }
+const logoTorneoAdm=()=>{
+  const u=(TORNEO&&TORNEO.logo_url)||(MARCA&&MARCA.logo_url)||null;
+  return u?`<img src="${u}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales((TORNEO&&TORNEO.nombre)||'?');
+};
 async function abrirTorneo(t){
   TORNEO=t;
   $('t-titulo').textContent=t.nombre.toUpperCase();
+  const tl=$('t-logo-adm'); if(tl) tl.innerHTML=logoTorneoAdm();
   const {data:cs,error}=await sb.from('categoria').select('*').eq('torneo_id',t.id).order('anio_nacimiento',{ascending:false});
   if(error){msg(errNegocio(error),'err');return;}
   $('lista-categorias').innerHTML=cs.map(c=>`
@@ -1995,6 +2004,12 @@ async function guardarDuracionCat(){
 async function abrirCategoria(c){
   CAT=c;
   $('bc-t').textContent='← '+TORNEO.nombre;
+  $('c-torneo-band').innerHTML=`<div class="inline-flex items-center gap-3 bg-ink-900 text-white rounded-2xl pl-2 pr-5 py-2 relative overflow-hidden">
+    <span class="absolute inset-0 opacity-25" style="background:radial-gradient(circle at 85% 20%, #d9232e 0%, transparent 60%)"></span>
+    <span class="relative w-11 h-11 rounded-xl grid place-items-center font-display text-sm overflow-hidden bg-white text-ink-900 shrink-0">${logoTorneoAdm()}</span>
+    <span class="relative min-w-0"><span class="font-display text-xl tracking-wide block leading-none truncate">${TORNEO.nombre.toUpperCase()}</span>
+    <span class="text-[10px] text-white/50 font-bold uppercase tracking-wider">${(MARCA&&MARCA.nombre?MARCA.nombre:'').toUpperCase()}</span></span>
+  </div>`;
   const durEf=c.duracion_partido||TORNEO.duracion_partido||90;
   $('c-titulo').innerHTML=`${(c.nombre_display||('Categoría '+c.anio_nacimiento+' / '+c.modalidad)).toUpperCase()}${esAdmin()?` <button onclick="modalDuracionCat()" title="Duración del partido de esta categoría (base de %participación y por-90)" class="align-middle text-xs font-sans font-bold bg-white border border-line rounded-full px-3 py-1.5 text-ink-500 hover:bg-paper">⏱ ${durEf}'${c.duracion_partido?'':' · torneo'}</button>`:''}`;
   renderKPIs('c-kpis-adm',[c.id]);

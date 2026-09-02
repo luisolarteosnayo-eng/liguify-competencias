@@ -384,7 +384,8 @@ function renderHubLista(){
     const soyCoord=grupo.some(m=>m.rol==='coordinador');
     RECL_EQS[t.torneo_id]=grupo.filter(m=>m.equipo_estado!=='inactivo').map(m=>({id:m.equipo_id,nombre:m.equipo_nombre,cat:m.categoria}));
     return `<div class="mb-6">
-      <div class="bg-ink-900 text-white rounded-2xl px-5 py-3 mb-2 flex items-center gap-3 flex-wrap">
+      <div class="bg-ink-900 text-white rounded-2xl px-3 py-3 mb-2 flex items-center gap-3 flex-wrap">
+        <span id="hub-tlogo-${t.torneo_id}" class="w-11 h-11 rounded-xl grid place-items-center font-display text-sm overflow-hidden relative bg-white text-ink-900 shrink-0">${iniciales(t.torneo)}</span>
         <span class="font-display text-2xl tracking-wide">${t.torneo.toUpperCase()}</span>
         <span class="text-xs text-white/50">${t.marca}${t.torneo_estado==='finalizado'?' · FINALIZADO':''}</span>
         <button onclick='modalDescargarProgramacion("${t.torneo_id}",${JSON.stringify(t.torneo).replace(/'/g,"&#39;")})' title="PDF de la programación de una fecha: agrupada por categoría y ordenada por hora" class="ml-auto bg-white/10 border border-white/20 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl hover:bg-white/20">🖨 PROGRAMACIÓN</button>
@@ -413,6 +414,12 @@ function renderHubLista(){
         ${HUB_VER_FIN?'▾ OCULTAR':'▸ VER'} TORNEOS FINALIZADOS (${fin.length})
       </button>
       ${HUB_VER_FIN?fin.map(grupoHTML).join(''):''}`:'');
+  // logos de los torneos (async: reemplaza las iniciales por el logo real)
+  const tids=[...new Set(HUB_GRUPOS.map(g=>g[0].torneo_id))];
+  if(tids.length) sb.from('torneo').select('id,logo_url,marca:marca_id(logo_url)').in('id',tids).then(({data})=>{
+    (data||[]).forEach(t=>{const u=t.logo_url||(t.marca||{}).logo_url; const el=$('hub-tlogo-'+t.id);
+      if(u&&el) el.innerHTML=`<img src="${u}" class="absolute inset-0 w-full h-full object-cover"/>`;});
+  });
 }
 async function aceptarInv(id){
   const {data,error}=await sb.rpc('aceptar_invitacion',{p_id:id});
@@ -537,14 +544,20 @@ function tabs(act){
 }
 async function abrirEquipo(id){
   EQ=MIS.find(m=>m.equipo_id===id); if(!EQ) return;
-  $('eq-head').innerHTML=`<div class="bg-ink-900 text-white rounded-2xl p-5 flex items-center gap-4 flex-wrap">
+  $('eq-head').innerHTML=`<div class="bg-ink-900 text-white rounded-2xl p-5 flex items-center gap-4 flex-wrap relative overflow-hidden">
+    <span class="absolute inset-0 opacity-20" style="background:radial-gradient(circle at 88% 15%, #d9232e 0%, transparent 55%)"></span>
     ${escudo(EQ,12)}
-    <div class="flex-1 min-w-40">
+    <div class="flex-1 min-w-40 relative">
       <h1 class="font-display text-3xl tracking-wide">${EQ.equipo_nombre.toUpperCase()}</h1>
       <p class="text-white/50 text-sm">${EQ.club_nombre} · ${EQ.categoria} · ${EQ.torneo}</p>
     </div>
-    <span class="text-[10px] font-bold bg-white/10 border border-white/20 rounded-full px-3 py-1 uppercase">${EQ.rol}</span>
+    <span id="eq-tlogo" class="relative w-12 h-12 rounded-xl grid place-items-center font-display text-sm overflow-hidden bg-white text-ink-900 shrink-0" title="${EQ.torneo}">${iniciales(EQ.torneo)}</span>
+    <span class="relative text-[10px] font-bold bg-white/10 border border-white/20 rounded-full px-3 py-1 uppercase">${EQ.rol}</span>
   </div>`;
+  sb.from('torneo').select('logo_url,marca:marca_id(logo_url)').eq('id',EQ.torneo_id).single().then(({data})=>{
+    const u=data&&(data.logo_url||(data.marca||{}).logo_url); const el=$('eq-tlogo');
+    if(u&&el) el.innerHTML=`<img src="${u}" class="absolute inset-0 w-full h-full object-cover"/>`;
+  });
   tabs('tabla');
   renderKPIs('eq-kpis',[EQ.categoria_id]);
   EQ_LISTO=false;
