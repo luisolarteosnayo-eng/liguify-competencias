@@ -1706,6 +1706,7 @@ async function reporteDocPendiente(){
   abrirModal(`<div class="flex items-center justify-between mb-1 flex-wrap gap-2">
       <h3 class="font-display text-2xl tracking-wide">📄 DOCUMENTACIÓN PENDIENTE</h3>
       <span class="flex items-center gap-2">
+        <button onclick="imagenDocPendiente()" class="text-xs font-bold text-ink-700 border border-line rounded-lg px-3 py-1.5 hover:bg-paper">🖼 IMAGEN</button>
         <button onclick="excelDocPendiente()" class="text-xs font-bold text-emerald-700 border border-emerald-300 rounded-lg px-3 py-1.5 hover:bg-emerald-50">📥 EXCEL</button>
         <button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></span></div>
     <p class="text-xs text-ink-400 mb-3">${TORNEO.nombre} · jugadores activos en LBF. En <b class="text-brand-600">rojo</b>, los pendientes por resolver con el club.${TORNEO.requiere_autorizacion?'':' <b>Este torneo no exige autorización</b> (columna solo informativa).'}</p>
@@ -1730,6 +1731,78 @@ function excelDocPendiente(){
   const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Doc pendiente');
   XLSX.writeFile(wb,`doc-pendiente-${(TORNEO.nombre||'torneo').toLowerCase().replace(/[^a-z0-9]+/g,'-')}.xlsx`);
   toast('📥 Excel descargado ✔');
+}
+async function imagenDocPendiente(){
+  if(!RDOC_FILAS.length){toast('⚠ Genera primero el reporte');return;}
+  try{await document.fonts.load('40px "Bebas Neue"');await document.fonts.load('bold 20px Inter');}catch(_){}
+  const ROJO='#c11d27', VERDE='#059669', INK='#171e2e', GRIS='#5b6478', LINEA='#e9e6e0';
+  const W=1080, ROW=46, BAND=54, TOP=190;
+  const L=[]; let clubAct=null;
+  RDOC_FILAS.forEach(f=>{
+    if(f.club!==clubAct){
+      if(clubAct!==null) L.push({t:'tot',s:RDOC_TOTC[clubAct]});
+      clubAct=f.club; L.push({t:'club',club:f.club});
+    }
+    L.push({t:'cat',cat:f.cat,s:f});
+  });
+  if(clubAct!==null) L.push({t:'tot',s:RDOC_TOTC[clubAct]});
+  const H=TOP+44+L.reduce((a,r)=>a+(r.t==='club'?BAND:ROW),0)+ROW+64;
+  const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+  const ctx=cv.getContext('2d');
+  ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,W,H);
+  // Cabecera
+  ctx.fillStyle=INK; ctx.fillRect(0,0,W,120);
+  ctx.fillStyle=ROJO; ctx.fillRect(0,120,W,6);
+  ctx.fillStyle='#ffffff'; ctx.font='46px "Bebas Neue"'; ctx.textAlign='left';
+  ctx.fillText('📄 DOCUMENTACIÓN PENDIENTE',40,58);
+  ctx.font='30px "Bebas Neue"'; ctx.fillStyle='#c8ccd8';
+  ctx.fillText((TORNEO.nombre||'').toUpperCase(),40,98);
+  ctx.font='bold 15px Inter'; ctx.fillStyle=GRIS; ctx.textAlign='right';
+  ctx.fillText('LIGUIFY · '+new Date().toLocaleDateString('es-PE',{day:'2-digit',month:'2-digit',year:'numeric'}),W-40,150);
+  // Encabezados de columna
+  const COLS=[{x:610,t:'JUGADORES'},{x:775,t:'SIN AUTORIZACIÓN'},{x:905,t:'SIN FOTO'},{x:1020,t:'SIN FOTO DNI'}];
+  let y=TOP;
+  ctx.textAlign='left'; ctx.font='bold 13px Inter'; ctx.fillStyle=GRIS;
+  ctx.fillText('CLUB / CATEGORÍA',40,y+2);
+  ctx.textAlign='center';
+  COLS.forEach(c=>ctx.fillText(c.t,c.x,y+2));
+  y+=18;
+  ctx.strokeStyle=LINEA; ctx.beginPath(); ctx.moveTo(30,y); ctx.lineTo(W-30,y); ctx.stroke();
+  const num=(v,x,yy)=>{ctx.fillStyle=v>0?ROJO:VERDE; ctx.font='bold 20px Inter'; ctx.textAlign='center'; ctx.fillText(v,x,yy);};
+  const fila4=(s,yy,neutroN)=>{
+    ctx.fillStyle=neutroN||INK; ctx.font='bold 20px Inter'; ctx.textAlign='center'; ctx.fillText(s.n,COLS[0].x,yy);
+    num(s.aut,COLS[1].x,yy); num(s.foto,COLS[2].x,yy); num(s.dni,COLS[3].x,yy);
+  };
+  L.forEach(r=>{
+    if(r.t==='club'){
+      ctx.fillStyle=INK; ctx.fillRect(30,y+8,W-60,BAND-12);
+      ctx.fillStyle='#ffffff'; ctx.font='26px "Bebas Neue"'; ctx.textAlign='left';
+      ctx.fillText(r.club.toUpperCase(),46,y+8+(BAND-12)/2+9);
+      y+=BAND;
+    }else if(r.t==='cat'){
+      const yy=y+ROW/2+7;
+      ctx.fillStyle=GRIS; ctx.font='16px Inter'; ctx.textAlign='left'; ctx.fillText(r.cat,46,yy);
+      fila4(r.s,yy);
+      ctx.strokeStyle=LINEA; ctx.beginPath(); ctx.moveTo(30,y+ROW); ctx.lineTo(W-30,y+ROW); ctx.stroke();
+      y+=ROW;
+    }else{
+      ctx.fillStyle='#faf9f7'; ctx.fillRect(30,y,W-60,ROW);
+      const yy=y+ROW/2+7;
+      ctx.fillStyle=INK; ctx.font='bold 16px Inter'; ctx.textAlign='left'; ctx.fillText('TOTAL',46,yy);
+      fila4(r.s,yy);
+      ctx.strokeStyle=LINEA; ctx.beginPath(); ctx.moveTo(30,y+ROW); ctx.lineTo(W-30,y+ROW); ctx.stroke();
+      y+=ROW;
+    }
+  });
+  // Total torneo
+  ctx.fillStyle='#fef3c7'; ctx.fillRect(30,y+6,W-60,ROW);
+  const yy=y+6+ROW/2+7;
+  ctx.fillStyle=INK; ctx.font='bold 17px Inter'; ctx.textAlign='left'; ctx.fillText('🏆 TOTAL TORNEO',46,yy);
+  fila4(RDOC_TOTT,yy);
+  const a=document.createElement('a');
+  a.download=`doc-pendiente-${(TORNEO.nombre||'torneo').toLowerCase().replace(/[^a-z0-9]+/g,'-')}.png`;
+  a.href=cv.toDataURL('image/png'); a.click();
+  toast('🖼 Imagen descargada ✔');
 }
 
 /* ---- Documentos del torneo (reglamento, bases…) ---- */
