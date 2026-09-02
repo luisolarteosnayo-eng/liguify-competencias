@@ -376,6 +376,9 @@ async function irCatalogo(){
   $('hdr-brand').textContent='LIGUIFY'; $('hdr-sub').textContent='Torneos en vivo';
   const {data,error}=await sb.from('marca').select('*').order('created_at');
   if(error){err(error.message);return;} err(null);
+  // orden del catálogo: PREMIUM → INTERMEDIO → BÁSICO (y por antigüedad dentro de cada nivel)
+  const RANGO={premium:0,intermedio:1,basico:2};
+  data.sort((a,b)=>((RANGO[a.membresia]??3)-(RANGO[b.membresia]??3))||String(a.created_at).localeCompare(String(b.created_at)));
   $('catalogo').innerHTML=data.map(m=>`
     <button onclick='irMarcaId("${m.id}")' class="group relative overflow-hidden bg-white border border-line rounded-2xl p-5 text-left hover:border-brand-500/40 hover:shadow-md hover:-translate-y-0.5 transition">
       <div class="w-16 h-16 rounded-2xl grid place-items-center text-white font-display text-2xl mb-3 overflow-hidden relative" style="background:#d9232e">
