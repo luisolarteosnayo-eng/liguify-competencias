@@ -456,6 +456,10 @@ function modalMarca(){
     </div>
     <label class="block text-sm mb-4"><span class="text-ink-400 font-semibold text-xs">Descripción</span>
       <textarea id="mk-desc" rows="2" class="w-full border border-line rounded-xl p-2.5 mt-1 text-sm">${MARCA.descripcion||''}</textarea></label>
+    ${ES_SUPER?`<label class="block text-sm mb-4"><span class="text-ink-400 font-semibold text-xs">Membresía <span class="text-[9px] font-bold bg-ink-900 text-white rounded-full px-2 py-0.5 ml-1">SOLO SUPER-ADMIN</span></span>
+      <select id="mk-memb" class="w-full border border-line rounded-xl px-3 py-2 mt-1 text-sm font-semibold bg-white">
+        ${['basico','intermedio','premium'].map(m=>`<option value="${m}" ${MARCA.membresia===m?'selected':''}>${m.toUpperCase()}</option>`).join('')}
+      </select></label>`:''}
     <div class="border-t border-line pt-3 mb-4">
       <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-2">Liguify Financiero (ERP) — opcional</p>
       <div id="mk-erp" class="text-sm">${MARCA.erp_org_id
@@ -499,6 +503,7 @@ async function guardarMarca(){
       email:$('mk-email').value.trim()||null, telefono:$('mk-tel').value.trim()||null,
       redes:$('mk-redes').value.trim()||null, descripcion:$('mk-desc').value.trim()||null};
     if(logo) upd.logo_url=logo;
+    if(ES_SUPER&&$('mk-memb')) upd.membresia=$('mk-memb').value;
     const {data,error}=await sb.from('marca').update(upd).eq('id',MARCA.id).select().single();
     if(error){toast(errNegocio(error));return;}
     MARCA=data; cerrarModal(); toast('Marca actualizada ✔ — visible en el módulo público'); cargarTorneos();
