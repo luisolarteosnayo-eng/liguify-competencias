@@ -3041,15 +3041,30 @@ async function modalImportarPlantel(){
   // otras marcas a las que el usuario tenga acceso
   const {data:fuentes,error}=await sb.rpc('fuentes_copiar_plantel',{p_equipo:EQUIPO.id});
   if(error){toast(errNegocio(error));return;}
+  CP_FUENTES=fuentes||[];
+  const anios=[...new Set(CP_FUENTES.map(f=>f.anio))].sort((a,b)=>b-a);
+  const anioMio=CAT.anio_nacimiento;
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⬇ COPIAR DE OTRO TORNEO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
-    <p class="text-xs text-ink-400 mb-4">Copia la LBF de <b>${(CLUBES[EQUIPO.club_id]||{}).nombre}</b> desde otro torneo — incluidos los de <b>otras marcas</b>. Los jugadores llegan con sus datos maestros intactos y quedan <b>PENDIENTES</b>: cada torneo exige su propia validación. Los ya inscritos en esta categoría se omiten.</p>
-    ${(fuentes||[]).length?(fuentes||[]).map(e=>`
+    <p class="text-xs text-ink-400 mb-3">Copia la LBF de <b>${(CLUBES[EQUIPO.club_id]||{}).nombre}</b> desde otro torneo — incluidos los de <b>otras marcas</b>. Los jugadores llegan con sus datos maestros intactos y quedan <b>PENDIENTES</b>. Los ya inscritos en esta categoría se omiten.</p>
+    <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Categoría</span>
+      <select id="cp-filtro" onchange="pintarFuentesCopia()" class="w-full border border-line rounded-xl px-3 py-2 text-sm font-semibold bg-white">
+        ${anios.map(a=>`<option value="${a}" ${a===anioMio?'selected':''}>Categoría ${a}${a===anioMio?' — la de este LBF':''}</option>`).join('')}
+        <option value="" ${anios.includes(anioMio)?'':'selected'}>— TODAS LAS CATEGORÍAS —</option>
+      </select></label>
+    <div id="cp-lista"></div>`);
+  pintarFuentesCopia();
+}
+let CP_FUENTES=[];
+function pintarFuentesCopia(){
+  const v=$('cp-filtro')?$('cp-filtro').value:'';
+  const lista=CP_FUENTES.filter(f=>!v||String(f.anio)===v);
+  $('cp-lista').innerHTML=lista.length?lista.map(e=>`
       <button onclick="importarPlantel('${e.equipo_id}')" class="w-full bg-white border border-line rounded-xl px-4 py-3 mb-2 flex items-center gap-3 hover:bg-emerald-50 hover:border-emerald-300 text-left">
         <span class="flex-1 min-w-0"><span class="font-bold text-sm block truncate">${e.torneo}</span>
         <span class="text-xs text-ink-400">${e.marca} · ${e.categoria}${e.misma_categoria?' · <b class="text-emerald-700">MISMA CATEGORÍA</b>':''}</span></span>
         <span class="text-xs font-bold text-emerald-700 shrink-0">${e.jugadores} jugador(es) →</span>
       </button>`).join('')
-      :'<p class="text-sm text-ink-400 py-6 text-center">Este club no tiene planteles cargados en otros torneos.</p>'}`);
+    :'<p class="text-sm text-ink-400 py-6 text-center">'+(CP_FUENTES.length?'Sin planteles en esta categoría — prueba con "TODAS".':'Este club no tiene planteles cargados en otros torneos.')+'</p>';
 }
 async function importarPlantel(fuenteEqId){
   const {data,error}=await sb.rpc('copiar_plantel',{p_destino:EQUIPO.id,p_fuente:fuenteEqId});
