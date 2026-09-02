@@ -65,8 +65,8 @@ where j.id = i.jugador_id and c.id = i.categoria_id
   and ((not coalesce(t.requiere_autorizacion,false)) or j.autorizacion_url is not null);
 
 -- Verificación: cuántos quedaron activos por el arreglo
-select count(*) filter (where estado='activo') as activos,
-       count(*) filter (where estado='pendiente') as pendientes
+select count(*) filter (where i.estado='activo') as activos,
+       count(*) filter (where i.estado='pendiente') as pendientes
 from competencias.inscripcion_lbf i
 join competencias.categoria c on c.id = i.categoria_id
 join competencias.torneo t on t.id = c.torneo_id
