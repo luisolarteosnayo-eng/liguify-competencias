@@ -3047,7 +3047,9 @@ async function modalImportarPlantel(){
     const ins=await sb.from('inscripcion_lbf').select('equipo_id').in('equipo_id',eqs.map(e=>e.id));
     (ins.data||[]).forEach(i=>conteos[i.equipo_id]=(conteos[i.equipo_id]||0)+1);
   }
-  const fuentes=eqs.filter(e=>conteos[e.id]);
+  const fuentes=eqs.filter(e=>conteos[e.id])
+    .sort((a,b)=>((a.categoria?.anio_nacimiento===CAT.anio_nacimiento?0:1)-(b.categoria?.anio_nacimiento===CAT.anio_nacimiento?0:1))
+      ||String(a.categoria?.torneo?.nombre||'').localeCompare(String(b.categoria?.torneo?.nombre||''),'es'));
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⬇ IMPORTAR PLANTEL</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
     <p class="text-xs text-ink-400 mb-4">Copia la LBF de <b>${(CLUBES[EQUIPO.club_id]||{}).nombre}</b> desde otro torneo/categoría. Los jugadores llegan con sus datos maestros intactos (verificación, fotos, DNI) y quedan <b>PENDIENTES</b>: cada torneo exige su propio apto médico. Los ya inscritos en esta categoría se omiten (anti-suplantación).</p>
     ${fuentes.length?fuentes.map(e=>`
