@@ -1105,55 +1105,23 @@ async function quitarIns(insId,nombre){
 }
 /* ⬇ COPIAR DE OTRO TORNEO: la LBF del club desde otro equipo (misma categoría primero) */
 async function modalCopiarPlantel(){
-  const [eqQ,catQ]=await Promise.all([
-    sb.from('equipo').select('id,nombre,club_id,categoria:categoria_id(nombre_display,anio_nacimiento,modalidad,torneo:torneo_id(nombre))')
-      .eq('club_id',EQ.club_id).neq('id',EQ.equipo_id),
-    sb.from('categoria').select('anio_nacimiento').eq('id',EQ.categoria_id).single()
-  ]);
-  if(eqQ.error){toast(errNegocio(eqQ.error));return;}
-  const anioMio=(catQ.data||{}).anio_nacimiento;
-  const eqs=eqQ.data||[];
-  let conteos={};
-  if(eqs.length){
-    const ins=await sb.from('inscripcion_lbf').select('equipo_id').in('equipo_id',eqs.map(e=>e.id));
-    (ins.data||[]).forEach(i=>conteos[i.equipo_id]=(conteos[i.equipo_id]||0)+1);
-  }
-  const fuentes=eqs.filter(e=>conteos[e.id])
-    .sort((a,b)=>((a.categoria?.anio_nacimiento===anioMio?0:1)-(b.categoria?.anio_nacimiento===anioMio?0:1))
-      ||String(a.categoria?.torneo?.nombre||'').localeCompare(String(b.categoria?.torneo?.nombre||''),'es'));
+  const {data:fuentes,error}=await sb.rpc('fuentes_copiar_plantel',{p_equipo:EQ.equipo_id});
+  if(error){toast(errNegocio(error));return;}
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⬇ COPIAR DE OTRO TORNEO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
-    <p class="text-xs text-ink-400 mb-4">Copia la lista de jugadores de <b>${EQ.club_nombre}</b> desde otro torneo. Llegan con todos sus datos (documento, foto, verificación) y quedan <b>PENDIENTES</b> hasta la validación de este torneo. Los que ya están en esta categoría se omiten.</p>
-    ${fuentes.length?fuentes.map(e=>`
-      <button onclick="copiarPlantel('${e.id}')" class="w-full bg-white border border-line rounded-xl px-4 py-3 mb-2 flex items-center gap-3 hover:bg-emerald-50 hover:border-emerald-300 text-left">
-        <span class="flex-1 min-w-0"><span class="font-bold text-sm block truncate">${e.categoria?.torneo?.nombre||''}</span>
-        <span class="text-xs text-ink-400">${e.categoria?.nombre_display||('Cat. '+(e.categoria?.anio_nacimiento||'')+' / '+(e.categoria?.modalidad||''))}${e.categoria?.anio_nacimiento===anioMio?' · <b class="text-emerald-700">MISMA CATEGORÍA</b>':''}</span></span>
-        <span class="text-xs font-bold text-emerald-700 shrink-0">${conteos[e.id]} jugador(es) →</span>
+    <p class="text-xs text-ink-400 mb-4">Copia la lista de jugadores de <b>${EQ.club_nombre}</b> desde otro torneo — incluidos los de <b>otras marcas</b> donde participa tu club. Llegan con todos sus datos (documento, foto, verificación) y quedan <b>PENDIENTES</b> hasta la validación de este torneo. Los que ya están en esta categoría se omiten.</p>
+    ${(fuentes||[]).length?(fuentes||[]).map(e=>`
+      <button onclick="copiarPlantel('${e.equipo_id}')" class="w-full bg-white border border-line rounded-xl px-4 py-3 mb-2 flex items-center gap-3 hover:bg-emerald-50 hover:border-emerald-300 text-left">
+        <span class="flex-1 min-w-0"><span class="font-bold text-sm block truncate">${e.torneo}</span>
+        <span class="text-xs text-ink-400">${e.marca} · ${e.categoria}${e.misma_categoria?' · <b class="text-emerald-700">MISMA CATEGORÍA</b>':''}</span></span>
+        <span class="text-xs font-bold text-emerald-700 shrink-0">${e.jugadores} jugador(es) →</span>
       </button>`).join('')
-      :'<p class="text-sm text-ink-400 py-6 text-center">Tu club no tiene planteles cargados en otros torneos.</p>'}`);
+      :'<p class="text-sm text-ink-400 py-6 text-center">Tu club no tiene planteles cargados en otros torneos a los que tengas acceso.</p>'}`);
 }
 async function copiarPlantel(fuenteEqId){
-  const [srcQ,catQ]=await Promise.all([
-    sb.from('inscripcion_lbf').select('*').eq('equipo_id',fuenteEqId),
-    sb.from('categoria').select('anio_nacimiento').eq('id',EQ.categoria_id).single()
-  ]);
-  if(srcQ.error){toast(errNegocio(srcQ.error));return;}
-  const src=srcQ.data||[], anioMio=(catQ.data||{}).anio_nacimiento;
-  if(!src.length){toast('⚠ Esa lista está vacía');return;}
-  const {data:js}=await sb.from('jugador_maestro').select('id,fecha_nacimiento').in('id',src.map(i=>i.jugador_id));
-  const nac=Object.fromEntries((js||[]).map(j=>[j.id,new Date(j.fecha_nacimiento+'T00:00:00').getFullYear()]));
-  const filas=src.map(i=>({
-    equipo_id:EQ.equipo_id, jugador_id:i.jugador_id, categoria_id:EQ.categoria_id,
-    dorsal:i.dorsal, capitan:false, en_lbf:true,
-    estado:'pendiente',                                  // nuevo torneo ⇒ nueva validación
-    es_excepcion: nac[i.jugador_id]!==anioMio,
-    origen:'maestra'
-  }));
-  const {data:ins,error}=await sb.from('inscripcion_lbf')
-    .upsert(filas,{onConflict:'jugador_id,categoria_id',ignoreDuplicates:true}).select();
+  const {data,error}=await sb.rpc('copiar_plantel',{p_destino:EQ.equipo_id,p_fuente:fuenteEqId});
   if(error){toast(errNegocio(error));return;}
-  const copiados=(ins||[]).length, omitidos=filas.length-copiados;
   cerrarModal(); await renderPlantel();
-  toast(`⬇ ${copiados} jugador(es) copiados en PENDIENTE${omitidos?` · ${omitidos} omitido(s) (ya estaban en la categoría)`:''} ✔`);
+  toast(`⬇ ${data.copiados} jugador(es) copiados en PENDIENTE${data.omitidos?` · ${data.omitidos} omitido(s) (ya estaban en la categoría)`:''} ✔`);
 }
 function modalJugador(){
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">+ AGREGAR JUGADOR/A</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>

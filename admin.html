@@ -3037,50 +3037,27 @@ async function activarIns(id){
 }
 /* ---- Importar plantel desde otro torneo/categoría del MISMO club ---- */
 async function modalImportarPlantel(){
-  // equipos del mismo club en otras categorías (de cualquier torneo de la marca)
-  const {data:eqs,error}=await sb.from('equipo')
-    .select('id,nombre,categoria:categoria_id(nombre_display,anio_nacimiento,modalidad,torneo:torneo_id(nombre))')
-    .eq('club_id',EQUIPO.club_id).neq('id',EQUIPO.id);
+  // fuentes vía RPC: el mismo club (por nombre) en otros torneos, INCLUIDAS
+  // otras marcas a las que el usuario tenga acceso
+  const {data:fuentes,error}=await sb.rpc('fuentes_copiar_plantel',{p_equipo:EQUIPO.id});
   if(error){toast(errNegocio(error));return;}
-  let conteos={};
-  if(eqs.length){
-    const ins=await sb.from('inscripcion_lbf').select('equipo_id').in('equipo_id',eqs.map(e=>e.id));
-    (ins.data||[]).forEach(i=>conteos[i.equipo_id]=(conteos[i.equipo_id]||0)+1);
-  }
-  const fuentes=eqs.filter(e=>conteos[e.id])
-    .sort((a,b)=>((a.categoria?.anio_nacimiento===CAT.anio_nacimiento?0:1)-(b.categoria?.anio_nacimiento===CAT.anio_nacimiento?0:1))
-      ||String(a.categoria?.torneo?.nombre||'').localeCompare(String(b.categoria?.torneo?.nombre||''),'es'));
-  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⬇ IMPORTAR PLANTEL</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
-    <p class="text-xs text-ink-400 mb-4">Copia la LBF de <b>${(CLUBES[EQUIPO.club_id]||{}).nombre}</b> desde otro torneo/categoría. Los jugadores llegan con sus datos maestros intactos (verificación, fotos, DNI) y quedan <b>PENDIENTES</b>: cada torneo exige su propio apto médico. Los ya inscritos en esta categoría se omiten (anti-suplantación).</p>
-    ${fuentes.length?fuentes.map(e=>`
-      <button onclick="importarPlantel('${e.id}')" class="w-full bg-white border border-line rounded-xl px-4 py-3 mb-2 flex items-center gap-3 hover:bg-emerald-50 hover:border-emerald-300 text-left">
-        <span class="flex-1"><span class="font-bold text-sm block">${e.nombre||(CLUBES[EQUIPO.club_id]||{}).nombre}</span>
-        <span class="text-xs text-ink-400">${e.categoria?.torneo?.nombre||''} · ${e.categoria?.nombre_display||''}</span></span>
-        <span class="text-xs font-bold text-emerald-700">${conteos[e.id]} jugador(es) →</span>
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⬇ COPIAR DE OTRO TORNEO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">Copia la LBF de <b>${(CLUBES[EQUIPO.club_id]||{}).nombre}</b> desde otro torneo — incluidos los de <b>otras marcas</b>. Los jugadores llegan con sus datos maestros intactos y quedan <b>PENDIENTES</b>: cada torneo exige su propia validación. Los ya inscritos en esta categoría se omiten.</p>
+    ${(fuentes||[]).length?(fuentes||[]).map(e=>`
+      <button onclick="importarPlantel('${e.equipo_id}')" class="w-full bg-white border border-line rounded-xl px-4 py-3 mb-2 flex items-center gap-3 hover:bg-emerald-50 hover:border-emerald-300 text-left">
+        <span class="flex-1 min-w-0"><span class="font-bold text-sm block truncate">${e.torneo}</span>
+        <span class="text-xs text-ink-400">${e.marca} · ${e.categoria}${e.misma_categoria?' · <b class="text-emerald-700">MISMA CATEGORÍA</b>':''}</span></span>
+        <span class="text-xs font-bold text-emerald-700 shrink-0">${e.jugadores} jugador(es) →</span>
       </button>`).join('')
-      :'<p class="text-sm text-ink-400 py-6 text-center">Este club no tiene planteles cargados en otros torneos/categorías.</p>'}`);
+      :'<p class="text-sm text-ink-400 py-6 text-center">Este club no tiene planteles cargados en otros torneos.</p>'}`);
 }
 async function importarPlantel(fuenteEqId){
-  // LBF de origen + fechas de nacimiento (para recalcular excepción por edad en ESTA categoría)
-  const {data:src,error}=await sb.from('inscripcion_lbf').select('*').eq('equipo_id',fuenteEqId);
+  const {data,error}=await sb.rpc('copiar_plantel',{p_destino:EQUIPO.id,p_fuente:fuenteEqId});
   if(error){toast(errNegocio(error));return;}
-  const {data:js}=await sb.from('jugador_maestro').select('id,fecha_nacimiento').in('id',src.map(i=>i.jugador_id));
-  const nac=Object.fromEntries((js||[]).map(j=>[j.id,new Date(j.fecha_nacimiento+'T00:00:00').getFullYear()]));
-  const filas=src.map(i=>({
-    equipo_id:EQUIPO.id, jugador_id:i.jugador_id, categoria_id:CAT.id,
-    dorsal:i.dorsal, capitan:i.capitan, en_lbf:true,
-    estado:'pendiente',                                  // nuevo torneo ⇒ nuevo apto médico
-    es_excepcion: nac[i.jugador_id]!==CAT.anio_nacimiento,
-    origen:'maestra'
-  }));
-  // upsert ignorando a los ya inscritos en la categoría (UNIQUE jugador+categoría)
-  const {data:ins,error:e2}=await sb.from('inscripcion_lbf')
-    .upsert(filas,{onConflict:'jugador_id,categoria_id',ignoreDuplicates:true}).select();
-  if(e2){toast(errNegocio(e2));return;}
-  const copiados=(ins||[]).length, omitidos=filas.length-copiados;
   cerrarModal(); await renderLBF();
-  toast(`⬇ Plantel importado: ${copiados} jugador(es) copiados como PENDIENTES${omitidos?` · ${omitidos} omitido(s) (ya inscritos en esta categoría)`:''} — valida sus aptos médicos para activarlos`);
+  toast(`⬇ Plantel importado: ${data.copiados} jugador(es) copiados como PENDIENTES${data.omitidos?` · ${data.omitidos} omitido(s) (ya inscritos en esta categoría)`:''} — valida sus aptos médicos para activarlos`);
 }
+
 
 function modalJugador(){
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">AGREGAR JUGADOR/A</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
