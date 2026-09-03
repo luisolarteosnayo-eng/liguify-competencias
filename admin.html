@@ -4467,7 +4467,11 @@ async function modalEquipoIdeal(jid){
 async function datosEquipoIdeal(jid){
   const {data:rows,error}=await sb.from('equipo_ideal').select('inscripcion_id,linea').eq('jornada_id',jid);
   if(error) throw new Error(errNegocio(error));
-  const insIds=(rows||[]).map(r=>r.inscripcion_id);
+  return await enriquecerEI(rows||[]);
+}
+/* Enriquecer pares {inscripcion_id,linea} con jugador, posición, equipo y club */
+async function enriquecerEI(rows){
+  const insIds=[...new Set((rows||[]).map(r=>r.inscripcion_id))];
   if(!insIds.length) return [];
   const ins=(await sb.from('inscripcion_lbf').select('id,equipo_id,jugador_id,dorsal').in('id',insIds)).data||[];
   const jids=[...new Set(ins.map(i=>i.jugador_id))];
@@ -4499,16 +4503,23 @@ async function modalEquipoIdealTorneo(){
   const js=(await sb.from('jornada').select('id,numero,categoria_id').in('categoria_id',cats.map(c=>c.id))).data||[];
   const JN=Object.fromEntries(js.map(j=>[j.id,j]));
   const rows=js.length?(await sb.from('equipo_ideal').select('jornada_id,en_torneo').in('jornada_id',js.map(j=>j.id))).data||[]:[];
+  // Figuras de partido por jornada (también son candidatas al equipo del torneo)
+  const figR=[]; const jidsAll=js.map(j=>j.id);
+  for(let k=0;k<jidsAll.length;k+=150){
+    figR.push(...((await sb.from('partido').select('jornada_id').in('jornada_id',jidsAll.slice(k,k+150)).not('figura_inscripcion_id','is',null)).data||[]));
+  }
   const porNum={};
-  rows.forEach(r=>{const j=JN[r.jornada_id]; if(!j) return; const k=j.numero; porNum[k]=porNum[k]||{jug:0,sel:0,cats:new Set()}; porNum[k].jug++; if(r.en_torneo) porNum[k].sel++; porNum[k].cats.add(j.categoria_id);});
+  const ini=k=>porNum[k]=porNum[k]||{jug:0,sel:0,fig:0,cats:new Set()};
+  rows.forEach(r=>{const j=JN[r.jornada_id]; if(!j) return; const p=ini(j.numero); p.jug++; if(r.en_torneo) p.sel++; p.cats.add(j.categoria_id);});
+  figR.forEach(r=>{const j=JN[r.jornada_id]; if(!j) return; const p=ini(j.numero); p.fig++; p.cats.add(j.categoria_id);});
   const nums=Object.keys(porNum).map(Number).sort((a,b)=>a-b);
   EIT={cats,js,num:null,data:[],form:(TORNEO.modalidad_default||'F9')};
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⭐ EQUIPO IDEAL DEL TORNEO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
-    <p class="text-xs text-ink-500 mb-3">Una <b>sola imagen</b> con jugadores de <b>distintas categorías</b>. Elige la fecha, marca quiénes integran el equipo del torneo (entre los marcados en cada partido) y genera la imagen.</p>
+    <p class="text-xs text-ink-500 mb-3">Una <b>sola imagen</b> con jugadores de <b>distintas categorías</b>. Elige la fecha, marca quiénes integran el equipo del torneo (entre los marcados en cada partido y las <b>⭐ figuras</b> de la fecha) y genera la imagen.</p>
     ${nums.length?`<div class="grid grid-cols-[1fr_auto] gap-3 mb-3">
       <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Fecha</span>
         <select id="eit-f" onchange="cargarEIT()" class="w-full border-b border-line py-2 font-semibold bg-transparent">
-          ${nums.map(n=>`<option value="${n}">FECHA ${n} — ${porNum[n].cats.size} cat. · ${porNum[n].jug} marcados · ${porNum[n].sel} en el torneo</option>`).join('')}
+          ${nums.map(n=>`<option value="${n}">FECHA ${n} — ${porNum[n].cats.size} cat. · ${porNum[n].jug} marcados · ${porNum[n].fig} figuras · ${porNum[n].sel} en el torneo</option>`).join('')}
         </select></label>
       <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Formación</span>
         <select id="eit-m" onchange="EIT.form=this.value;renderEIT()" class="border-b border-line py-2 font-semibold bg-transparent">
@@ -4526,10 +4537,19 @@ async function cargarEIT(){
   for(const c of EIT.cats){
     const j=EIT.js.find(x=>x.categoria_id===c.id&&x.numero===EIT.num); if(!j) continue;
     const rows=(await sb.from('equipo_ideal').select('inscripcion_id,en_torneo').eq('jornada_id',j.id)).data||[];
-    if(!rows.length) continue;
+    const figs=(await sb.from('partido').select('figura_inscripcion_id').eq('jornada_id',j.id).not('figura_inscripcion_id','is',null)).data||[];
+    const figSet=new Set(figs.map(x=>x.figura_inscripcion_id));
+    if(!rows.length&&!figSet.size) continue;
     const sel=Object.fromEntries(rows.map(r=>[r.inscripcion_id,r.en_torneo]));
+    const tieneFila=new Set(rows.map(r=>r.inscripcion_id));
     let d=[]; try{ d=await datosEquipoIdeal(j.id); }catch(e){ continue; }
-    d.forEach(p=>{p.jornada_id=j.id; p.cat=(c.nombre_display||('Cat. '+c.anio_nacimiento)).replace(/^Categor[ií]a\s+/i,'').toUpperCase(); p.catCorta=String(c.anio_nacimiento); p.en_torneo=!!sel[p.inscripcion_id];});
+    // figuras de la fecha que no fueron marcadas en el equipo ideal: también candidatas
+    const nuevas=[...figSet].filter(id=>!tieneFila.has(id));
+    if(nuevas.length){
+      try{ const fd=await enriquecerEI(nuevas.map(id=>({inscripcion_id:id,linea:null})));
+        fd.forEach(p=>p.linea=sugerirLinea(p.posicion)||'MED'); d.push(...fd); }catch(e){}
+    }
+    d.forEach(p=>{p.jornada_id=j.id; p.cat=(c.nombre_display||('Cat. '+c.anio_nacimiento)).replace(/^Categor[ií]a\s+/i,'').toUpperCase(); p.catCorta=String(c.anio_nacimiento); p.en_torneo=!!sel[p.inscripcion_id]; p.esFigura=figSet.has(p.inscripcion_id); p.soloFigura=!tieneFila.has(p.inscripcion_id);});
     data.push(...d);
   }
   EIT.data=data; renderEIT();
@@ -4551,14 +4571,15 @@ function renderEIT(){
     ${EI_LINEAS.map(l=>`<div class="border border-line rounded-xl mb-2 overflow-hidden">
       <div class="flex items-center justify-between px-3 py-1.5 ${selL(l)===f[l]?'bg-emerald-50':selL(l)>f[l]?'bg-brand-50':'bg-paper'}">
         <span class="font-display text-lg tracking-wide">${EI_NOMBRE[l]}</span>
-        <span class="text-[10px] font-bold ${selL(l)===f[l]?'text-emerald-700':selL(l)>f[l]?'text-brand-600':'text-ink-400'}">${selL(l)} / ${f[l]} · ${porL[l].length} marcados</span>
+        <span class="text-[10px] font-bold ${selL(l)===f[l]?'text-emerald-700':selL(l)>f[l]?'text-brand-600':'text-ink-400'}">${selL(l)} / ${f[l]} · ${porL[l].length} candidatos</span>
       </div>
       ${porL[l].map(p=>`<label class="flex items-center gap-2 px-3 py-1.5 border-t border-line text-xs cursor-pointer ${p.en_torneo?'bg-amber-50/60':''}">
         <input type="checkbox" ${p.en_torneo?'checked':''} onchange="EIT.data.find(x=>x.inscripcion_id==='${p.inscripcion_id}').en_torneo=this.checked;renderEIT()" class="w-4 h-4 accent-[#d9232e]"/>
         ${p.club.escudo_url?`<img src="${p.club.escudo_url}" class="w-6 h-6 object-contain shrink-0"/>`:`<span class="w-6 h-6 rounded-md grid place-items-center text-white text-[9px] font-bold shrink-0" style="background:${p.club.color||'#334155'}">${iniciales(p.club.nombre||'?')}</span>`}
-        <span class="flex-1 min-w-0 truncate"><b>${p.nombre}</b> <span class="text-ink-400">· ${p.equipo}</span></span>
+        <span class="flex-1 min-w-0 truncate"><b>${p.nombre}</b> <span class="text-ink-400">· ${p.equipo}${p.posicion?' · '+p.posicion:''}</span></span>
+        ${p.esFigura?'<span class="text-[9px] font-bold bg-amber-100 text-amber-800 rounded-full px-2 py-0.5 shrink-0">⭐ FIGURA</span>':''}
         <span class="text-[9px] font-bold bg-ink-900 text-white rounded-full px-2 py-0.5 shrink-0">${p.cat}</span>
-      </label>`).join('')||'<p class="px-3 py-2 text-[11px] text-ink-400 border-t border-line">Sin jugadores marcados en esta línea.</p>'}
+      </label>`).join('')||'<p class="px-3 py-2 text-[11px] text-ink-400 border-t border-line">Sin jugadores marcados ni figuras en esta línea.</p>'}
     </div>`).join('')}
     <p class="text-[10px] text-ink-400 mt-2">La imagen se genera con los seleccionados (aunque la formación no esté completa). Guarda la selección para conservarla.</p>`;
 }
@@ -4566,7 +4587,15 @@ async function guardarEIT(){
   // por jornada: marcar en_torneo según la selección actual
   const porJ={}; EIT.data.forEach(p=>{(porJ[p.jornada_id]=porJ[p.jornada_id]||[]).push(p);});
   for(const [jid,lista] of Object.entries(porJ)){
-    const si=lista.filter(p=>p.en_torneo).map(p=>p.inscripcion_id), no=lista.filter(p=>!p.en_torneo).map(p=>p.inscripcion_id);
+    // figuras seleccionadas que aún no tienen fila en equipo_ideal: se insertan
+    const alta=lista.filter(p=>p.soloFigura&&p.en_torneo);
+    if(alta.length){
+      const r=await sb.from('equipo_ideal').insert(alta.map(p=>({jornada_id:jid,inscripcion_id:p.inscripcion_id,linea:p.linea,en_torneo:true})));
+      if(r.error){toast(errNegocio(r.error));return;}
+      alta.forEach(p=>p.soloFigura=false);
+    }
+    const conFila=lista.filter(p=>!p.soloFigura);
+    const si=conFila.filter(p=>p.en_torneo).map(p=>p.inscripcion_id), no=conFila.filter(p=>!p.en_torneo).map(p=>p.inscripcion_id);
     if(si.length){const r=await sb.from('equipo_ideal').update({en_torneo:true}).eq('jornada_id',jid).in('inscripcion_id',si); if(r.error){toast(errNegocio(r.error));return;}}
     if(no.length){const r=await sb.from('equipo_ideal').update({en_torneo:false}).eq('jornada_id',jid).in('inscripcion_id',no); if(r.error){toast(errNegocio(r.error));return;}}
   }
