@@ -1002,7 +1002,7 @@ async function verificarPersona(){
         </div>
         ${insTok?`<div class="flex items-center gap-2 border-2 border-emerald-200 bg-emerald-50 rounded-xl px-3 py-2">
           <span class="text-xs font-bold text-ink-700 flex-1">N° de camiseta</span>
-          <input id="vf-d-${insTok.id}" type="number" min="0" value="${insTok.dorsal??''}" class="w-16 border border-line rounded-lg text-center py-1 text-sm font-bold bg-white"/>
+          <input id="vf-d-${insTok.id}" type="number" min="0" value="${insTok.dorsal??''}" onkeydown="if(event.key==='Enter')confirmarDorsal('${insTok.id}')" class="w-16 border border-line rounded-lg text-center py-1 text-sm font-bold bg-white"/>
           <button onclick="confirmarDorsal('${insTok.id}')" class="bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-emerald-800">✔ CONFIRMAR</button>
         </div>`:''}
         ${pHoy}`; return;}
@@ -1077,7 +1077,7 @@ async function verificarPersona(){
           ${chip(i.en_lbf,'LBF')} ${chip(habil(i),habil(i)?(i.estado==='activo'?'ACTIVO':'HABILITADO'):'SIN AUTORIZACIÓN')} ${i.inhabilitado?chip(false,'INHABILITADO'):''}
           <span class="flex items-center gap-1.5" title="Confirmar o corregir el número de camiseta">
             <span class="text-[10px] font-bold text-ink-400">#</span>
-            <input id="vf-d-${i.id}" type="number" min="0" value="${i.dorsal??''}" class="w-14 border border-line rounded-lg text-center py-1 text-xs font-bold"/>
+            <input id="vf-d-${i.id}" type="number" min="0" value="${i.dorsal??''}" onkeydown="if(event.key==='Enter')confirmarDorsal('${i.id}')" class="w-14 border border-line rounded-lg text-center py-1 text-xs font-bold"/>
             <button onclick="confirmarDorsal('${i.id}')" class="bg-emerald-700 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-lg hover:bg-emerald-800">✔</button>
           </span>
           ${pHoyIns[i.id]||''}
@@ -1115,11 +1115,19 @@ async function partidoHoyHTML(insId,equipoId,valido){
 }
 async function marcarAsistencia(partidoId,insId){
   const {data:{user}}=await sb.auth.getUser();
+  // Si el verificador digitó/corrigió el N° de camiseta, se guarda junto con la asistencia
+  let dorsalMsg='';
+  const dEl=$('vf-d-'+insId);
+  if(dEl&&dEl.value.trim()!==''){
+    const dorsal=Math.max(0,+dEl.value.trim()||0);
+    const up=await sb.from('inscripcion_lbf').update({dorsal}).eq('id',insId);
+    if(up.error){toast('⚠ Camiseta no guardada: '+errNegocio(up.error));}else{dorsalMsg=' · camiseta #'+dorsal;}
+  }
   const ac=await sb.from('acreditacion_partido').insert({partido_id:partidoId,inscripcion_id:insId,metodo:VF_METODO||'dni_scan',verificado_por:user?.id||null});
   if(ac.error){toast(errNegocio(ac.error));return;}
   const pl=await sb.from('planilla_partido').upsert({partido_id:partidoId,inscripcion_id:insId,jugo:true},{onConflict:'partido_id,inscripcion_id'});
   if(pl.error){toast(errNegocio(pl.error));return;}
-  toast('✔ Asistencia registrada — participación (J) marcada en la planilla del partido');
+  toast('✔ Asistencia registrada'+dorsalMsg+' — participación (J) marcada en la planilla del partido');
   document.querySelectorAll(`[onclick="marcarAsistencia('${partidoId}','${insId}')"]`).forEach(b=>{
     b.outerHTML='<p class="text-xs font-bold text-emerald-700 mt-1">✔ ASISTENCIA REGISTRADA</p>';});
   const inp=$('vf-in'); if(inp) inp.focus();
