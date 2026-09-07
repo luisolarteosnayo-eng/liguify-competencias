@@ -470,15 +470,6 @@ async function htmlRendimiento(eqIds){
     +`<p class="font-display text-lg tracking-wide mb-1">GOLES A FAVOR Y EN CONTRA</p>`+goles
     +`<p class="text-[10px] text-ink-400 mt-2">Solo partidos finalizados. La posición se calcula sobre todos los equipos de cada categoría con los resultados cargados.</p>`;
 }
-async function modalRendTorneo(tid,tnombre){
-  abrirModal('<p class="text-sm text-ink-500 py-8 text-center">Calculando rendimiento…</p>');
-  try{
-    const eqIds=(RECL_EQS[tid]||[]).map(e=>e.id);
-    abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">📊 RENDIMIENTO POR CATEGORÍAS</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
-      <p class="text-xs text-ink-400 mb-3">${tnombre} · comparación de tus categorías con los partidos finalizados.</p>`
-      +await htmlRendimiento(eqIds));
-  }catch(e){abrirModal('<p class="text-sm font-bold text-brand-600 p-4">⚠ '+(e.message||e)+'</p>');}
-}
 function renderHubLista(){
   const grupoHTML=grupo=>{
     const t=grupo[0];
@@ -489,8 +480,7 @@ function renderHubLista(){
         <span id="hub-tlogo-${t.torneo_id}" class="w-11 h-11 rounded-xl grid place-items-center font-display text-sm overflow-hidden relative bg-white text-ink-900 shrink-0">${iniciales(t.torneo)}</span>
         <span class="font-display text-2xl tracking-wide">${t.torneo.toUpperCase()}</span>
         <span class="text-xs text-white/50">${t.marca}${t.torneo_estado==='finalizado'?' · FINALIZADO':''}</span>
-        <button onclick='modalRendTorneo("${t.torneo_id}",${JSON.stringify(t.torneo).replace(/'/g,"&#39;")})' title="Comparar el rendimiento de tus categorías en este torneo: efectividad, evolución fecha a fecha, forma y goles" class="ml-auto bg-white/10 border border-white/20 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl hover:bg-white/20">📊 RENDIMIENTO</button>
-        <button onclick='modalDescargarProgramacion("${t.torneo_id}",${JSON.stringify(t.torneo).replace(/'/g,"&#39;")})' title="PDF de la programación de una fecha: agrupada por categoría y ordenada por hora" class="bg-white/10 border border-white/20 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl hover:bg-white/20">🖨 PROGRAMACIÓN</button>
+        <button onclick='modalDescargarProgramacion("${t.torneo_id}",${JSON.stringify(t.torneo).replace(/'/g,"&#39;")})' title="PDF de la programación de una fecha: agrupada por categoría y ordenada por hora" class="ml-auto bg-white/10 border border-white/20 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl hover:bg-white/20">🖨 PROGRAMACIÓN</button>
         <button onclick='modalReclamos("${t.torneo_id}")' title="Reclamos sobre partidos de la última fecha jugada" class="bg-white/10 border border-white/20 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl hover:bg-white/20">⚖ RECLAMOS</button>
         ${soyCoord?`<button onclick='modalSubcoordinador("${t.torneo_id}")' class="bg-white/10 border border-white/20 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl hover:bg-white/20">➕ SUB-COORDINADOR</button>`:''}
       </div>
@@ -1862,8 +1852,15 @@ async function renderTablaEq(){
         <td class="text-center text-sm text-ink-400">${r.gf}</td>
         <td class="text-center text-sm text-ink-400">${r.gc}</td></tr>`).join('')}</tbody></table></div>`;
   }).join('')||'<p class="text-ink-400 text-sm bg-white border border-line rounded-2xl p-6 text-center mb-4">Tu equipo aún no está asignado a una zona.</p>';
-  // Orden de la pestaña: RESULTADOS (partidos jugados) · TABLA DE POSICIONES · ESTADÍSTICAS DEL TORNEO · GOLEADORES
-  $('tab-tabla').innerHTML=RESULTADOS_HTML+tablaHTML+(STATS_HTML?STATS_HTML.replace('rounded-2xl overflow-hidden mt-4','rounded-2xl overflow-hidden mb-4'):'')+await goleadoresHTML(EQ.categoria_id)+await rankingHTML(EQ.categoria_id,'renderTablaEq');
+  // Orden de la pestaña: RESULTADOS (partidos jugados) · TABLA DE POSICIONES · ESTADÍSTICAS DEL TORNEO · GOLEADORES · RENDIMIENTO DEL CLUB
+  $('tab-tabla').innerHTML=RESULTADOS_HTML+tablaHTML+(STATS_HTML?STATS_HTML.replace('rounded-2xl overflow-hidden mt-4','rounded-2xl overflow-hidden mb-4'):'')+await goleadoresHTML(EQ.categoria_id)+await rankingHTML(EQ.categoria_id,'renderTablaEq')+`<div id="rend-club-eq" class="mt-4"><p class="text-xs text-ink-400 py-4 text-center">Calculando el rendimiento del club…</p></div>`;
+  // 📊 rendimiento del club (todas sus categorías del torneo), embebido al final de la pestaña
+  const rEqIds=(RECL_EQS[EQ.torneo_id]||[]).map(e=>e.id);
+  htmlRendimiento(rEqIds).then(h=>{const el=$('rend-club-eq'); if(el) el.innerHTML=
+    `<div class="bg-ink-900 text-white rounded-2xl px-4 py-2.5 mb-3 flex items-center gap-2 flex-wrap">
+      <span class="font-display text-xl tracking-wide">📊 RENDIMIENTO DEL CLUB POR CATEGORÍAS</span>
+      <span class="text-[10px] text-white/50">comparativo de tus equipos en ${EQ.torneo} · solo partidos finalizados</span></div>`+h;
+  }).catch(()=>{const el=$('rend-club-eq'); if(el) el.innerHTML='';});
 }
 
 iniciar();
