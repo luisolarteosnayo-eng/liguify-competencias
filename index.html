@@ -145,6 +145,7 @@ tailwind.config={theme:{extend:{
       <div id="eq-lbf"></div>
     </div>
     <div id="eq-stats"></div>
+    <div id="eq-rend" class="mt-4"></div>
   </section>
 
   <!-- 🔭 SCOUT: SEGUIMIENTOS -->
@@ -1113,8 +1114,8 @@ async function irEquipoId(id){
       <div class="min-w-0"><h1 class="font-display text-3xl sm:text-4xl tracking-wide truncate">${nomEq(EQUIPO).toUpperCase()}</h1>
       <p class="text-white/50 text-xs sm:text-sm truncate">${(CLUBES[EQUIPO.club_id]||{}).nombre||''} · ${TORNEO.nombre}</p></div>
     </div>
-    <button onclick="rendClubPublico()" title="Comparar el rendimiento de todas las categorías del club en este torneo" class="relative shrink-0 bg-white/10 border border-white/25 text-white text-[10px] font-bold px-3 py-2 rounded-xl hover:bg-white/20">📊 RENDIMIENTO</button>
   </div>`;
+  cargarRendEquipo();   // 📊 rendimiento del club por categorías, embebido al final de la página
   // Partidos del equipo: resultados y programados (mockup: ficha completa)
   const {data:pms}=await sb.from('partido')
     .select('*, jornada:jornada_id(numero,horarios_publicados)')
@@ -1279,16 +1280,21 @@ async function htmlRendimiento(eqIds){
     +`<p class="font-display text-lg tracking-wide mb-1">GOLES A FAVOR Y EN CONTRA</p>`+goles
     +`<p class="text-[10px] text-ink-400 mt-2">Solo partidos finalizados. La posición se calcula sobre todos los equipos de cada categoría con los resultados cargados.</p>`;
 }
-async function rendClubPublico(){
-  abrirModal('<p class="text-sm text-ink-500 py-8 text-center">Calculando rendimiento…</p>');
+async function cargarRendEquipo(){
+  const eqAbierto=EQUIPO&&EQUIPO.id, el0=$('eq-rend');
+  if(!el0) return;
+  el0.innerHTML='<p class="text-xs text-ink-400 py-4 text-center">Calculando el rendimiento del club…</p>';
   try{
     const cats=(await sb.from('categoria').select('id').eq('torneo_id',TORNEO.id)).data||[];
     const eqsC=cats.length?(await sb.from('equipo').select('id').eq('club_id',EQUIPO.club_id).in('categoria_id',cats.map(c=>c.id))).data||[]:[];
     const club=(CLUBES[EQUIPO.club_id]||{}).nombre||nomEq(EQUIPO);
-    abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">📊 RENDIMIENTO · ${club.toUpperCase()}</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
-      <p class="text-xs text-ink-400 mb-3">${TORNEO.nombre} · comparación de sus categorías con los partidos finalizados.</p>`
-      +await htmlRendimiento(eqsC.map(e=>e.id)));
-  }catch(e){abrirModal('<p class="text-sm font-bold text-brand-600 p-4">⚠ '+(e.message||e)+'</p>');}
+    const h=await htmlRendimiento(eqsC.map(e=>e.id));
+    const el=$('eq-rend');
+    if(!el||!EQUIPO||EQUIPO.id!==eqAbierto) return;   // el visitante ya cambió de equipo
+    el.innerHTML=`<div class="bg-ink-900 text-white rounded-2xl px-4 py-2.5 mb-3 flex items-center gap-2 flex-wrap">
+      <span class="font-display text-xl tracking-wide">📊 RENDIMIENTO DEL CLUB POR CATEGORÍAS</span>
+      <span class="text-[10px] text-white/50">${club.toUpperCase()} en ${TORNEO.nombre} · solo partidos finalizados</span></div>`+h;
+  }catch(e){const el=$('eq-rend'); if(el) el.innerHTML='';}
 }
 
 /* ============ REALTIME: la página se actualiza sola ============ */
