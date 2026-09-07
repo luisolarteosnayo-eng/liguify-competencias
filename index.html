@@ -1108,11 +1108,12 @@ async function irEquipoId(id){
   $('bc-cat').textContent='← '+(CAT.nombre_display||'Categoría');
   $('eq-head').innerHTML=`<div class="bg-ink-900 text-white rounded-2xl p-5 sm:p-6 flex items-center gap-4 relative overflow-hidden">
     <div class="absolute inset-0 opacity-25" style="background:radial-gradient(circle at 85% 15%, #d9232e 0%, transparent 55%)"></div>
-    <div class="relative flex items-center gap-4 min-w-0">
+    <div class="relative flex items-center gap-4 min-w-0 flex-1">
       ${badge(EQUIPO,9)}
       <div class="min-w-0"><h1 class="font-display text-3xl sm:text-4xl tracking-wide truncate">${nomEq(EQUIPO).toUpperCase()}</h1>
       <p class="text-white/50 text-xs sm:text-sm truncate">${(CLUBES[EQUIPO.club_id]||{}).nombre||''} · ${TORNEO.nombre}</p></div>
     </div>
+    <button onclick="rendClubPublico()" title="Comparar el rendimiento de todas las categorías del club en este torneo" class="relative shrink-0 bg-white/10 border border-white/25 text-white text-[10px] font-bold px-3 py-2 rounded-xl hover:bg-white/20">📊 RENDIMIENTO</button>
   </div>`;
   // Partidos del equipo: resultados y programados (mockup: ficha completa)
   const {data:pms}=await sb.from('partido')
@@ -1184,6 +1185,110 @@ async function irEquipoId(id){
       ${SCOUT&&J_INS[j.inscripcion_id]?`<button data-jid="${J_INS[j.inscripcion_id]}" onclick="toggleSeguir('${J_INS[j.inscripcion_id]}')" class="${btnSeguirCls(SEG_SET.has(J_INS[j.inscripcion_id]))}">${SEG_SET.has(J_INS[j.inscripcion_id])?'✔ SIGUIENDO':'➕ SEGUIR'}</button>`:''}
     </div>`).join(''):'<p class="px-5 py-8 text-sm text-ink-400 text-center">Este equipo aún no publica su plantel.</p>';
   show('s-equipo');
+}
+
+/* ============ 📊 RENDIMIENTO DEL CLUB POR CATEGORÍAS ============ */
+const REND_PAL=['#3b5bdb','#d97706','#0891b2','#db2777','#8b5cf6','#4d7c0f','#b45309','#475569'];
+async function htmlRendimiento(eqIds){
+  if(!eqIds.length) return '<p class="text-sm text-ink-400 p-4">Este club no tiene equipos en el torneo.</p>';
+  const eqs=(await sb.from('equipo').select('id,nombre,categoria_id,club_id').in('id',eqIds)).data||[];
+  const catIds=[...new Set(eqs.map(e=>e.categoria_id))];
+  const cats=((await sb.from('categoria').select('id,nombre_display,anio_nacimiento,modalidad').in('id',catIds)).data||[]).sort((a,b)=>a.anio_nacimiento-b.anio_nacimiento);
+  const todosEq=(await sb.from('equipo').select('id,categoria_id').in('categoria_id',catIds)).data||[];
+  const ps=(await sb.from('partido').select('categoria_id,local_id,visita_id,goles_local,goles_visita,estado,jornada_id').in('categoria_id',catIds).in('estado',['finalizado','walkover'])).data||[];
+  const jids=[...new Set(ps.map(p=>p.jornada_id).filter(Boolean))];
+  const js2=jids.length?(await sb.from('jornada').select('id,numero').in('id',jids.slice(0,150))).data||[]:[];
+  const JN=Object.fromEntries(js2.map(j=>[j.id,j.numero]));
+  const misIds=new Set(eqs.map(e=>e.id));
+  const rivIds=[...new Set(ps.filter(p=>misIds.has(p.local_id)||misIds.has(p.visita_id)).flatMap(p=>[p.local_id,p.visita_id]))].filter(x=>x&&!misIds.has(x));
+  const rvs=rivIds.length?(await sb.from('equipo').select('id,nombre,club:club_id(nombre)').in('id',rivIds.slice(0,150))).data||[]:[];
+  const NM=Object.fromEntries(rvs.map(e=>[e.id,e.nombre||(e.club||{}).nombre||'—']));
+  // mini-tabla por categoría para la posición
+  const st={}; const key=(c,e)=>c+'|'+e;
+  ps.forEach(p=>{ if(p.goles_local==null||p.goles_visita==null) return;
+    [[p.local_id,p.goles_local,p.goles_visita],[p.visita_id,p.goles_visita,p.goles_local]].forEach(([e,gf,gc])=>{
+      if(!e) return; const k=key(p.categoria_id,e); const s2=st[k]=st[k]||{pts:0,gf:0,gc:0};
+      s2.gf+=gf; s2.gc+=gc; s2.pts+=gf>gc?3:gf===gc?1:0; }); });
+  const D=[];
+  cats.forEach((c,ix)=>{
+    const eq=eqs.find(e=>e.categoria_id===c.id); if(!eq) return;
+    const mios=ps.filter(p=>(p.local_id===eq.id||p.visita_id===eq.id)&&p.goles_local!=null&&p.goles_visita!=null)
+      .map(p=>{const L2=p.local_id===eq.id; return {f:JN[p.jornada_id]??null,gf:L2?p.goles_local:p.goles_visita,gc:L2?p.goles_visita:p.goles_local,riv:NM[L2?p.visita_id:p.local_id]||'—',cond:L2?'local':'visita'};})
+      .sort((a,b)=>(a.f??99)-(b.f??99));
+    const tabla=todosEq.filter(e=>e.categoria_id===c.id).map(e=>({id:e.id,...(st[key(c.id,e.id)]||{pts:0,gf:0,gc:0})}))
+      .sort((a,b)=>b.pts-a.pts||((b.gf-b.gc)-(a.gf-a.gc))||b.gf-a.gf);
+    let acc=0; const cum=[0]; mios.forEach(r=>{acc+=r.gf>r.gc?3:r.gf===r.gc?1:0; cum.push(acc);});
+    D.push({nom:String(c.anio_nacimiento),mod:c.modalidad,color:REND_PAL[ix%REND_PAL.length],res:mios,cum,pts:acc,pj:mios.length,
+      pg:mios.filter(r=>r.gf>r.gc).length,pe:mios.filter(r=>r.gf===r.gc).length,pp:mios.filter(r=>r.gf<r.gc).length,
+      gf:mios.reduce((s,r)=>s+r.gf,0),gc:mios.reduce((s,r)=>s+r.gc,0),
+      pos:tabla.findIndex(x=>x.id===eq.id)+1,de:tabla.length});
+  });
+  if(!D.some(d=>d.pj)) return '<p class="text-sm text-ink-400 p-4">Aún no hay partidos finalizados para medir el rendimiento.</p>';
+  const ef=d=>d.pj?Math.round(d.pts/(d.pj*3)*100):0;
+  const orden=[...D].sort((a,b)=>ef(b)-ef(a));
+  const cards=`<div class="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">`+orden.map(d=>`
+    <div class="bg-white border border-line rounded-xl p-3" style="border-top:4px solid ${d.color}">
+      <p><span class="font-display text-2xl">${d.nom}</span> <span class="text-[9px] font-bold text-ink-400">${d.mod}</span></p>
+      <p class="text-lg font-extrabold mt-1">${d.pts} <span class="text-[10px] font-semibold text-ink-400">pts · ${d.pos}.º de ${d.de}</span></p>
+      <p class="text-[11px] text-ink-500">${d.pg}G · ${d.pe}E · ${d.pp}P &nbsp;|&nbsp; ${d.gf}-${d.gc}</p>
+      <div class="h-1.5 rounded-full bg-paper mt-2 overflow-hidden"><span class="block h-full rounded-full" style="width:${Math.max(ef(d),2)}%;background:${d.color}"></span></div>
+      <p class="flex justify-between text-[10px] text-ink-400 mt-1"><span>Efectividad</span><b class="text-ink-900 text-xs">${ef(d)} %</b></p>
+    </div>`).join('')+`</div>`;
+  // evolución (SVG con tooltips nativos)
+  const maxF=Math.max(...D.map(d=>d.pj),1), maxP=maxF*3;
+  const W=800,H=330,Lm=42,Rm=112,Tm=14,Bm=36;
+  const X=f=>Lm+(W-Lm-Rm)*(f/maxF), Y=p=>Tm+(H-Tm-Bm)*(1-p/maxP);
+  const step=maxP<=12?3:Math.ceil(maxP/12)*3;
+  let svg='';
+  for(let p=0;p<=maxP;p+=step){svg+=`<line x1="${Lm}" y1="${Y(p)}" x2="${W-Rm}" y2="${Y(p)}" stroke="#e9e6e0"/><text x="${Lm-8}" y="${Y(p)+4}" text-anchor="end" font-size="11" fill="#8b93a7">${p}</text>`;}
+  for(let f=0;f<=maxF;f++){svg+=`<text x="${X(f)}" y="${H-Bm+22}" text-anchor="middle" font-size="11" font-weight="600" fill="#5b6478">${f===0?'Inicio':'F'+f}</text>`;}
+  svg+=`<path d="M ${X(0)} ${Y(0)} L ${X(maxF)} ${Y(maxP)}" stroke="#8b93a7" stroke-width="1.5" stroke-dasharray="5 5" fill="none"/><text x="${X(maxF)-6}" y="${Y(maxP)+13}" text-anchor="end" font-size="10" fill="#8b93a7">máximo posible</text>`;
+  D.forEach(d=>{svg+=`<path d="${d.cum.map((p,i)=>(i?'L ':'M ')+X(i)+' '+Y(p)).join(' ')}" stroke="${d.color}" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;});
+  const ends=D.map(d=>({d,y:Y(d.cum[d.cum.length-1])})).sort((a,b)=>a.y-b.y);
+  for(let i=1;i<ends.length;i++) if(ends[i].y-ends[i-1].y<16) ends[i].y=ends[i-1].y+16;
+  ends.forEach(e=>{svg+=`<text x="${W-Rm+12}" y="${e.y+4}" font-size="12" font-weight="700" fill="${e.d.color}">${e.d.nom} · ${e.d.pts} pts</text>`;});
+  D.forEach(d=>{d.cum.forEach((p,i)=>{
+    const r=i>0?d.res[i-1]:null;
+    svg+=`<circle cx="${X(i)}" cy="${Y(p)}" r="4" fill="${d.color}" stroke="#fff" stroke-width="2">${r?`<title>${d.nom} · Fecha ${r.f??i}: ${r.gf>r.gc?'ganó':r.gf===r.gc?'empató':'perdió'} ${r.gf}-${r.gc} vs ${r.riv} (${r.cond}) · ${p} pts</title>`:''}</circle>`;});});
+  // forma por fecha
+  const chip=r=>{const L3=r.gf>r.gc?'G':r.gf===r.gc?'E':'P';
+    const cls=L3==='G'?'bg-emerald-100 text-emerald-700':L3==='E'?'bg-gray-200 text-gray-600':'bg-brand-50 text-brand-600';
+    return `<span class="inline-flex flex-col items-center justify-center w-9 h-9 rounded-lg font-extrabold text-xs leading-none ${cls}" title="${L3==='G'?'Ganó':L3==='E'?'Empató':'Perdió'} ${r.gf}-${r.gc} vs ${r.riv} (${r.cond})">${L3}<span class="text-[9px] font-bold mt-0.5">${r.gf}-${r.gc}</span></span>`;};
+  const fnums=[...new Set(D.flatMap(d=>d.res.map((r,i)=>r.f??(i+1))))].sort((a,b)=>a-b);
+  const forma=`<div class="overflow-x-auto bg-white border border-line rounded-xl mb-4"><table class="text-xs" style="border-collapse:collapse;min-width:${90+fnums.length*46}px">
+    <tr class="text-[9px] uppercase text-ink-400 font-bold"><td class="px-3 py-2">Categoría</td>${fnums.map(f=>`<td class="px-1 py-2 text-center">F${f}</td>`).join('')}</tr>
+    ${D.map(d=>`<tr class="border-t border-line"><td class="px-3 py-1.5 font-bold whitespace-nowrap"><span class="inline-block w-2.5 h-2.5 rounded mr-1.5" style="background:${d.color}"></span>${d.nom}</td>
+      ${fnums.map(f=>{const r=d.res.find((x,i)=>(x.f??(i+1))===f);return `<td class="px-1 py-1.5 text-center">${r?chip(r):'<span class="text-ink-400">·</span>'}</td>`;}).join('')}</tr>`).join('')}
+  </table></div>`;
+  // goles
+  const maxG=Math.max(...D.flatMap(d=>[d.gf,d.gc]),1);
+  const goles=`<div class="bg-white border border-line rounded-xl p-3 mb-1">`+D.map(d=>`
+    <div class="flex items-center gap-2 py-1">
+      <span class="w-12 font-bold text-xs shrink-0"><span class="inline-block w-2.5 h-2.5 rounded mr-1.5" style="background:${d.color}"></span>${d.nom}</span>
+      <span class="flex-1 flex flex-col gap-0.5">
+        <span class="flex items-center gap-1.5"><span class="block h-3 rounded-r" style="width:${d.gf/maxG*72}%;min-width:2px;background:${d.color}"></span><b class="text-[10px] text-ink-500">${d.gf} GF</b></span>
+        <span class="flex items-center gap-1.5"><span class="block h-3 rounded-r bg-paper border border-line" style="width:${Math.max(d.gc/maxG*72,.5)}%"></span><b class="text-[10px] text-ink-400">${d.gc} GC</b></span>
+      </span>
+    </div>`).join('')+`</div>`;
+  return cards
+    +`<p class="font-display text-lg tracking-wide mb-1">EVOLUCIÓN · PUNTOS ACUMULADOS</p>
+      <p class="text-[10px] text-ink-400 mb-2">La línea punteada es el máximo posible. Toca o pasa el mouse por los puntos para ver cada resultado.</p>
+      <div class="bg-white border border-line rounded-xl p-2 mb-4"><svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">${svg}</svg></div>
+      <p class="font-display text-lg tracking-wide mb-1">FORMA POR FECHA</p>
+      <p class="text-[10px] text-ink-400 mb-2">G ganó · E empató · P perdió, con el marcador. Toca cada casilla para ver el rival.</p>`+forma
+    +`<p class="font-display text-lg tracking-wide mb-1">GOLES A FAVOR Y EN CONTRA</p>`+goles
+    +`<p class="text-[10px] text-ink-400 mt-2">Solo partidos finalizados. La posición se calcula sobre todos los equipos de cada categoría con los resultados cargados.</p>`;
+}
+async function rendClubPublico(){
+  abrirModal('<p class="text-sm text-ink-500 py-8 text-center">Calculando rendimiento…</p>');
+  try{
+    const cats=(await sb.from('categoria').select('id').eq('torneo_id',TORNEO.id)).data||[];
+    const eqsC=cats.length?(await sb.from('equipo').select('id').eq('club_id',EQUIPO.club_id).in('categoria_id',cats.map(c=>c.id))).data||[]:[];
+    const club=(CLUBES[EQUIPO.club_id]||{}).nombre||nomEq(EQUIPO);
+    abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">📊 RENDIMIENTO · ${club.toUpperCase()}</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+      <p class="text-xs text-ink-400 mb-3">${TORNEO.nombre} · comparación de sus categorías con los partidos finalizados.</p>`
+      +await htmlRendimiento(eqsC.map(e=>e.id)));
+  }catch(e){abrirModal('<p class="text-sm font-bold text-brand-600 p-4">⚠ '+(e.message||e)+'</p>');}
 }
 
 /* ============ REALTIME: la página se actualiza sola ============ */
