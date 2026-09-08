@@ -4131,11 +4131,24 @@ async function replicarFixture(){
     .filter(m=>m.jornada_id&&!m.etapa&&m.local_id&&m.visita_id&&act(m.local_id)&&act(m.visita_id));
   if(!pSrc.length){toast('⚠ No hay cruces que replicar');return;}
   const clubDe=eid=>(EQUIPOS[eid]||{}).club_id;
+  // Un club puede tener VARIOS equipos en la misma categoría (p. ej. "X" y
+  // "X SELECTIVO"): se emparejan por orden de nombre (1.º con 1.º, 2.º con 2.º).
+  const ordNom=(a,b)=>String(a.nombre||'').localeCompare(String(b.nombre||''),'es');
+  const srcPorClub={};
+  Object.values(EQUIPOS).filter(e=>e.estado==='activo').forEach(e=>{(srcPorClub[e.club_id]=srcPorClub[e.club_id]||[]).push(e);});
+  Object.values(srcPorClub).forEach(l=>l.sort(ordNom));
   let resumen=[];
   for(const c of elegidas){
-    // mapa club → equipo de la categoría destino
-    const eqs=((await sb.from('equipo').select('id,club_id,estado').eq('categoria_id',c.id)).data||[]).filter(e=>e.estado==='activo');
-    const porClub={}; eqs.forEach(e=>{porClub[e.club_id]=e.id;});
+    // mapa club → equipos de la categoría destino (lista ordenada por nombre)
+    const eqs=((await sb.from('equipo').select('id,club_id,estado,nombre').eq('categoria_id',c.id)).data||[]).filter(e=>e.estado==='activo');
+    const porClub={}; eqs.forEach(e=>{(porClub[e.club_id]=porClub[e.club_id]||[]).push(e);});
+    Object.values(porClub).forEach(l=>l.sort(ordNom));
+    const destinoDe=eid=>{
+      const cl=clubDe(eid), destL=porClub[cl]||[], srcL=srcPorClub[cl]||[];
+      if(srcL.length<=1) return destL[0]?destL[0].id:null;          // caso normal: 1 equipo por club
+      const i=srcL.findIndex(x=>x.id===eid);                        // club con varios equipos: por posición
+      return (i>=0&&destL[i])?destL[i].id:null;
+    };
     // zona destino: la del mismo nombre que la del origen, o la primera
     const zonaDest=id=>{
       const zo=ZONAS.find(z=>z.id===id);
@@ -4165,8 +4178,8 @@ async function replicarFixture(){
     // cruces emparejados por club
     const filas=[]; let sinEquipo=0;
     for(const m of pSrc){
-      const L=porClub[clubDe(m.local_id)], V=porClub[clubDe(m.visita_id)];
-      if(!L||!V){sinEquipo++;continue;}
+      const L=destinoDe(m.local_id), V=destinoDe(m.visita_id);
+      if(!L||!V||L===V){sinEquipo++;continue;}
       const z=zonaDest(m.zona_id);
       const j=porNum[(jById[m.jornada_id]||{}).numero];
       if(!j){sinEquipo++;continue;}
