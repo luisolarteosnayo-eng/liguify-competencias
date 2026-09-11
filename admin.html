@@ -204,7 +204,7 @@ function msg(texto,tipo){const e=$('msg'); if(!texto){e.classList.add('hidden');
   e.textContent=texto; e.classList.remove('hidden');}
 function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));$(id).classList.add('active');window.scrollTo({top:0});}
 function cerrarModal(){const m=$('modal');m.classList.add('hidden');m.classList.remove('flex');}
-function abrirModal(html,ancho){const b=$('modal-body');b.innerHTML=html;b.style.maxWidth=ancho?'880px':'';const m=$('modal');m.classList.remove('hidden');m.classList.add('flex');}
+function abrirModal(html,ancho){const b=$('modal-body');b.innerHTML=html;b.style.maxWidth=ancho==='full'?'min(1500px,96vw)':(ancho?'880px':'');const m=$('modal');m.classList.remove('hidden');m.classList.add('flex');}
 const iniciales=n=>(n||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
 /* Foto a pantalla completa en la validación (toca para ampliar / cerrar) */
 function verFotoValidacion(url){
@@ -1553,7 +1553,7 @@ async function modalDuplicados(){
         <span class="block text-[10px] text-ink-400 font-normal">Desmárcalo para ignorar a quienes están en equipos del mismo club (por ejemplo, el club participa en los dos torneos elegidos). Solo se mostrarán los que aparecen en clubes distintos.</span></span>
     </label>
     <button onclick="buscarDuplicados()" class="w-full bg-ink-900 text-white font-bold py-2.5 rounded-xl hover:bg-ink-700 mb-3">BUSCAR DUPLICADOS</button>
-    <div id="dup-lista" class="max-h-80 overflow-y-auto text-sm"></div>`);
+    <div id="dup-lista" class="max-h-[58vh] overflow-y-auto text-sm"></div>`,'full');
 }
 function dupTodos(on){ document.querySelectorAll('.dup-t').forEach(c=>c.checked=on); }
 async function buscarDuplicados(){
@@ -1573,14 +1573,70 @@ async function buscarDuplicados(){
     omitidos=antes-lista.length;
   }
   const notaOm=omitidos?`<p class="text-[10px] text-ink-400 mb-2">Se omitieron ${omitidos} persona(s) cuyos equipos son todos del mismo club.</p>`:'';
-  $('dup-lista').innerHTML=lista.length?notaOm+`<p class="text-xs text-ink-400 mb-2">${lista.length} persona(s) con más de un equipo ${alcance}:</p>`+lista.map(d=>`
-    <div class="border border-line rounded-xl p-3 mb-2">
-      <p class="font-bold text-sm">${d.nombres} ${d.apellidos} <span class="text-xs text-ink-500 font-semibold">· ${d.pais} ${d.documento}</span>
-        <span class="text-[9px] font-bold bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 ml-1">${d.equipos.length} EQUIPOS</span></p>
-      ${d.equipos.map(e=>`<p class="text-xs text-ink-500 mt-1">• <b>${e.equipo}</b>${e.club&&e.club!==e.equipo?` <span class="text-ink-400">(${e.club})</span>`:''} — ${e.categoria} · ${e.torneo}
-        <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full ${e.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${e.estado.toUpperCase()}</span></p>`).join('')}
-    </div>`).join('')
+  DUP_RES={lista,alcance:sel.length===1?(nom[sel[0]]||''):sel.length+' torneos',mismoClub};
+  // chip de participación: dice de qué equipo SÍ se puede quitar al jugador
+  const partHTML=e=>e.jugo===undefined?''
+    :e.jugo?`<span class="text-[9px] font-bold bg-ink-900 text-white rounded-full px-2 py-0.5 whitespace-nowrap" title="Participación real en ${e.pj} partido(s): NO se puede eliminar de esta planilla">⚽ JUGÓ ${e.pj}</span>`
+    :`<span class="text-[9px] font-bold bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 whitespace-nowrap" title="Sin participación en este torneo: se le puede quitar de esta planilla">✔ SE PUEDE QUITAR</span>`;
+  $('dup-lista').innerHTML=lista.length?notaOm+`
+    <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+      <p class="text-xs text-ink-400">${lista.length} persona(s) con más de un equipo ${alcance}. <b class="text-ink-900">⚽ JUGÓ</b> = tiene participación real (no se puede eliminar ahí); <b class="text-emerald-700">✔ SE PUEDE QUITAR</b> = planilla de la que conviene retirarlo.</p>
+      <button onclick="pdfDuplicados()" class="text-xs font-bold text-ink-500 border border-line rounded-lg px-3 py-1.5 hover:bg-paper">🖨 PDF</button>
+    </div>
+    <div class="border border-line rounded-xl overflow-x-auto"><table class="w-full text-xs min-w-[820px]">
+      <thead class="sticky top-0 bg-white"><tr class="text-[9px] uppercase text-ink-400 border-b border-line tracking-wider text-left">
+        <th class="px-3 py-2">Jugador</th><th class="px-2 py-2">Equipo</th><th class="px-2 py-2">Categoría</th><th class="px-2 py-2">Torneo</th><th class="px-2 py-2">Estado</th><th class="px-2 py-2">Participación</th></tr></thead>
+      <tbody>${lista.map(d=>d.equipos.map((e,i)=>`<tr class="border-b border-line ${i===0?'border-t-2 border-t-ink-900/20':''}">
+        <td class="px-3 py-1.5">${i===0?`<b>${d.nombres} ${d.apellidos}</b><span class="block text-[10px] text-ink-400">${d.pais} ${d.documento} · ${d.equipos.length} equipos</span>`:''}</td>
+        <td class="px-2 py-1.5 font-semibold">${e.equipo}${e.club&&e.club!==e.equipo?` <span class="text-ink-400 font-normal">(${e.club})</span>`:''}</td>
+        <td class="px-2 py-1.5 text-ink-500">${(e.categoria||'').replace(/^Categor[ií]a\s+/i,'')}</td>
+        <td class="px-2 py-1.5 text-ink-500">${e.torneo}</td>
+        <td class="px-2 py-1.5"><span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full ${e.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${e.estado.toUpperCase()}</span></td>
+        <td class="px-2 py-1.5">${partHTML(e)}</td>
+      </tr>`).join('')).join('')}</tbody></table></div>`
     :notaOm+`<p class="text-emerald-700 text-sm font-semibold bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">✔ Sin duplicados ${alcance}${mismoClub?'':' (en clubes distintos)'}: ninguna persona está en más de un equipo.</p>`;
+}
+let DUP_RES=null;
+/* PDF del reporte de duplicados: vista de impresión (desde el diálogo se guarda como PDF) */
+function pdfDuplicados(){
+  if(!DUP_RES||!DUP_RES.lista.length){toast('⚠ Busca duplicados primero');return;}
+  const esc2=t=>String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const filas=DUP_RES.lista.map(d=>d.equipos.map((e,i)=>`<tr class="${i===0?'sep':''}">
+    <td class="jug">${i===0?`<b>${esc2(d.nombres+' '+d.apellidos)}</b><br><span class="doc">${esc2(d.pais+' '+d.documento)} · ${d.equipos.length} equipos</span>`:''}</td>
+    <td><b>${esc2(e.equipo)}</b>${e.club&&e.club!==e.equipo?` <span class="doc">(${esc2(e.club)})</span>`:''}</td>
+    <td>${esc2((e.categoria||'').replace(/^Categor[ií]a\s+/i,''))}</td>
+    <td>${esc2(e.torneo)}</td>
+    <td>${esc2((e.estado||'').toUpperCase())}</td>
+    <td class="${e.jugo===undefined?'':e.jugo?'jugo':'libre'}">${e.jugo===undefined?'—':e.jugo?('⚽ JUGÓ '+e.pj):'✔ SE PUEDE QUITAR'}</td>
+  </tr>`).join('')).join('');
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Duplicados · ${esc2(MARCA.nombre)}</title><style>
+    @page{size:A4 landscape;margin:12mm}
+    body{font-family:Arial,Helvetica,sans-serif;color:#171e2e;margin:0}
+    h1{font-size:18px;margin:0 0 2px} .sub{font-size:11px;color:#5b6478;margin:0 0 10px}
+    table{border-collapse:collapse;width:100%;font-size:10px}
+    th{background:#171e2e;color:#fff;text-align:left;padding:5px 7px;font-size:9px;text-transform:uppercase;letter-spacing:.05em}
+    td{padding:4px 7px;border-bottom:1px solid #e9e6e0;vertical-align:top}
+    tr.sep td{border-top:2px solid #171e2e33}
+    .jug{width:24%} .doc{color:#8b93a7;font-size:9px}
+    .jugo{font-weight:bold} .libre{color:#047857;font-weight:bold}
+    .pie{text-align:center;font-size:9px;color:#94a3b8;margin-top:8px;letter-spacing:1px}
+    .barra{background:#111;color:#fff;padding:8px;text-align:center;font-size:12px}
+    .barra button{background:#d9232e;color:#fff;border:0;border-radius:8px;padding:7px 16px;font-weight:bold;cursor:pointer}
+    @media print{.barra{display:none}}
+  </style></head><body>
+  <div class="barra"><button onclick="print()">🖨 IMPRIMIR / GUARDAR PDF</button></div>
+  <div style="padding:10px 14px">
+  <h1>🔎 JUGADORES DUPLICADOS · ${esc2(MARCA.nombre)}</h1>
+  <p class="sub">Alcance: ${esc2(DUP_RES.alcance)} · ${DUP_RES.lista.length} persona(s) en más de un equipo · ${new Date().toLocaleDateString('es-PE')} · ⚽ JUGÓ = participación real (no eliminable de esa planilla) · ✔ SE PUEDE QUITAR = sin participación en ese torneo</p>
+  <table><thead><tr><th>Jugador</th><th>Equipo</th><th>Categoría</th><th>Torneo</th><th>Estado</th><th>Participación</th></tr></thead>
+  <tbody>${filas}</tbody></table>
+  <div class="pie">⚡ POWERED BY LIGUIFY · liguify.com</div>
+  </div>
+  <script>window.onload=function(){setTimeout(function(){window.print();},600);};<\/script>
+  </body></html>`;
+  const w=window.open('','_blank');
+  if(!w){toast('⚠ El navegador bloqueó la ventana — permite pop-ups para generar el PDF');return;}
+  w.document.write(html); w.document.close();
 }
 
 /* ============ ⚖ RECLAMOS (admin) ============ */
