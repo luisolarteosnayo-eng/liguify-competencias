@@ -1479,8 +1479,12 @@ async function previsualizarProgramacion(){
     const hora=progHora(horaTxt);
     if(hora===undefined){f.err=`HORA inválida ("${horaTxt}") — usa HH:MM`;res.push(f);return;}
     const L=progNorm(localTxt), V=progNorm(visitaTxt);
-    let cand=pms.filter(m=>nombresDe(m.local_id).includes(L)&&nombresDe(m.visita_id).includes(V));
-    if(!cand.length) cand=pms.filter(m=>nombresDe(m.visita_id).includes(L)&&nombresDe(m.local_id).includes(V));
+    // AMBAS orientaciones desde el inicio: si el mismo cruce existe invertido en
+    // otra categoría (p. ej. ALIANZA BASE vs ALIANZA SURQUILLO en 2016 y 2017),
+    // quedarse solo con la primera orientación aplicaba la hora a la categoría
+    // equivocada sin llegar a desambiguar por la columna CATEGORÍA.
+    let cand=pms.filter(m=>(nombresDe(m.local_id).includes(L)&&nombresDe(m.visita_id).includes(V))
+                        ||(nombresDe(m.visita_id).includes(L)&&nombresDe(m.local_id).includes(V)));
     if(cand.length>1&&catTxt){
       const toks=progNorm(catTxt).split(' ').filter(Boolean);
       const filtra=cand.filter(m=>{const c=CT[m.categoria_id]||{};const ref=progNorm(c.cat+' '+c.torneo).split(' ');return toks.every(t=>ref.includes(t));});
