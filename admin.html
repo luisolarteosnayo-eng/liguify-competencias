@@ -4721,6 +4721,7 @@ async function modalEquipoIdealTorneo(){
           ${['F7','F9','F11'].map(m=>`<option value="${m}" ${m===EIT.form?'selected':''}>${m} · ${Object.values(formacionEI(m)).join('-')}</option>`).join('')}
         </select></label>
     </div>
+    <div id="eit-add"></div>
     <div id="eit-body" class="text-sm">Cargando…</div>`
     :'<p class="text-sm text-ink-400">Aún no hay jugadores marcados para el equipo ideal en ninguna fecha.</p>'}`, true);
   if(nums.length) cargarEIT();
@@ -4747,7 +4748,95 @@ async function cargarEIT(){
     d.forEach(p=>{p.jornada_id=j.id; p.cat=(c.nombre_display||('Cat. '+c.anio_nacimiento)).replace(/^Categor[ií]a\s+/i,'').toUpperCase(); p.catCorta=String(c.anio_nacimiento); p.en_torneo=!!sel[p.inscripcion_id]; p.esFigura=figSet.has(p.inscripcion_id); p.soloFigura=!tieneFila.has(p.inscripcion_id);});
     data.push(...d);
   }
-  EIT.data=data; renderEIT();
+  EIT.data=data; renderEIT(); renderEITAdd();
+}
+/* ---- ➕ AGREGAR JUGADOR al equipo del torneo (cualquier jugador de la fecha) ---- */
+let EIT_ADD={prev:null,goles:0};
+function renderEITAdd(){
+  const el=$('eit-add'); if(!el) return;
+  EIT_ADD={prev:null,goles:0};
+  el.innerHTML=`<div class="border border-line rounded-xl p-3 mb-3 bg-paper/60">
+    <p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-2">➕ Agregar jugador al equipo del torneo <span class="normal-case font-normal">— si no fue marcado ni figura, elígelo aquí</span></p>
+    <div class="grid sm:grid-cols-3 gap-2 mb-2">
+      <select id="eit-add-cat" onchange="eitAddCat()" class="border border-line rounded-lg px-2 py-2 text-xs font-semibold bg-white">
+        <option value="">— Categoría —</option>
+        ${EIT.cats.filter(c=>EIT.js.some(x=>x.categoria_id===c.id&&x.numero===EIT.num)).map(c=>`<option value="${c.id}">${c.nombre_display||('Cat. '+c.anio_nacimiento+' / '+c.modalidad)}</option>`).join('')}
+      </select>
+      <select id="eit-add-eq" onchange="eitAddEq()" disabled class="border border-line rounded-lg px-2 py-2 text-xs font-semibold bg-white disabled:opacity-50"><option value="">— Equipo —</option></select>
+      <select id="eit-add-jug" onchange="eitAddJug()" disabled class="border border-line rounded-lg px-2 py-2 text-xs font-semibold bg-white disabled:opacity-50"><option value="">— Jugador —</option></select>
+    </div>
+    <div id="eit-add-prev"></div>
+  </div>`;
+}
+async function eitAddCat(){
+  const catId=$('eit-add-cat').value, sel=$('eit-add-eq');
+  sel.innerHTML='<option value="">— Equipo —</option>'; sel.disabled=!catId;
+  $('eit-add-jug').innerHTML='<option value="">— Jugador —</option>'; $('eit-add-jug').disabled=true;
+  $('eit-add-prev').innerHTML=''; EIT_ADD.prev=null;
+  if(!catId) return;
+  const eqs=((await sb.from('equipo').select('id,nombre,estado,club:club_id(nombre)').eq('categoria_id',catId)).data||[]).filter(e=>e.estado==='activo');
+  eqs.sort((a,b)=>String(a.nombre||(a.club||{}).nombre||'').localeCompare(String(b.nombre||(b.club||{}).nombre||''),'es'));
+  sel.innerHTML='<option value="">— Equipo —</option>'+eqs.map(e=>`<option value="${e.id}">${e.nombre||(e.club||{}).nombre||'—'}</option>`).join('');
+}
+async function eitAddEq(){
+  const eqId=$('eit-add-eq').value, sel=$('eit-add-jug');
+  sel.innerHTML='<option value="">— Jugador —</option>'; sel.disabled=!eqId;
+  $('eit-add-prev').innerHTML=''; EIT_ADD.prev=null;
+  if(!eqId) return;
+  const ins=((await sb.from('inscripcion_lbf').select('id,dorsal,jugador_id').eq('equipo_id',eqId).eq('en_lbf',true).eq('inhabilitado',false)).data||[]);
+  const jms=ins.length?(await sb.from('jugador_maestro').select('id,nombres,apellidos').in('id',ins.map(i=>i.jugador_id))).data||[]:[];
+  const J=Object.fromEntries(jms.map(j=>[j.id,j]));
+  const nom=i=>{const j=J[i.jugador_id]||{};return ((j.nombres||'')+' '+(j.apellidos||'')).trim();};
+  ins.sort((a,b)=>ordCamiseta(a,b,nom(a),nom(b)));
+  sel.innerHTML='<option value="">— Jugador —</option>'+ins.map(i=>`<option value="${i.id}">${i.dorsal!=null?i.dorsal+' · ':''}${nom(i)}</option>`).join('');
+}
+async function eitAddJug(){
+  const insId=$('eit-add-jug').value, box=$('eit-add-prev');
+  box.innerHTML=''; EIT_ADD.prev=null;
+  if(!insId) return;
+  box.innerHTML='<p class="text-xs text-ink-400 py-2">Cargando ficha…</p>';
+  let p=null;
+  try{ p=(await enriquecerEI([{inscripcion_id:insId,linea:null}]))[0]; }catch(e){}
+  if(!p){box.innerHTML='<p class="text-xs text-brand-600 font-bold">No se pudo cargar la ficha del jugador.</p>';return;}
+  // goles del jugador EN ESTA FECHA (partidos de la jornada de su categoría)
+  const catId=$('eit-add-cat').value;
+  const j=EIT.js.find(x=>x.categoria_id===catId&&x.numero===EIT.num);
+  let goles=0, jugoFecha=false;
+  if(j){
+    const pms=(await sb.from('partido').select('id').eq('jornada_id',j.id)).data||[];
+    if(pms.length){
+      const pl=(await sb.from('planilla_partido').select('goles,jugo,minutos').eq('inscripcion_id',insId).in('partido_id',pms.map(m=>m.id))).data||[];
+      goles=pl.reduce((s,r)=>s+(r.goles||0),0);
+      jugoFecha=pl.some(r=>r.jugo||(r.minutos||0)>0||(r.goles||0)>0);
+    }
+  }
+  const linea=sugerirLinea(p.posicion)||'MED';
+  EIT_ADD.prev={...p,catId,jornada_id:j?j.id:null,goles};
+  box.innerHTML=`<div class="flex items-center gap-3 border border-line rounded-xl bg-white px-3 py-2 flex-wrap">
+    <span class="w-14 h-14 rounded-xl grid place-items-center text-white font-bold overflow-hidden relative shrink-0" style="background:#2b3550">
+      ${p.foto?`<img src="${p.foto}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales(p.nombre)}</span>
+    <span class="flex-1 min-w-[40%]">
+      <b class="text-sm">${p.nombre}</b>
+      <span class="block text-[11px] text-ink-500">${p.equipo}${p.posicion?' · '+p.posicion:''}</span>
+      <span class="block text-[11px] font-bold ${goles>0?'text-emerald-700':'text-ink-400'}">⚽ ${goles} gol(es) en la Fecha ${EIT.num}${jugoFecha?'':' · sin participación registrada en la fecha'}</span>
+    </span>
+    <label class="text-[10px] font-bold text-ink-400">LÍNEA
+      <select id="eit-add-linea" class="block border border-line rounded-lg px-2 py-1.5 text-xs font-bold bg-white mt-0.5">
+        ${EI_LINEAS.map(l=>`<option value="${l}" ${l===linea?'selected':''}>${EI_NOMBRE[l]}</option>`).join('')}
+      </select></label>
+    <button onclick="eitAgregar()" class="bg-ink-900 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-ink-700">➕ AGREGAR</button>
+  </div>`;
+}
+function eitAgregar(){
+  const p=EIT_ADD.prev; if(!p){toast('⚠ Elige un jugador');return;}
+  if(!p.jornada_id){toast('⚠ Esa categoría no tiene Fecha '+EIT.num);return;}
+  if(EIT.data.some(x=>x.inscripcion_id===p.inscripcion_id)){toast('⚠ Ese jugador ya está en la lista de candidatos — márcalo con su checkbox');return;}
+  const c=EIT.cats.find(x=>x.id===p.catId)||{};
+  EIT.data.push({...p, linea:$('eit-add-linea').value, jornada_id:p.jornada_id,
+    cat:(c.nombre_display||('Cat. '+c.anio_nacimiento)).replace(/^Categor[ií]a\s+/i,'').toUpperCase(),
+    catCorta:String(c.anio_nacimiento||''), en_torneo:true, esFigura:false, soloFigura:true, manual:true, golesFecha:p.goles});
+  toast('➕ '+p.nombre+' agregado — recuerda 💾 GUARDAR SELECCIÓN');
+  renderEIT(); renderEITAdd();
 }
 function renderEIT(){
   const f=formacionEI(EIT.form);
@@ -4772,6 +4861,8 @@ function renderEIT(){
         <input type="checkbox" ${p.en_torneo?'checked':''} onchange="EIT.data.find(x=>x.inscripcion_id==='${p.inscripcion_id}').en_torneo=this.checked;renderEIT()" class="w-4 h-4 accent-[#d9232e]"/>
         ${p.club.escudo_url?`<img src="${p.club.escudo_url}" class="w-6 h-6 object-contain shrink-0"/>`:`<span class="w-6 h-6 rounded-md grid place-items-center text-white text-[9px] font-bold shrink-0" style="background:${p.club.color||'#334155'}">${iniciales(p.club.nombre||'?')}</span>`}
         <span class="flex-1 min-w-0 truncate"><b>${p.nombre}</b> <span class="text-ink-400">· ${p.equipo}${p.posicion?' · '+p.posicion:''}</span></span>
+        ${p.golesFecha>0?`<span class="text-[9px] font-bold bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 shrink-0">⚽ ${p.golesFecha}</span>`:''}
+        ${p.manual?'<span class="text-[9px] font-bold bg-sky-100 text-sky-700 rounded-full px-2 py-0.5 shrink-0">➕ MANUAL</span>':''}
         ${p.esFigura?'<span class="text-[9px] font-bold bg-amber-100 text-amber-800 rounded-full px-2 py-0.5 shrink-0">⭐ FIGURA</span>':''}
         <span class="text-[9px] font-bold bg-ink-900 text-white rounded-full px-2 py-0.5 shrink-0">${p.cat}</span>
       </label>`).join('')||'<p class="px-3 py-2 text-[11px] text-ink-400 border-t border-line">Sin jugadores marcados ni figuras en esta línea.</p>'}
