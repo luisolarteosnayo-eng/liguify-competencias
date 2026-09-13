@@ -665,7 +665,7 @@ let N_LBF=0, STATS_HTML='', RESULTADOS_HTML='', EQ_LISTO=false;   // STATS/RESUL
 async function renderPlantel(){
   const [insQ,tq,cq]=await Promise.all([
     sb.from('inscripcion_lbf').select('*').eq('equipo_id',EQ.equipo_id).order('dorsal'),
-    sb.from('torneo').select('requiere_autorizacion,duracion_partido').eq('id',EQ.torneo_id).single(),
+    sb.from('torneo').select('requiere_autorizacion,duracion_partido,fecha_limite_carga_equipo').eq('id',EQ.torneo_id).single(),
     sb.from('categoria').select('duracion_partido').eq('id',EQ.categoria_id).single()
   ]);
   const ins=insQ.data, error=insQ.error;
@@ -692,7 +692,10 @@ async function renderPlantel(){
     });
     (ac.data||[]).forEach(a=>PARTICIPO.add(a.inscripcion_id));
   }
-  const puedeEditar=EQ.permitir_delegados&&EQ.cargar_lbf&&EQ.equipo_estado==='activo'&&EQ.torneo_estado!=='finalizado'&&EQ.torneo_estado!=='archivado';
+  // 🔒 fecha límite de carga: pasado el cierre, los cambios de LBF son solo del organizador
+  const FLIM=(tq.data&&tq.data.fecha_limite_carga_equipo)||null;
+  const cargaCerrada=!!(FLIM&&new Date().toISOString().slice(0,10)>FLIM);
+  const puedeEditar=EQ.permitir_delegados&&EQ.cargar_lbf&&!cargaCerrada&&EQ.equipo_estado==='activo'&&EQ.torneo_estado!=='finalizado'&&EQ.torneo_estado!=='archivado';
   const lleno=N_LBF>=EQ.lbf_max;
   $('tab-plantel').innerHTML=`
     <div class="bg-white border border-line rounded-2xl overflow-hidden">
@@ -703,6 +706,7 @@ async function renderPlantel(){
           :`<span class="flex gap-2 flex-wrap">
              <button onclick="modalCopiarPlantel()" title="Copiar la lista de jugadores del club desde otro torneo (misma categoría primero)" class="bg-white border border-emerald-600 text-emerald-700 text-xs font-bold px-4 py-2 rounded-xl hover:bg-emerald-50">⬇ COPIAR DE OTRO TORNEO</button>
              <button onclick="modalJugador()" class="bg-ink-900 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-ink-700">+ AGREGAR JUGADOR/A</button></span>`)
+          :cargaCerrada?`<span class="text-[10px] font-bold text-brand-600">🔒 Carga de equipo CERRADA el ${FLIM.split('-').reverse().join('/')} — cambios solo a través del organizador</span>`
           :'<span class="text-[10px] font-bold text-ink-400">Solo lectura'+(EQ.permitir_delegados?'':' — el torneo no habilita delegados')+'</span>'}
       </div>
       ${ins.length?ins.map(i=>{const j=jug[i.jugador_id]||{};
