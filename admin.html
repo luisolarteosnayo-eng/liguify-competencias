@@ -3836,13 +3836,21 @@ function renderLlaveRows(){
   const pares=llSugeridos(etapa);
   $('ll-rows').innerHTML=Array.from({length:n},(_,i)=>{
     const [l,v]=pares[i]||['',''];
-    return `<div class="flex items-center gap-2 border border-line rounded-xl px-3 py-2">
+    return `<div id="ll-row-${i}" class="flex items-center gap-2 border border-line rounded-xl px-3 py-2">
       <span class="text-[10px] font-bold text-ink-400 w-16">${etapa}${n>1?' #'+(i+1):''}</span>
       <select id="ll-l-${i}" class="flex-1 border border-line rounded-lg px-2 py-1.5 text-xs font-semibold bg-white">${llEquipoOpts(l)}</select>
       <span class="text-ink-300 text-xs">vs</span>
       <select id="ll-v-${i}" class="flex-1 border border-line rounded-lg px-2 py-1.5 text-xs font-semibold bg-white">${llEquipoOpts(v)}</select>
+      <button onclick="llQuitarFila(${i})" title="Quitar esta llave (no se creará)" class="text-ink-400 hover:text-brand-600 font-bold px-1 shrink-0">✕</button>
     </div>`;
   }).join('');
+}
+/* Quitar una llave de la lista: se limpia y no se crea (útil cuando la etapa
+   tiene menos cruces que la plantilla, p. ej. solo 4 partidos de octavos) */
+function llQuitarFila(i){
+  const l=$('ll-l-'+i), v=$('ll-v-'+i), row=$('ll-row-'+i);
+  if(l) l.value=''; if(v) v.value='';
+  if(row) row.style.display='none';
 }
 async function crearLlaves(){
   let faseId=$('ll-fase').value;
@@ -3860,8 +3868,8 @@ async function crearLlaves(){
     if(!l||!v) continue;                       // llaves "por definir" se crean después
     if(l===v){toast(`⚠ ${etapa} #${i+1}: un equipo no puede jugar contra sí mismo`);return;}
     filas.push({categoria_id:CAT.id, fase_id:faseId, zona_id:null, jornada_id:null,
-      etapa: n>1?`${etapa} #${i+1}`:etapa, local_id:l, visita_id:v,
-      fecha, hora:hBase?String(((+hBase.slice(0,2))+i)%24).padStart(2,'0')+':'+hBase.slice(3):null,
+      etapa: n>1?`${etapa} #${filas.length+1}`:etapa, local_id:l, visita_id:v,
+      fecha, hora:hBase?String(((+hBase.slice(0,2))+filas.length)%24).padStart(2,'0')+':'+hBase.slice(3):null,
       sede, estado:'programado'});
   }
   if(!filas.length){toast('⚠ Define al menos una llave con ambos equipos');return;}
