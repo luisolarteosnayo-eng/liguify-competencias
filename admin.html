@@ -3623,6 +3623,7 @@ async function modalLlaves(){
         <p id="ll-cupos-desc"></p>
         <p class="mt-1 text-ink-500">Será visible en el público desde ya. Cuando la fase de grupos avance, usa <b>⚡ RESOLVER</b> en el fixture para asignar los equipos reales (con vista previa editable).</p>
       </div>
+      <label class="flex items-center justify-between text-sm font-semibold py-1">Incluir Octavos de final <span class="text-[10px] text-ink-400 font-normal">(16 equipos · siembra global por posiciones)</span><input id="ll-oct" type="checkbox" onchange="setLlModo('cupos')" class="w-4 h-4 accent-[#d9232e]"/></label>
       <label class="flex items-center justify-between text-sm font-semibold py-1">Incluir Tercer puesto<input id="ll-3er" type="checkbox" checked class="w-4 h-4 accent-[#d9232e]"/></label>
     </div>
     <button id="ll-go" onclick="crearLlavesDispatch()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">CREAR LLAVES</button>`);
@@ -3641,12 +3642,15 @@ function setLlModo(m){
   $('ll-cupos').classList.toggle('hidden', m!=='cupos');
   if(m==='cupos'){
     const Z=LL_ZONAS, o=+($('ll-desde').value||0);
+    const oct=$('ll-oct')&&$('ll-oct').checked;
     const p1=n=>`${o+1}º ${n}`, p2=n=>`${o+2}º ${n}`;
-    $('ll-cupos-desc').innerHTML = Z.length===2
+    $('ll-cupos-desc').innerHTML = oct
+      ? `<b>OCTAVOS con siembra global:</b> clasifican los 16 mejores por posición entre las ${Z.length} zona(s) — todos los ${o+1}º (ordenados por la tabla), luego los ${o+2}º, y así hasta completar 16. Cruce sembrado (1 vs 16, 2 vs 15, …) → Cuartos → Semifinales → Final (+ 3er puesto). Al RESOLVER, cada cupo "MEJOR" se calcula con el desempate del torneo y es editable.`
+      : Z.length===2
       ? `SF1: <b>${p1(Z[0])} vs ${p2(Z[1])}</b> · SF2: <b>${p1(Z[1])} vs ${p2(Z[0])}</b> · Final: Ganador SF1 vs Ganador SF2 (+ 3er puesto con los perdedores).`
       : Z.length===4
       ? `Cuartos cruzados (${p1(Z[0])}-${p2(Z[1])}, ${p1(Z[2])}-${p2(Z[3])}, ${p1(Z[1])}-${p2(Z[0])}, ${p1(Z[3])}-${p2(Z[2])}) → Semifinales → Final (+ 3er puesto).`
-      : `⚠ La plantilla automática requiere 2 o 4 zonas (esta categoría tiene ${Z.length}). Usa EQUIPOS DIRECTOS.`;
+      : `⚠ La plantilla directa de cuartos/semis requiere 2 o 4 zonas (esta categoría tiene ${Z.length}). Con ${Z.length} zonas, marca <b>Incluir Octavos de final</b> (siembra global) o usa EQUIPOS DIRECTOS.`;
   }
   $('ll-go').textContent = m==='cupos' ? '🔮 CREAR PLANTILLA COMPLETA' : 'CREAR LLAVES';
 }
@@ -3663,15 +3667,36 @@ async function llFaseElegida(){
 }
 async function crearPlantilla(){
   const Z=LL_ZONAS;
-  if(Z.length!==2&&Z.length!==4){toast('⚠ La plantilla automática requiere 2 o 4 zonas. Usa EQUIPOS DIRECTOS.');return;}
+  const octavos=$('ll-oct')&&$('ll-oct').checked;
+  if(!octavos&&Z.length!==2&&Z.length!==4){toast('⚠ Con '+Z.length+' zonas marca "Incluir Octavos de final" (siembra global) o usa EQUIPOS DIRECTOS.');return;}
+  if(octavos&&!Z.length){toast('⚠ No hay zonas con tabla en esta categoría');return;}
   const faseId=await llFaseElegida(); if(!faseId) return;
   const o=+($('ll-desde').value||0);
   const fecha=$('ll-f').value, hBase=$('ll-h').value||'', sede=$('ll-s').value.trim()||null;
   const hora=i=>hBase?String(((+hBase.slice(0,2))+i)%24).padStart(2,'0')+':'+hBase.slice(3):null;
   const cupo=(z,p)=>({t:'zona',zona:z,puesto:p});
   const base={categoria_id:CAT.id,fase_id:faseId,zona_id:null,jornada_id:null,estado:'programado',fecha,sede};
-  let semis;
-  if(Z.length===2){
+  const numEtapa=e=>+((e.etapa.match(/#(\d+)/)||[])[1]||0);
+  let semis, offOct=0;
+  if(octavos){
+    // 16 clasificados por SIEMBRA GLOBAL: todos los (o+1)º entre zonas (ordenados
+    // por la tabla), luego los (o+2)º, … hasta 16. Cruce sembrado 1v16, 2v15…
+    const seeds=[]; let p=o+1;
+    while(seeds.length<16){ for(let r=1;r<=Z.length&&seeds.length<16;r++) seeds.push({t:'mejor',puesto:p,rank:r}); p++; }
+    const orden=[[1,16],[8,9],[5,12],[4,13],[3,14],[6,11],[7,10],[2,15]];   // bracket sembrado estándar
+    const ofr=await sb.from('partido').insert(orden.map(([a,b],i)=>({...base,etapa:'Octavos de final #'+(i+1),hora:hora(i),
+      local_origen:seeds[a-1],visita_origen:seeds[b-1]}))).select();
+    if(ofr.error){toast(errNegocio(ofr.error));return;}
+    const O=ofr.data.sort((a,b)=>numEtapa(a)-numEtapa(b));
+    const qr=await sb.from('partido').insert([0,1,2,3].map(i=>({...base,etapa:'Cuartos de final #'+(i+1),hora:hora(8+i),
+      local_origen:{t:'ganador',partido:O[i*2].id},visita_origen:{t:'ganador',partido:O[i*2+1].id}}))).select();
+    if(qr.error){toast(errNegocio(qr.error));return;}
+    const q=qr.data.sort((a,b)=>numEtapa(a)-numEtapa(b));
+    semis=[
+      {...base,etapa:'Semifinal #1',hora:hora(12),local_origen:{t:'ganador',partido:q[0].id},visita_origen:{t:'ganador',partido:q[1].id}},
+      {...base,etapa:'Semifinal #2',hora:hora(13),local_origen:{t:'ganador',partido:q[2].id},visita_origen:{t:'ganador',partido:q[3].id}}];
+    offOct=14;
+  } else if(Z.length===2){
     semis=[
       {...base,etapa:'Semifinal #1',hora:hora(0),local_origen:cupo(Z[0],o+1),visita_origen:cupo(Z[1],o+2)},
       {...base,etapa:'Semifinal #2',hora:hora(1),local_origen:cupo(Z[1],o+1),visita_origen:cupo(Z[0],o+2)}];
@@ -3688,7 +3713,7 @@ async function crearPlantilla(){
   const sr=await sb.from('partido').insert(semis).select();
   if(sr.error){toast(errNegocio(sr.error));return;}
   const s=sr.data.sort((a,b)=>a.etapa.localeCompare(b.etapa));
-  const off=Z.length===2?2:6;
+  const off=octavos?offOct:(Z.length===2?2:6);
   const finales=[];
   if($('ll-3er').checked)
     finales.push({...base,etapa:'Tercer puesto',hora:hora(off),local_origen:{t:'perdedor',partido:s[0].id},visita_origen:{t:'perdedor',partido:s[1].id}});
