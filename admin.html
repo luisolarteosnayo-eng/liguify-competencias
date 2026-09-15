@@ -3582,7 +3582,7 @@ async function generarFixture(){
 }
 
 /* ---- Fase eliminatoria: GENERAR LLAVES (cuartos/semis/final — no suman puntos) ---- */
-const ETAPAS_LLAVE={'Cuartos de final':4,'Semifinal':2,'Tercer puesto':1,'Final':1};
+const ETAPAS_LLAVE={'Octavos de final':8,'Cuartos de final':4,'Semifinal':2,'Tercer puesto':1,'Final':1};
 let LL_RANK={}, LL_ZONAS=[];
 async function modalLlaves(){
   const {data:vt}=await sb.from('vista_tabla_zona').select('*').eq('categoria_id',CAT.id);
@@ -3813,6 +3813,18 @@ function llSugeridos(etapa){
   const A=LL_RANK[LL_ZONAS[0]]||[], B=LL_RANK[LL_ZONAS[1]]||[];
   const t=(arr,i)=>(arr[o+i]||{}).equipo_id||'';
   const dosZonas=LL_ZONAS.length>=2;
+  if(etapa==='Octavos de final'){
+    // siembra global: todos los (o+1)º entre zonas (ordenados por tabla), luego los (o+2)º… hasta 16
+    const seeds=[]; let p=o;
+    while(seeds.length<16&&p<o+30){
+      const fila=LL_ZONAS.map(z=>(LL_RANK[z]||[])[p]).filter(Boolean).sort((a,b)=>b.pts-a.pts||b.dg-a.dg||b.gf-a.gf);
+      if(!fila.length) break;
+      fila.forEach(r=>{if(seeds.length<16)seeds.push(r.equipo_id);});
+      p++;
+    }
+    const s=i=>seeds[i]||'';
+    return [[s(0),s(15)],[s(7),s(8)],[s(4),s(11)],[s(3),s(12)],[s(2),s(13)],[s(5),s(10)],[s(6),s(9)],[s(1),s(14)]];
+  }
   if(etapa==='Semifinal') return dosZonas?[[t(A,0),t(B,1)],[t(B,0),t(A,1)]]:[[t(A,0),t(A,3)],[t(A,1),t(A,2)]];
   if(etapa==='Cuartos de final') return dosZonas
     ?[[t(A,0),t(B,3)],[t(A,1),t(B,2)],[t(B,0),t(A,3)],[t(B,1),t(A,2)]]
