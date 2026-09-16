@@ -62,7 +62,8 @@ tailwind.config={theme:{extend:{
     <div id="marca-card"></div>
     <div class="flex items-center justify-between mb-3 mt-6 flex-wrap gap-2">
       <h2 id="h2-torneos" class="font-display text-2xl tracking-wide">TORNEOS DE LA MARCA</h2>
-      <div class="flex gap-2">        <button onclick="modalDuplicados()" id="btn-duplicados" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper" title="Jugadores con el mismo documento en más de un equipo de la marca">🔎 DUPLICADOS</button>
+      <div class="flex gap-2">        <button onclick="modalReclamosMarca()" title="Reclamos de TODOS los torneos de la marca, filtrados por activos" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">⚖ RECLAMOS</button>
+        <button onclick="modalDuplicados()" id="btn-duplicados" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper" title="Jugadores con el mismo documento en más de un equipo de la marca">🔎 DUPLICADOS</button>
         <button onclick="modalNuevoTorneo()" id="btn-nuevo-torneo" class="hidden bg-brand-500 text-white font-bold px-4 py-2 rounded-xl text-sm hover:bg-brand-600">+ NUEVO TORNEO</button>
       </div>
     </div>
@@ -1647,7 +1648,47 @@ const RCA_ESTADOS={borrador:['BORRADOR','bg-paper text-ink-500 border border-lin
   cerrado:['CERRADO','bg-emerald-100 text-emerald-700'],rechazado:['RECHAZADO','bg-brand-50 text-brand-600']};
 const chipRca=e=>{const [l,c]=RCA_ESTADOS[e]||[e,'bg-paper'];return `<span class="text-[9px] font-bold rounded-full px-2 py-0.5 ${c}">${l}</span>`;};
 const urlFirmadaRca=async ruta=>{const r=await sb.storage.from('documentos').createSignedUrl(ruta,3600);return (r.data&&r.data.signedUrl)||'#';};
+/* ---- ⚖ Reclamos de TODA LA MARCA (pantalla ancha, filtro por activos) ---- */
+let RCA_ORIGEN='torneo', RCM_FILTRO='activos';
+function rcaVolver(){ return RCA_ORIGEN==='marca'?modalReclamosMarca():modalReclamosAdmin(); }
+async function modalReclamosMarca(filtro){
+  RCA_ORIGEN='marca'; if(filtro!==undefined) RCM_FILTRO=filtro;
+  abrirModal('<p class="text-sm text-ink-500 py-8 text-center">Cargando los reclamos de la marca…</p>','full');
+  const ts=(TORNEOS_TODOS||[]).filter(t=>t.estado!=='archivado');
+  const res=await Promise.all(ts.map(t=>sb.rpc('reclamos_torneo',{p_torneo:t.id}).then(r=>({t,rows:r.data||[]})).catch(()=>({t,rows:[]}))));
+  const todos=res.flatMap(x=>x.rows.map(r=>({...r,torneoNom:x.t.nombre,torneoId:x.t.id})));
+  const ACT=['generado','en_proceso','pendiente_devolucion'];
+  let lista=todos;
+  if(RCM_FILTRO==='activos') lista=todos.filter(r=>ACT.includes(r.estado));
+  else if(RCM_FILTRO!=='todos') lista=todos.filter(r=>r.estado===RCM_FILTRO);
+  const ordEstado=e=>{const i=ACT.indexOf(e); return i<0?(e==='borrador'?3:4):i;};
+  lista.sort((a,b)=>ordEstado(a.estado)-ordEstado(b.estado)||String(b.enviado_at||'').localeCompare(String(a.enviado_at||'')));
+  const nAct=todos.filter(r=>ACT.includes(r.estado)).length;
+  const opts=[['activos',`⚡ ACTIVOS (${nAct})`],['todos',`TODOS (${todos.length})`],
+    ...Object.entries(RCA_ESTADOS).map(([k,[l]])=>[k,l+' ('+todos.filter(r=>r.estado===k).length+')'])];
+  abrirModal(`<div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+      <h3 class="font-display text-2xl tracking-wide">⚖ RECLAMOS · ${MARCA.nombre.toUpperCase()}</h3>
+      <span class="flex items-center gap-2">
+        <select onchange="modalReclamosMarca(this.value)" class="border border-line rounded-lg px-2 py-1.5 text-xs font-bold bg-white">
+          ${opts.map(([v,l])=>`<option value="${v}" ${v===RCM_FILTRO?'selected':''}>${l}</option>`).join('')}
+        </select>
+        <button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></span></div>
+    <p class="text-xs text-ink-400 mb-3">Todos los torneos de la marca. <b>Activos</b> = GENERADO, EN PROCESO o PENDIENTE DE DEVOLUCIÓN — los que requieren tu acción. Toca un reclamo para gestionarlo.</p>
+    ${lista.length?`<div class="border border-line rounded-xl overflow-x-auto"><table class="w-full text-xs min-w-[860px]">
+      <thead class="sticky top-0 bg-white"><tr class="text-[9px] uppercase text-ink-400 border-b border-line tracking-wider text-left">
+        <th class="px-3 py-2">Reclamo</th><th class="px-2 py-2">Estado</th><th class="px-2 py-2">Torneo</th><th class="px-2 py-2">Categoría</th><th class="px-2 py-2">Reclamante → Reclamado</th><th class="px-2 py-2">Enviado</th></tr></thead>
+      <tbody>${lista.map(r=>`<tr onclick="abrirReclamoAdmin('${r.id}')" class="border-b border-line cursor-pointer hover:bg-paper">
+        <td class="px-3 py-2 font-bold whitespace-nowrap">${r.codigo||'(borrador)'}</td>
+        <td class="px-2 py-2">${chipRca(r.estado)}</td>
+        <td class="px-2 py-2 text-ink-500">${r.torneoNom}</td>
+        <td class="px-2 py-2 text-ink-500">${(r.categoria||'').replace(/^Categor[ií]a\s+/i,'')}</td>
+        <td class="px-2 py-2"><b>${r.reclamante||'—'}</b> <span class="text-ink-400">→</span> ${r.reclamado||'—'}</td>
+        <td class="px-2 py-2 text-ink-400 whitespace-nowrap">${r.enviado_at?new Date(r.enviado_at).toLocaleDateString('es-PE'):'—'}</td>
+      </tr>`).join('')}</tbody></table></div>`
+    :`<p class="text-emerald-700 text-sm font-semibold bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">✔ Sin reclamos ${RCM_FILTRO==='activos'?'activos':RCM_FILTRO==='todos'?'':'en ese estado'} en los torneos de ${MARCA.nombre}.</p>`}`,'full');
+}
 async function modalReclamosAdmin(){
+  RCA_ORIGEN='torneo';
   const {data,error}=await sb.rpc('reclamos_torneo',{p_torneo:TORNEO.id});
   if(error){toast(errNegocio(error));return;}
   abrirModal(`<div class="flex items-center justify-between mb-1 flex-wrap gap-2">
@@ -1691,7 +1732,7 @@ async function abrirReclamoAdmin(id){
   }[d.estado]||'';
   abrirModal(`<div class="flex items-center justify-between mb-1 flex-wrap gap-2">
       <h3 class="font-display text-2xl tracking-wide">⚖ ${d.codigo}</h3>
-      <span class="flex items-center gap-2">${chipRca(d.estado)}<button onclick="modalReclamosAdmin()" class="text-ink-400 text-xl">✕</button></span></div>
+      <span class="flex items-center gap-2">${chipRca(d.estado)}<button onclick="rcaVolver()" class="text-ink-400 text-xl">✕</button></span></div>
     <div class="bg-ink-900 text-white rounded-xl px-4 py-2.5 mb-3 text-sm">
       <b>${d.partido.local} ${d.partido.gl??'–'} : ${d.partido.gv??'–'} ${d.partido.visita}</b>
       <span class="block text-[11px] text-white/60">${d.categoria} · Fecha ${d.partido.fecha_numero||''} · ${d.partido.fecha||''} — <b>${d.reclamante}</b> reclama a <b>${d.reclamado}</b></span></div>
