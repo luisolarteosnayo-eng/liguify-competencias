@@ -846,6 +846,7 @@ function modalTorneo(t){
       ${campo('tc-ct','Máx. comando técnico por equipo',t.ct_max_personas??5,'number')}
       ${campo('tc-dur','Duración del partido por defecto (min) — cada categoría puede fijar la suya',t.duracion_partido??90,'number')}
       ${campo('tc-flim','Fecha límite carga equipo',t.fecha_limite_carga_equipo,'date')}
+      ${campo('tc-grupo','Grupo de exclusión de jugadores — torneos con el MISMO texto se validan entre sí: quien ya jugó en uno no puede inscribirse en otro equipo del grupo',t.grupo_exclusion)}
     </div>
     ${toggleC('tc-clbf','Cargar jugadores en LBF',t.cargar_lbf)}
     ${toggleC('tc-scan','Crear jugadores solo con scan de DNI',t.scan_dni_obligatorio)}
@@ -881,6 +882,7 @@ async function guardarTorneo(id){
       lbf_max_jugadores:+$('tc-lbf').value||30, ct_max_personas:+$('tc-ct').value||5,
       duracion_partido:+$('tc-dur').value||90,
       fecha_limite_carga_equipo:$('tc-flim').value||null,
+      grupo_exclusion:($('tc-grupo')&&$('tc-grupo').value.trim())||null,
       cargar_lbf:$('tc-clbf').checked, scan_dni_obligatorio:$('tc-scan').checked,
       permitir_delegados:$('tc-del').checked, permitir_modificacion_equipo:$('tc-modif').checked,
       requiere_autorizacion:$('tc-aut').checked,
