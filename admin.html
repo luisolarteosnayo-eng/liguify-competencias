@@ -2262,7 +2262,7 @@ function modalCategoria(cat){
   const ed=!!cat;
   const anios=[...new Set([...Array.from({length:14},(_,i)=>2022-i),...(ed?[cat.anio_nacimiento]:[])])].sort((a,b)=>b-a);
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">${ed?'EDITAR':'NUEVA'} CATEGORÍA</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
-    <p class="text-xs text-ink-400 mb-4">Llave real de la BD: <b>UNIQUE (torneo, año, modalidad)</b> — un duplicado será rechazado por Postgres.</p>
+    <p class="text-xs text-ink-400 mb-4">Llave real de la BD: <b>UNIQUE (torneo, año, modalidad) entre categorías ACTIVAS</b> — un duplicado activo será rechazado por Postgres; las inactivas no bloquean.</p>
     <div class="grid grid-cols-2 gap-3 text-sm">
       <label><span class="text-ink-400 font-semibold text-xs">Año de nacimiento</span>
         <select id="nc-a" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${anios.map(a=>`<option ${ed&&a===cat.anio_nacimiento?'selected':''}>${a}</option>`).join('')}</select></label>
