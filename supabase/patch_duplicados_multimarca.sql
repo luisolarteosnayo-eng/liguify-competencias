@@ -44,6 +44,7 @@ as $$
   join competencias.categoria cat on cat.id = i.categoria_id
   join competencias.torneo t on t.id = cat.torneo_id
   join competencias.marca mk on mk.id = t.marca_id
+  join competencias.jugador_maestro j on j.id = i.jugador_id
   where t.marca_id = any(p_marcas)
     -- staff de TODAS las marcas pedidas, o nada
     and not exists (select 1 from unnest(p_marcas) pm(id)
