@@ -1746,9 +1746,14 @@ async function abrirReclamoAdmin(id){
       <p class="text-sm">${d.descargo.replace(/</g,'&lt;')}</p>
       <div id="rca-desc-adj" class="mt-2"></div></div>`
     :(d.estado==='en_proceso'?'<p class="text-[11px] text-ink-400 mb-3">⏳ El club reclamado aún no registra su descargo.</p>':'')}
-    ${d.respuesta?`<div class="bg-paper border border-line rounded-xl p-3 mb-3"><p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Respuesta registrada</p><p class="text-sm">${d.respuesta.replace(/</g,'&lt;')}</p></div>`:''}
-    ${acciones?`<label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Respuesta / sustento del organizador (va en el email a los clubes)</span>
+    ${d.respuesta&&!acciones?`<div class="bg-paper border border-line rounded-xl p-3 mb-3"><p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Respuesta registrada</p><p class="text-sm">${d.respuesta.replace(/</g,'&lt;')}</p><div id="rca-resp-adj" class="mt-2"></div></div>`:''}
+    ${acciones?`<label class="block text-sm mb-2"><span class="text-ink-400 font-semibold text-xs">Respuesta / sustento del organizador (va en el email a los clubes)</span>
       <textarea id="rca-resp" rows="3" class="w-full border border-line rounded-xl p-3 text-sm">${(d.respuesta||'').replace(/</g,'&lt;')}</textarea></label>
+    <div class="mb-3">
+      <p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-1.5">Imágenes de la respuesta <span class="normal-case font-normal">(máx. 3 — se ven en el detalle de ambos clubes)</span></p>
+      <span id="rca-resp-adj" class="inline-block align-middle"></span>
+      <label class="inline-block align-middle text-xs font-bold text-ink-500 border border-line rounded-xl px-3 py-2 cursor-pointer hover:bg-paper">📸 AGREGAR IMAGEN<input id="rca-foto-in" type="file" accept="image/*" class="hidden" onchange="rcaAgregarFoto(this)"/></label>
+    </div>
     <div class="flex gap-2">${acciones}</div>`:`<p class="text-[10px] text-ink-400">Reclamo en estado final${d.resuelto_at?' · '+new Date(d.resuelto_at).toLocaleString('es-PE'):''}.</p>`}`,true);
   // adjuntos con URLs firmadas
   let h='';
@@ -1758,11 +1763,46 @@ async function abrirReclamoAdmin(id){
   const cont=$('rca-adj'); if(cont) cont.innerHTML=h||'<span class="text-[11px] text-ink-400">Sin adjuntos.</span>';
   const cd=$('rca-desc-adj');
   if(cd){let hd='';for(const f of (d.descargo_fotos||[])){const u=await urlFirmadaRca(f);hd+=`<a href="${u}" target="_blank"><img src="${u}" class="inline-block w-16 h-16 object-cover rounded-lg border border-sky-200 mr-2 mb-1"/></a>`;}cd.innerHTML=hd;}
+  RCA_RESP_FOTOS=[...(d.respuesta_fotos||[])]; RCA_RESP_NUEVAS=[];
+  await pintarRespFotos();
+}
+/* Imágenes de la respuesta del organizador (máx. 3, como el descargo) */
+let RCA_RESP_FOTOS=[], RCA_RESP_NUEVAS=[];
+async function pintarRespFotos(){
+  const cont=$('rca-resp-adj'); if(!cont) return;
+  let h='';
+  for(const f of RCA_RESP_FOTOS){const u=await urlFirmadaRca(f);
+    h+=`<span class="relative inline-block mr-2 mb-1 align-middle"><a href="${u}" target="_blank"><img src="${u}" class="w-16 h-16 object-cover rounded-lg border border-line"/></a>${RCA_DET&&['generado','en_proceso','pendiente_devolucion'].includes(RCA_DET.estado)?`<button onclick="RCA_RESP_FOTOS=RCA_RESP_FOTOS.filter(x=>x!=='${f.replace(/'/g,'')}');pintarRespFotos()" class="absolute -top-1.5 -right-1.5 bg-brand-500 text-white rounded-full w-5 h-5 text-[10px] font-bold">✕</button>`:''}</span>`;}
+  RCA_RESP_NUEVAS.forEach((n,i)=>{
+    h+=`<span class="relative inline-block mr-2 mb-1 align-middle"><img src="${n.prev}" class="w-16 h-16 object-cover rounded-lg border-2 border-amber-300"/><button onclick="RCA_RESP_NUEVAS.splice(${i},1);pintarRespFotos()" class="absolute -top-1.5 -right-1.5 bg-brand-500 text-white rounded-full w-5 h-5 text-[10px] font-bold">✕</button></span>`;});
+  cont.innerHTML=h;
+}
+async function rcaAgregarFoto(inp){
+  const file=inp.files&&inp.files[0]; inp.value=''; if(!file) return;
+  if(RCA_RESP_FOTOS.length+RCA_RESP_NUEVAS.length>=3){toast('⚠ Máximo 3 imágenes en la respuesta');return;}
+  const f=await redimensionar(file,1600,0.85);
+  const prev=await new Promise(r=>{const rd=new FileReader();rd.onload=e=>r(e.target.result);rd.readAsDataURL(f);});
+  RCA_RESP_NUEVAS.push({file:f,prev});
+  pintarRespFotos();
 }
 async function estadoReclamo(nuevo){
   const resp=$('rca-resp')?$('rca-resp').value.trim():'';
   if((nuevo==='rechazado'||nuevo==='pendiente_devolucion')&&!resp){toast('⚠ Escribe la respuesta/sustento antes de resolver');return;}
-  const {data,error}=await sb.rpc('cambiar_estado_reclamo',{p_id:RCA_ID,p_estado:nuevo,p_respuesta:resp||null});
+  // subir las imágenes nuevas de la respuesta (si hay) y armar la lista final
+  let fotos=null;
+  if(RCA_RESP_NUEVAS.length||RCA_RESP_FOTOS.length!==((RCA_DET&&RCA_DET.respuesta_fotos)||[]).length){
+    const rutas=[...RCA_RESP_FOTOS];
+    for(const n of RCA_RESP_NUEVAS){
+      const ruta=`reclamos/${RCA_ID}/resp-${Date.now()}-${Math.random().toString(36).slice(2,7)}.jpg`;
+      const up=await sb.storage.from('documentos').upload(ruta,n.file,{upsert:true});
+      if(up.error){toast('⚠ No se pudo subir una imagen: '+errNegocio(up.error));return;}
+      rutas.push(ruta);
+    }
+    fotos=rutas;
+  }
+  const args={p_id:RCA_ID,p_estado:nuevo,p_respuesta:resp||null};
+  if(fotos!==null) args.p_fotos=fotos;   // solo si hubo cambios (compatible mientras no corra el SQL)
+  const {data,error}=await sb.rpc('cambiar_estado_reclamo',args);
   if(error){toast(errNegocio(error));return;}
   try{await sb.functions.invoke('enviar-aviso-reclamo',{body:{reclamo_id:RCA_ID}});}catch(_){}
   toast('⚖ Reclamo → '+((RCA_ESTADOS[nuevo]||[nuevo])[0])+' ✔ — emails enviados');

@@ -1754,9 +1754,17 @@ async function vistaReclamo(){
         <p class="text-[10px] text-sky-700/70 mt-1.5">Puedes registrar tu descargo mientras el reclamo esté EN PROCESO.${d.descargo_at?' Última actualización: '+new Date(d.descargo_at).toLocaleString('es-PE'):''}</p>`
       :`<p class="text-sm">${(d.descargo||'—').replace(/</g,'&lt;')}</p><div id="rc-desc-adj" class="mt-2"></div>`}
     </div>`:''}
-    ${d.respuesta?`<div class="bg-paper border border-line rounded-xl p-3 mb-3"><p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Respuesta del organizador</p><p class="text-sm">${d.respuesta.replace(/</g,'&lt;')}</p></div>`:''}
+    ${d.respuesta?`<div class="bg-paper border border-line rounded-xl p-3 mb-3"><p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider">Respuesta del organizador</p><p class="text-sm">${d.respuesta.replace(/</g,'&lt;')}</p><div id="rc-resp-adj" class="mt-2"></div></div>`:''}
     <p class="text-[10px] text-ink-400">Presentado ${d.enviado_at?new Date(d.enviado_at).toLocaleString('es-PE'):'—'}${d.resuelto_at?' · Resuelto '+new Date(d.resuelto_at).toLocaleString('es-PE'):''}</p>`,true);
-  pintarAdjuntosReclamo(); pintarDescargoAdj();
+  pintarAdjuntosReclamo(); pintarDescargoAdj(); pintarRespuestaAdj(d);
+}
+/* Imágenes que el organizador adjuntó a su respuesta */
+async function pintarRespuestaAdj(d){
+  const cont=$('rc-resp-adj'); if(!cont) return;
+  let h='';
+  for(const f of ((d&&d.respuesta_fotos)||[])){const u=await urlFirmada(f);
+    h+=`<a href="${u}" target="_blank"><img src="${u}" class="inline-block w-16 h-16 object-cover rounded-lg border border-line mr-2 mb-1"/></a>`;}
+  cont.innerHTML=h;
 }
 let RECL_DESC={fotos:[]};
 async function pintarDescargoAdj(){
