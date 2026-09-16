@@ -4605,7 +4605,7 @@ async function imprimirPlanillasJornada(jid){
   const eqIds=[...new Set(ms.flatMap(m=>[m.local_id,m.visita_id]))];
   const [ins,cts]=await Promise.all([
     sb.from('inscripcion_lbf').select('id,equipo_id,dorsal,capitan,jugador_id').in('equipo_id',eqIds).eq('en_lbf',true).eq('inhabilitado',false),
-    sb.from('comando_tecnico').select('id,equipo_id,rol,persona_id').in('equipo_id',eqIds).eq('estado','activo').eq('inhabilitado',false)
+    sb.from('comando_tecnico').select('id,equipo_id,rol,persona_id').in('equipo_id',eqIds).eq('inhabilitado',false)
   ]);
   if(ins.error){toast(errNegocio(ins.error));return;}
   const jids=[...new Set([...(ins.data||[]).map(i=>i.jugador_id),...((cts.data)||[]).map(c=>c.persona_id)])];
@@ -4755,7 +4755,7 @@ async function imprimirPlanillasTorneo(tipo,valor){
   const EQX=Object.fromEntries(eqs.map(e=>[e.id,e])), CLX=Object.fromEntries(cls.map(c=>[c.id,c]));
   const [ins,ctsX]=await Promise.all([
     sb.from('inscripcion_lbf').select('id,equipo_id,dorsal,capitan,jugador_id').in('equipo_id',eqIds).eq('en_lbf',true).eq('inhabilitado',false),
-    sb.from('comando_tecnico').select('id,equipo_id,rol,persona_id').in('equipo_id',eqIds).eq('estado','activo').eq('inhabilitado',false)
+    sb.from('comando_tecnico').select('id,equipo_id,rol,persona_id').in('equipo_id',eqIds).eq('inhabilitado',false)
   ]);
   const porEqCTX={}; ((ctsX&&ctsX.data)||[]).forEach(c=>{(porEqCTX[c.equipo_id]=porEqCTX[c.equipo_id]||[]).push(c);});
   const jids=[...new Set([...(ins.data||[]).map(i=>i.jugador_id),...((ctsX&&ctsX.data)||[]).map(c=>c.persona_id)])];
@@ -5873,7 +5873,7 @@ async function modalResultado(m){
   const [ins,pl,cts,pct]=await Promise.all([
     sb.from('inscripcion_lbf').select('id,equipo_id,dorsal,jugador_id').in('equipo_id',[m.local_id,m.visita_id]).eq('en_lbf',true).eq('inhabilitado',false),
     sb.from('planilla_partido').select('*').eq('partido_id',m.id),
-    sb.from('comando_tecnico').select('id,equipo_id,rol,persona_id').in('equipo_id',[m.local_id,m.visita_id]).eq('estado','activo').eq('inhabilitado',false),
+    sb.from('comando_tecnico').select('id,equipo_id,rol,persona_id').in('equipo_id',[m.local_id,m.visita_id]).eq('inhabilitado',false),
     sb.from('planilla_ct').select('*').eq('partido_id',m.id)
   ]);
   const jids=[...new Set([...(ins.data||[]).map(i=>i.jugador_id),...(cts.data||[]).map(c=>c.persona_id)])];
