@@ -2183,18 +2183,32 @@ async function abrirTorneo(t){
   const tl=$('t-logo-adm'); if(tl) tl.innerHTML=logoTorneoAdm();
   const {data:cs,error}=await sb.from('categoria').select('*').eq('torneo_id',t.id).order('anio_nacimiento',{ascending:false});
   if(error){msg(errNegocio(error),'err');return;}
-  $('lista-categorias').innerHTML=cs.map(c=>`
-    <button onclick='abrirCategoria(${JSON.stringify(c)})' class="w-full bg-white border border-line rounded-2xl px-5 py-4 flex items-center gap-4 hover:shadow-md transition text-left">
-      <span class="w-11 h-11 rounded-xl bg-ink-900 text-white font-display grid place-items-center text-lg">${String(c.anio_nacimiento).slice(2)}</span>
-      <span class="flex-1"><span class="font-bold block">${c.nombre_display||('Categoría '+c.anio_nacimiento+' / '+c.modalidad)}</span>
-      <span class="text-xs text-ink-400">Modalidad ${c.modalidad}</span></span>
-      <span class="text-ink-400">→</span></button>`).join('') || '<p class="text-ink-400 text-sm">Sin categorías — crea la primera.</p>';
-  renderKPIs('t-kpis-adm',(cs||[]).map(c=>c.id));
-  renderTablaGeneral('t-general-adm',t,cs);
-  // Torneo de UNA sola categoría: entrar directo a la categoría (el ← de la
+  const activas=(cs||[]).filter(c=>c.activa!==false);
+  $('lista-categorias').innerHTML=cs.map(c=>{const inac=c.activa===false;return `
+    <div class="w-full bg-white border border-line rounded-2xl px-5 py-4 flex items-center gap-4 transition ${inac?'opacity-60':'hover:shadow-md'}">
+      <button onclick='abrirCategoria(${JSON.stringify(c)})' class="flex-1 flex items-center gap-4 text-left min-w-0">
+        <span class="w-11 h-11 rounded-xl ${inac?'bg-ink-400':'bg-ink-900'} text-white font-display grid place-items-center text-lg shrink-0">${String(c.anio_nacimiento).slice(2)}</span>
+        <span class="flex-1 min-w-0"><span class="font-bold block truncate">${c.nombre_display||('Categoría '+c.anio_nacimiento+' / '+c.modalidad)} ${inac?'<span class="text-[9px] font-bold bg-brand-100 text-brand-600 rounded-full px-2 py-0.5 ml-1">INACTIVA</span>':''}</span>
+        <span class="text-xs text-ink-400">Modalidad ${c.modalidad}${inac?' · oculta del público':''}</span></span>
+      </button>
+      ${esAdmin()?`<button onclick="toggleCategoriaActiva('${c.id}',${inac?'true':'false'},'${(c.nombre_display||('Categoría '+c.anio_nacimiento)).replace(/'/g,'')}')" title="${inac?'Reactivar: vuelve a verse en el público y en las herramientas del torneo':'Inactivar: se oculta del público y de las herramientas del torneo — conserva TODO su historial'}" class="shrink-0 text-[10px] font-bold rounded-lg px-2.5 py-1.5 border ${inac?'text-emerald-700 border-emerald-300 hover:bg-emerald-50':'text-ink-400 border-line hover:bg-brand-50 hover:text-brand-600'}">${inac?'✔ REACTIVAR':'🚫 INACTIVAR'}</button>`:''}
+      <span class="text-ink-400 shrink-0">→</span>
+    </div>`;}).join('') || '<p class="text-ink-400 text-sm">Sin categorías — crea la primera.</p>';
+  renderKPIs('t-kpis-adm',activas.map(c=>c.id));
+  renderTablaGeneral('t-general-adm',t,activas);
+  // Torneo de UNA sola categoría ACTIVA: entrar directo a la categoría (el ← de la
   // categoría sigue llevando a la pantalla del torneo: tabla general, planillas, etc.)
-  if((cs||[]).length===1){ await abrirCategoria(cs[0]); return; }
+  if((cs||[]).length===1&&activas.length===1){ await abrirCategoria(activas[0]); return; }
   show('s-torneo');
+}
+/* Inactivar / reactivar una categoría: no borra nada, solo la oculta del
+   público y de los conteos del torneo (el historial queda intacto) */
+async function toggleCategoriaActiva(id,activar,nombre){
+  if(!activar&&!confirm(`¿INACTIVAR ${nombre}?\n\nSe oculta del público y deja de contar en los KPIs y la tabla general del torneo. No se borra nada: fixture, resultados y jugadores quedan intactos, y puedes reactivarla cuando quieras.`))return;
+  const {error}=await sb.from('categoria').update({activa:activar}).eq('id',id);
+  if(error){toast(errNegocio(error));return;}
+  toast(activar?'✔ Categoría reactivada — visible de nuevo en el público':'🚫 Categoría inactivada — oculta del público (historial conservado)');
+  await abrirTorneo(TORNEO);
 }
 /* ---- 🏆 TABLA GENERAL del torneo (config "Mostrar tabla general") ----
    Acumulado por EQUIPO de la suma de TODAS sus categorías (PJ/PG/PE/PP/GF/GC/PTS).
