@@ -4575,13 +4575,17 @@ async function imprimirPlanillasJornada(jid){
   const ms=(pms||[]).filter(m=>m.local_id&&m.visita_id);
   if(!ms.length){toast('⚠ Esta fecha no tiene partidos con equipos definidos');return;}
   const eqIds=[...new Set(ms.flatMap(m=>[m.local_id,m.visita_id]))];
-  const ins=await sb.from('inscripcion_lbf').select('id,equipo_id,dorsal,capitan,jugador_id').in('equipo_id',eqIds).eq('en_lbf',true).eq('inhabilitado',false);
+  const [ins,cts]=await Promise.all([
+    sb.from('inscripcion_lbf').select('id,equipo_id,dorsal,capitan,jugador_id').in('equipo_id',eqIds).eq('en_lbf',true).eq('inhabilitado',false),
+    sb.from('comando_tecnico').select('id,equipo_id,rol,persona_id').in('equipo_id',eqIds).eq('estado','activo').eq('inhabilitado',false)
+  ]);
   if(ins.error){toast(errNegocio(ins.error));return;}
-  const jids=[...new Set((ins.data||[]).map(i=>i.jugador_id))];
+  const jids=[...new Set([...(ins.data||[]).map(i=>i.jugador_id),...((cts.data)||[]).map(c=>c.persona_id)])];
   const js=jids.length?await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,foto_url').in('id',jids):{data:[]};
   await fotosDelTorneo(js.data||[]);
   const jmap=Object.fromEntries((js.data||[]).map(x=>[x.id,x]));
   const porEq={}; (ins.data||[]).forEach(i=>{(porEq[i.equipo_id]=porEq[i.equipo_id]||[]).push(i);});
+  const porEqCT={}; ((cts.data)||[]).forEach(c=>{(porEqCT[c.equipo_id]=porEqCT[c.equipo_id]||[]).push(c);});
   Object.values(porEq).forEach(l=>l.sort((a,b)=>{const ja=jmap[a.jugador_id]||{},jb=jmap[b.jugador_id]||{};return ordCamiseta(a,b,(ja.nombres||'')+' '+(ja.apellidos||''),(jb.nombres||'')+' '+(jb.apellidos||''));}));
   const esc=t=>String(t??'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
   const nom=id=>esc(nomEq(EQUIPOS[id]||{})||'—');
@@ -4595,10 +4599,16 @@ async function imprimirPlanillasJornada(jid){
         <td class="c-box"></td><td class="c-box"></td><td class="c-box"></td>
       </tr>`;}).join('');
     const extra='<tr><td class="c-foto"></td><td class="c-dor"></td><td class="c-nom c-raya"></td><td class="c-box"></td><td class="c-box"></td><td class="c-box"></td></tr>'.repeat(3);
+    // 🎓 comando técnico: nombre + rol, con casillas TA/TR (la de goles va anulada)
+    const ctFilas=(porEqCT[eqId]||[]).map(c=>{const p=jmap[c.persona_id]||{};
+      return `<tr><td class="c-foto"></td><td class="c-dor">CT</td>
+        <td class="c-nom">${esc(p.nombres||'')} ${esc(p.apellidos||'')}<span class="doc">${esc(c.rol||'')}</span></td>
+        <td class="c-box c-x"></td><td class="c-box"></td><td class="c-box"></td></tr>`;}).join('');
+    const ctBloque=ctFilas?`<tr><td colspan="6" class="ct-h">COMANDO TÉCNICO</td></tr>${ctFilas}`:'';
     return `<div class="equipo">
       <div class="eq-head">${cl.escudo_url?`<img src="${cl.escudo_url}"/>`:''}<span>${esc(nomEq(e)||'—')}</span></div>
       <table><thead><tr><th></th><th>#</th><th>JUGADOR</th><th class="th-box">⚽</th><th class="th-box">TA</th><th class="th-box">TR</th></tr></thead>
-      <tbody>${filas||''}${extra}</tbody></table>
+      <tbody>${filas||''}${extra}${ctBloque}</tbody></table>
     </div>`;
   };
   const pagina=m=>`<div class="pagina">
@@ -4647,6 +4657,8 @@ async function imprimirPlanillasJornada(jid){
     .c-nom .doc{display:block;font-size:7px;font-weight:normal;color:#666}
     .c-raya{border-bottom:1px solid #ccc;height:7mm}
     .c-box{width:7mm;height:7mm;border:1px solid #888}
+    .c-x{background:repeating-linear-gradient(45deg,#ddd 0,#ddd 1px,#fff 1px,#fff 3px)}
+    .ct-h{font-size:7px;font-weight:bold;letter-spacing:2px;color:#555;background:#eee;padding:0.8mm 1mm;border-bottom:1px solid #999}
     .obs{font-size:8px;font-weight:bold;color:#555;margin-top:4mm}
     .obs-l{border-bottom:1px solid #999;height:6mm}
     .firmas{display:flex;gap:8mm;margin-top:9mm}
@@ -4713,8 +4725,12 @@ async function imprimirPlanillasTorneo(tipo,valor){
   const eqs=(await sb.from('equipo').select('id,nombre,club_id').in('id',eqIds)).data||[];
   const cls=(await sb.from('club').select('id,nombre,escudo_url').in('id',[...new Set(eqs.map(e=>e.club_id))])).data||[];
   const EQX=Object.fromEntries(eqs.map(e=>[e.id,e])), CLX=Object.fromEntries(cls.map(c=>[c.id,c]));
-  const ins=await sb.from('inscripcion_lbf').select('id,equipo_id,dorsal,capitan,jugador_id').in('equipo_id',eqIds).eq('en_lbf',true).eq('inhabilitado',false);
-  const jids=[...new Set((ins.data||[]).map(i=>i.jugador_id))];
+  const [ins,ctsX]=await Promise.all([
+    sb.from('inscripcion_lbf').select('id,equipo_id,dorsal,capitan,jugador_id').in('equipo_id',eqIds).eq('en_lbf',true).eq('inhabilitado',false),
+    sb.from('comando_tecnico').select('id,equipo_id,rol,persona_id').in('equipo_id',eqIds).eq('estado','activo').eq('inhabilitado',false)
+  ]);
+  const porEqCTX={}; ((ctsX&&ctsX.data)||[]).forEach(c=>{(porEqCTX[c.equipo_id]=porEqCTX[c.equipo_id]||[]).push(c);});
+  const jids=[...new Set([...(ins.data||[]).map(i=>i.jugador_id),...((ctsX&&ctsX.data)||[]).map(c=>c.persona_id)])];
   const jgs=jids.length?await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,foto_url').in('id',jids):{data:[]};
   await fotosDelTorneo(jgs.data||[]);
   const jmap=Object.fromEntries((jgs.data||[]).map(x=>[x.id,x]));
@@ -4732,10 +4748,15 @@ async function imprimirPlanillasTorneo(tipo,valor){
         <td class="c-box"></td><td class="c-box"></td><td class="c-box"></td>
       </tr>`;}).join('');
     const extra='<tr><td class="c-foto"></td><td class="c-dor"></td><td class="c-nom c-raya"></td><td class="c-box"></td><td class="c-box"></td><td class="c-box"></td></tr>'.repeat(3);
+    const ctFilas=(porEqCTX[eqId]||[]).map(c=>{const p=jmap[c.persona_id]||{};
+      return `<tr><td class="c-foto"></td><td class="c-dor">CT</td>
+        <td class="c-nom">${esc(p.nombres||'')} ${esc(p.apellidos||'')}<span class="doc">${esc(c.rol||'')}</span></td>
+        <td class="c-box c-x"></td><td class="c-box"></td><td class="c-box"></td></tr>`;}).join('');
+    const ctBloque=ctFilas?`<tr><td colspan="6" class="ct-h">COMANDO TÉCNICO</td></tr>${ctFilas}`:'';
     return `<div class="equipo">
       <div class="eq-head">${cl.escudo_url?`<img src="${cl.escudo_url}"/>`:''}<span>${nomX(eqId)}</span></div>
       <table><thead><tr><th></th><th>#</th><th>JUGADOR</th><th class="th-box">⚽</th><th class="th-box">TA</th><th class="th-box">TR</th></tr></thead>
-      <tbody>${filas||''}${extra}</tbody></table>
+      <tbody>${filas||''}${extra}${ctBloque}</tbody></table>
     </div>`;
   };
   const pagina=m=>{const c=CT[m.categoria_id]||{}, n=(JN[m.jornada_id]||{}).numero;
@@ -4786,6 +4807,8 @@ async function imprimirPlanillasTorneo(tipo,valor){
     .c-nom .doc{display:block;font-size:7px;font-weight:normal;color:#666}
     .c-raya{border-bottom:1px solid #ccc;height:7mm}
     .c-box{width:7mm;height:7mm;border:1px solid #888}
+    .c-x{background:repeating-linear-gradient(45deg,#ddd 0,#ddd 1px,#fff 1px,#fff 3px)}
+    .ct-h{font-size:7px;font-weight:bold;letter-spacing:2px;color:#555;background:#eee;padding:0.8mm 1mm;border-bottom:1px solid #999}
     .obs{font-size:8px;font-weight:bold;color:#555;margin-top:4mm}
     .obs-l{border-bottom:1px solid #999;height:6mm}
     .firmas{display:flex;gap:8mm;margin-top:9mm}
@@ -5814,20 +5837,25 @@ async function guardarVideoPartido(id,quitar){
   cerrarModal(); toast(quitar?'Video quitado':'📺 Video guardado ✔ — visible en el público');
   if(esMesa()) await renderMesa(); else await renderFixture();
 }
+let RS_CT=[], RS_PCT={};
 async function modalResultado(m){
   RS_M=m;
   const L=EQUIPOS[m.local_id],V=EQUIPOS[m.visita_id];
-  // jugadores en LBF de ambos equipos + planilla ya registrada del partido
-  const [ins,pl]=await Promise.all([
+  // jugadores en LBF + comando técnico de ambos equipos + planillas del partido
+  const [ins,pl,cts,pct]=await Promise.all([
     sb.from('inscripcion_lbf').select('id,equipo_id,dorsal,jugador_id').in('equipo_id',[m.local_id,m.visita_id]).eq('en_lbf',true).eq('inhabilitado',false),
-    sb.from('planilla_partido').select('*').eq('partido_id',m.id)
+    sb.from('planilla_partido').select('*').eq('partido_id',m.id),
+    sb.from('comando_tecnico').select('id,equipo_id,rol,persona_id').in('equipo_id',[m.local_id,m.visita_id]).eq('estado','activo').eq('inhabilitado',false),
+    sb.from('planilla_ct').select('*').eq('partido_id',m.id)
   ]);
-  const jids=(ins.data||[]).map(i=>i.jugador_id);
+  const jids=[...new Set([...(ins.data||[]).map(i=>i.jugador_id),...(cts.data||[]).map(c=>c.persona_id)])];
   const js=jids.length?await sb.from('jugador_maestro').select('id,nombres,apellidos,posicion').in('id',jids):{data:[]};
   const jn=Object.fromEntries((js.data||[]).map(j=>[j.id,(j.nombres||'')+' '+(j.apellidos||'')]));
   const jpos=Object.fromEntries((js.data||[]).map(j=>[j.id,j.posicion||'']));
   RS_INS=(ins.data||[]).map(i=>({...i,nombre:jn[i.jugador_id]||'—',posicion:jpos[i.jugador_id]||''})).sort((a,b)=>ordCamiseta(a,b,a.nombre,b.nombre));
   RS_PLANILLA=Object.fromEntries((pl.data||[]).map(p=>[p.inscripcion_id,p]));
+  RS_CT=(cts.data||[]).map(c=>({...c,nombre:jn[c.persona_id]||'—'}));
+  RS_PCT=Object.fromEntries(((pct&&pct.data)||[]).map(p=>[p.ct_id,p]));
   // ⭐ equipo ideal de la FECHA: lo ya marcado para estos jugadores en esta jornada
   RS_EI={};
   if(m.jornada_id&&RS_INS.length){
@@ -5844,6 +5872,15 @@ async function modalResultado(m){
     <input id="st-a-${i.id}" type="number" min="0" value="${p.amarillas||0}" title="Tarjetas amarillas" class="w-10 border border-yellow-300 bg-yellow-50 rounded-lg text-center py-1 text-xs font-bold"/>
     <input id="st-r-${i.id}" type="number" min="0" value="${p.rojas||0}" title="Tarjetas rojas" class="w-10 border border-brand-100 bg-brand-50 rounded-lg text-center py-1 text-xs font-bold"/>
     ${m.jornada_id?selEI(i):''}
+  </div>`;};
+  // 🎓 fila del comando técnico: solo tarjetas (sin goles ni equipo ideal)
+  const filaCT=c=>{const p=RS_PCT[c.id]||{};return `<div class="flex items-center gap-2 py-1 border-b border-line last:border-0">
+    <span class="w-5 text-center shrink-0 text-[11px]" title="Comando técnico">🎓</span>
+    <span class="flex-1 min-w-0 text-xs font-semibold truncate">${c.nombre} <span class="text-[9px] text-ink-400 font-normal">· ${c.rol}</span></span>
+    <span class="w-10 shrink-0"></span>
+    <input id="ct-a-${c.id}" type="number" min="0" value="${p.amarillas||0}" title="Tarjetas amarillas del técnico" class="w-10 border border-yellow-300 bg-yellow-50 rounded-lg text-center py-1 text-xs font-bold"/>
+    <input id="ct-r-${c.id}" type="number" min="0" value="${p.rojas||0}" title="Tarjetas rojas del técnico" class="w-10 border border-brand-100 bg-brand-50 rounded-lg text-center py-1 text-xs font-bold"/>
+    ${m.jornada_id?'<span class="w-[58px] shrink-0"></span>':''}
   </div>`;};
   const optsFig=RS_INS.length?[[m.local_id,L?nomEq(L):''],[m.visita_id,V?nomEq(V):'']].map(([eqId,nom])=>{
     const list=RS_INS.filter(i=>i.equipo_id===eqId);
@@ -5883,6 +5920,8 @@ async function modalResultado(m){
             <span class="flex gap-2 text-[10px] font-bold text-ink-400 shrink-0"><span class="w-10 text-center" title="Goles">⚽</span><span class="w-10 text-center">🟨</span><span class="w-10 text-center">🟥</span>${m.jornada_id?'<span class="w-[58px] text-center" title="Equipo ideal de la fecha">⭐</span>':''}</span>
           </div>
           <div>${RS_INS.filter(i=>i.equipo_id===eqId).map(filaJ).join('')||'<p class="text-xs text-ink-400 py-3 text-center">Sin jugadores en LBF.</p>'}</div>
+          ${RS_CT.filter(c=>c.equipo_id===eqId).length?`<p class="text-[9px] font-bold text-ink-400 uppercase tracking-wider mt-2 pt-1 border-t border-dashed border-line">🎓 Comando técnico</p>
+          <div>${RS_CT.filter(c=>c.equipo_id===eqId).map(filaCT).join('')}</div>`:''}
         </div>`).join('')}
       </div>
       <label class="block text-sm mt-3"><span class="text-ink-400 font-semibold text-xs">⭐ Figura del partido</span>
@@ -5902,6 +5941,7 @@ async function guardarResultado(id){
       penales:false,penales_local:null,penales_visita:null,figura_inscripcion_id:null,video_url:null}).eq('id',id);
     if(error){toast(errNegocio(error));return;}
     const pl=await sb.from('planilla_partido').update({jugo:false,goles:0,amarillas:0,rojas:0,minutos:0,asistencias:0}).eq('partido_id',id);
+    try{await sb.from('planilla_ct').delete().eq('partido_id',id);}catch(_){}   // tarjetas del CT también se anulan
     // al anular el resultado, sus jugadores salen del equipo ideal de la fecha
     if(RS_M&&RS_M.jornada_id&&RS_INS.length) await sb.from('equipo_ideal').delete().eq('jornada_id',RS_M.jornada_id).in('inscripcion_id',RS_INS.map(i=>i.id));
     if(pl.error) toast('Partido reprogramado, pero la planilla no se pudo limpiar: '+errNegocio(pl.error));
@@ -5953,9 +5993,21 @@ async function guardarResultado(id){
       else nEI=sel.length;
     }
   }
+  // 🎓 tarjetas del comando técnico (solo las que cambiaron)
+  let nCT=0, errCT='';
+  const ctCambios=RS_CT.map(c=>{
+    const a=+($('ct-a-'+c.id)?.value||0), r=+($('ct-r-'+c.id)?.value||0);
+    const antes=RS_PCT[c.id]||{amarillas:0,rojas:0};
+    return (a!==(antes.amarillas||0)||r!==(antes.rojas||0))?{partido_id:id,ct_id:c.id,amarillas:a,rojas:r}:null;
+  }).filter(Boolean);
+  if(ctCambios.length){
+    const up=await sb.from('planilla_ct').upsert(ctCambios,{onConflict:'partido_id,ct_id'});
+    if(up.error) errCT=errNegocio(up.error); else nCT=ctCambios.length;
+  }
   cerrarModal();
   if(errEI) toast(`Resultado guardado ✔ pero el ⭐ equipo ideal NO se registró: ${errEI}`);
-  else toast(`Resultado guardado ✔${cambios.length?` — estadísticas de ${cambios.length} jugador(es) registradas`:''}${nEI?` — ⭐ ${nEI} al equipo ideal de la fecha`:''} — tabla recalculada y publicada en vivo ⚡`);
+  else if(errCT) toast(`Resultado guardado ✔ pero las tarjetas del CT no se registraron: ${errCT}`);
+  else toast(`Resultado guardado ✔${cambios.length?` — estadísticas de ${cambios.length} jugador(es) registradas`:''}${nCT?` — 🎓 tarjetas de ${nCT} técnico(s)`:''}${nEI?` — ⭐ ${nEI} al equipo ideal de la fecha`:''} — tabla recalculada y publicada en vivo ⚡`);
   if(esMesa()) await renderMesa(); else {await renderFixture(); await renderTabla();}
 }
 
