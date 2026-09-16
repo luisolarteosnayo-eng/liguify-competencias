@@ -2191,7 +2191,8 @@ async function abrirTorneo(t){
         <span class="flex-1 min-w-0"><span class="font-bold block truncate">${c.nombre_display||('Categoría '+c.anio_nacimiento+' / '+c.modalidad)} ${inac?'<span class="text-[9px] font-bold bg-brand-100 text-brand-600 rounded-full px-2 py-0.5 ml-1">INACTIVA</span>':''}</span>
         <span class="text-xs text-ink-400">Modalidad ${c.modalidad}${inac?' · oculta del público':''}</span></span>
       </button>
-      ${esAdmin()?`<button onclick="toggleCategoriaActiva('${c.id}',${inac?'true':'false'},'${(c.nombre_display||('Categoría '+c.anio_nacimiento)).replace(/'/g,'')}')" title="${inac?'Reactivar: vuelve a verse en el público y en las herramientas del torneo':'Inactivar: se oculta del público y de las herramientas del torneo — conserva TODO su historial'}" class="shrink-0 text-[10px] font-bold rounded-lg px-2.5 py-1.5 border ${inac?'text-emerald-700 border-emerald-300 hover:bg-emerald-50':'text-ink-400 border-line hover:bg-brand-50 hover:text-brand-600'}">${inac?'✔ REACTIVAR':'🚫 INACTIVAR'}</button>`:''}
+      ${esAdmin()?`<button onclick='modalCategoria(${JSON.stringify(c).replace(/'/g,"&#39;")})' title="Editar categoría: año, modalidad (F7/F9/F11), nombre y duración del partido" class="shrink-0 text-[10px] font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper">✏️</button>
+      <button onclick="toggleCategoriaActiva('${c.id}',${inac?'true':'false'},'${(c.nombre_display||('Categoría '+c.anio_nacimiento)).replace(/'/g,'')}')" title="${inac?'Reactivar: vuelve a verse en el público y en las herramientas del torneo':'Inactivar: se oculta del público y de las herramientas del torneo — conserva TODO su historial'}" class="shrink-0 text-[10px] font-bold rounded-lg px-2.5 py-1.5 border ${inac?'text-emerald-700 border-emerald-300 hover:bg-emerald-50':'text-ink-400 border-line hover:bg-brand-50 hover:text-brand-600'}">${inac?'✔ REACTIVAR':'🚫 INACTIVAR'}</button>`:''}
       <span class="text-ink-400 shrink-0">→</span>
     </div>`;}).join('') || '<p class="text-ink-400 text-sm">Sin categorías — crea la primera.</p>';
   renderKPIs('t-kpis-adm',activas.map(c=>c.id));
@@ -2257,19 +2258,23 @@ async function renderTablaGeneral(contId,torneo,cats){
     <p class="px-5 py-2 text-[10px] text-ink-400 border-t border-line">Suma de los resultados de cada equipo en todas las categorías del torneo. Orden: puntos, diferencia de gol, goles a favor.</p>
   </div>`;
 }
-function modalCategoria(){
-  const anios=Array.from({length:14},(_,i)=>2022-i);
-  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">NUEVA CATEGORÍA</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+function modalCategoria(cat){
+  const ed=!!cat;
+  const anios=[...new Set([...Array.from({length:14},(_,i)=>2022-i),...(ed?[cat.anio_nacimiento]:[])])].sort((a,b)=>b-a);
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">${ed?'EDITAR':'NUEVA'} CATEGORÍA</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
     <p class="text-xs text-ink-400 mb-4">Llave real de la BD: <b>UNIQUE (torneo, año, modalidad)</b> — un duplicado será rechazado por Postgres.</p>
     <div class="grid grid-cols-2 gap-3 text-sm">
       <label><span class="text-ink-400 font-semibold text-xs">Año de nacimiento</span>
-        <select id="nc-a" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${anios.map(a=>`<option>${a}</option>`).join('')}</select></label>
+        <select id="nc-a" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${anios.map(a=>`<option ${ed&&a===cat.anio_nacimiento?'selected':''}>${a}</option>`).join('')}</select></label>
       <label><span class="text-ink-400 font-semibold text-xs">Modalidad</span>
-        <select id="nc-m" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"><option>F7</option><option>F9</option><option>F11</option></select></label>
+        <select id="nc-m" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">${['F7','F9','F11'].map(m=>`<option ${ed&&m===cat.modalidad?'selected':''}>${m}</option>`).join('')}</select></label>
+      ${ed?`<label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Nombre para mostrar — vacío = se regenera con año y modalidad</span>
+        <input id="nc-n" value="${(cat.nombre_display||'').replace(/"/g,'&quot;')}" class="w-full border-b border-line py-1.5 font-semibold"/></label>`:''}
       <label class="col-span-2"><span class="text-ink-400 font-semibold text-xs">Duración del partido (min) — vacío = hereda del torneo (${TORNEO?.duracion_partido||90}')</span>
-        <input id="nc-d" type="number" min="1" placeholder="${TORNEO?.duracion_partido||90}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+        <input id="nc-d" type="number" min="1" value="${ed&&cat.duracion_partido?cat.duracion_partido:''}" placeholder="${TORNEO?.duracion_partido||90}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
     </div>
-    <button onclick="crearCategoria()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl mt-4 hover:bg-brand-600">CREAR</button>`);
+    ${ed?'<p class="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mt-3">⚠ Cambiar la <b>modalidad</b> afecta la formación del equipo ideal y las nuevas planillas (lo ya jugado no se toca). Cambiar el <b>año</b> no re-marca las excepciones de edad de los ya inscritos.</p>':''}
+    <button onclick="${ed?`editarCategoria('${cat.id}')`:'crearCategoria()'}" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl mt-4 hover:bg-brand-600">${ed?'GUARDAR CAMBIOS':'CREAR'}</button>`);
 }
 async function crearCategoria(){
   const a=+$('nc-a').value, m=$('nc-m').value;
@@ -2277,6 +2282,15 @@ async function crearCategoria(){
   const {error}=await sb.from('categoria').insert({torneo_id:TORNEO.id,anio_nacimiento:a,modalidad:m,nombre_display:`Categoría ${a} / ${m}`,duracion_partido:d?Math.max(1,+d||0):null});
   if(error){toast(errNegocio(error));return;}
   cerrarModal(); toast(`Categoría ${a}/${m} creada en la BD ✔`); abrirTorneo(TORNEO);
+}
+async function editarCategoria(id){
+  const a=+$('nc-a').value, m=$('nc-m').value, d=$('nc-d').value.trim();
+  let n=($('nc-n')&&$('nc-n').value.trim())||'';
+  // si el nombre sigue el patrón automático (o quedó vacío), se regenera
+  if(!n||/^Categoría \d{4} \/ F\d+$/.test(n)) n=`Categoría ${a} / ${m}`;
+  const {error}=await sb.from('categoria').update({anio_nacimiento:a,modalidad:m,nombre_display:n,duracion_partido:d?Math.max(1,+d||0):null}).eq('id',id);
+  if(error){toast(errNegocio(error));return;}
+  cerrarModal(); toast(`Categoría actualizada ✔ — ${n} (${m})`); abrirTorneo(TORNEO);
 }
 /* ---- Relación del COMANDO TÉCNICO del torneo en PDF (imprimir/guardar):
    agrupada por CLUB (alfabético) → categoría, con foto, DNI y nombres.
