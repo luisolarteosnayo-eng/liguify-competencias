@@ -1564,6 +1564,16 @@ async function modalDuplicados(){
           <span class="flex-1 min-w-0"><b>${t.nombre}</b> <span class="text-[10px] text-ink-400">· ${t.estado==='en_curso'?'en curso':t.estado}</span></span>
         </label>`).join('')}
       </div>
+      ${(MARCAS||[]).filter(m=>m.id!==MARCA.id).length?`
+      <div class="border-t border-dashed border-line mt-2 pt-2">
+        <p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-1">Cruzar también con OTRAS MARCAS de la empresa</p>
+        ${(MARCAS||[]).filter(m=>m.id!==MARCA.id).map(m=>`
+          <label class="flex items-center gap-2 py-1 text-sm">
+            <input type="checkbox" class="dup-m w-4 h-4 accent-[#d9232e]" value="${m.id}" onchange="dupToggleMarca(this,'${m.id}',${JSON.stringify(m.nombre).replace(/"/g,'&quot;')})"/>
+            <span class="font-bold">${m.nombre}</span>
+          </label>
+          <div id="dup-mt-${m.id}" class="pl-6"></div>`).join('')}
+      </div>`:''}
     </div>
     <label class="flex items-start gap-2 text-xs font-semibold mb-3">
       <input id="dup-mismoclub" type="checkbox" class="w-4 h-4 mt-0.5 accent-[#d9232e]" checked/>
@@ -1574,14 +1584,30 @@ async function modalDuplicados(){
     <div id="dup-lista" class="max-h-[58vh] overflow-y-auto text-sm"></div>`,'full');
 }
 function dupTodos(on){ document.querySelectorAll('.dup-t').forEach(c=>c.checked=on); }
+/* Marcar otra marca de la empresa: carga sus torneos como opciones del cruce */
+let DUP_NOMT={};
+async function dupToggleMarca(chk,mid,mnombre){
+  const cont=$('dup-mt-'+mid); if(!cont) return;
+  if(!chk.checked){cont.innerHTML='';return;}
+  cont.innerHTML='<p class="text-[11px] text-ink-400 py-1">Cargando torneos…</p>';
+  const ts=((await sb.from('torneo').select('id,nombre,estado').eq('marca_id',mid).order('created_at')).data||[]).filter(t=>t.estado!=='archivado');
+  ts.forEach(t=>DUP_NOMT[t.id]=t.nombre+' ('+mnombre+')');
+  cont.innerHTML=ts.length?ts.map(t=>`<label class="flex items-center gap-2 py-0.5 text-sm">
+      <input type="checkbox" class="dup-t dup-t-otra w-4 h-4 accent-[#d9232e]" value="${t.id}" data-marca="${mid}" checked/>
+      <span class="flex-1 min-w-0 text-xs"><b>${t.nombre}</b> <span class="text-[10px] text-ink-400">· ${t.estado==='en_curso'?'en curso':t.estado}</span></span>
+    </label>`).join(''):'<p class="text-[11px] text-ink-400 py-1">Esa marca no tiene torneos.</p>';
+}
 async function buscarDuplicados(){
   const sel=[...document.querySelectorAll('.dup-t:checked')].map(c=>c.value);
   if(!sel.length){toast('⚠ Elige al menos un torneo');return;}
-  const nom=Object.fromEntries((TORNEOS_TODOS||[]).map(t=>[t.id,t.nombre]));
+  const marcasExtra=[...new Set([...document.querySelectorAll('.dup-t-otra:checked')].map(c=>c.dataset.marca))];
+  const nom={...Object.fromEntries((TORNEOS_TODOS||[]).map(t=>[t.id,t.nombre])),...DUP_NOMT};
   $('dup-lista').innerHTML='<p class="text-xs text-ink-400">Buscando…</p>';
-  const {data,error}=await sb.rpc('reporte_duplicados',{p_marca:MARCA.id,p_torneos:sel});
+  const {data,error}=marcasExtra.length
+    ?await sb.rpc('reporte_duplicados_marcas',{p_marcas:[MARCA.id,...marcasExtra],p_torneos:sel})
+    :await sb.rpc('reporte_duplicados',{p_marca:MARCA.id,p_torneos:sel});
   if(error){$('dup-lista').innerHTML=`<p class="text-brand-600 text-xs font-bold">${errNegocio(error)}</p>`;return;}
-  const alcance=sel.length===1?`en <b>${nom[sel[0]]||''}</b>`:`entre <b>${sel.length} torneos</b>`;
+  const alcance=sel.length===1?`en <b>${nom[sel[0]]||''}</b>`:`entre <b>${sel.length} torneos${marcasExtra.length?' de '+(marcasExtra.length+1)+' marcas':''}</b>`;
   const mismoClub=$('dup-mismoclub')?$('dup-mismoclub').checked:true;
   let lista=data||[], omitidos=0;
   if(!mismoClub){
@@ -1608,7 +1634,7 @@ async function buscarDuplicados(){
         <td class="px-3 py-1.5">${i===0?`<b>${d.nombres} ${d.apellidos}</b><span class="block text-[10px] text-ink-400">${d.pais} ${d.documento} · ${d.equipos.length} equipos</span>`:''}</td>
         <td class="px-2 py-1.5 font-semibold">${e.equipo}${e.club&&e.club!==e.equipo?` <span class="text-ink-400 font-normal">(${e.club})</span>`:''}</td>
         <td class="px-2 py-1.5 text-ink-500">${(e.categoria||'').replace(/^Categor[ií]a\s+/i,'')}</td>
-        <td class="px-2 py-1.5 text-ink-500">${e.torneo}</td>
+        <td class="px-2 py-1.5 text-ink-500">${e.torneo}${e.marca?` <span class="text-[9px] font-bold text-ink-400">· ${e.marca}</span>`:''}</td>
         <td class="px-2 py-1.5"><span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full ${e.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${e.estado.toUpperCase()}</span></td>
         <td class="px-2 py-1.5">${partHTML(e)}</td>
       </tr>`).join('')).join('')}</tbody></table></div>`
@@ -1623,7 +1649,7 @@ function pdfDuplicados(){
     <td class="jug">${i===0?`<b>${esc2(d.nombres+' '+d.apellidos)}</b><br><span class="doc">${esc2(d.pais+' '+d.documento)} · ${d.equipos.length} equipos</span>`:''}</td>
     <td><b>${esc2(e.equipo)}</b>${e.club&&e.club!==e.equipo?` <span class="doc">(${esc2(e.club)})</span>`:''}</td>
     <td>${esc2((e.categoria||'').replace(/^Categor[ií]a\s+/i,''))}</td>
-    <td>${esc2(e.torneo)}</td>
+    <td>${esc2(e.torneo)}${e.marca?' <span class="doc">· '+esc2(e.marca)+'</span>':''}</td>
     <td>${esc2((e.estado||'').toUpperCase())}</td>
     <td class="${e.jugo===undefined?'':e.jugo?'jugo':'libre'}">${e.jugo===undefined?'—':e.jugo?('⚽ JUGÓ '+e.pj):'✔ SE PUEDE QUITAR'}</td>
   </tr>`).join('')).join('');
