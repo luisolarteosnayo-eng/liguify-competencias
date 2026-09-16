@@ -3952,13 +3952,18 @@ async function renderFixture(){
       ${porFecha[n].map(fila).join('')}
     </div>`;
   }).join('');
-  const htmlFases=FASES.filter(f=>porFase[f.id]).map(f=>`
+  const htmlFases=FASES.filter(f=>porFase[f.id]).map(f=>{
+    const visF=!porFase[f.id].some(m=>m.visible===false);
+    return `
     <div class="bg-white border-2 border-amber-200 rounded-2xl mb-4">
       ${header(medalla(f.nombre)+' '+f.nombre.toUpperCase(),
         `${porFase[f.id].some(m=>!m.local_id||!m.visita_id)?`<button onclick="modalResolver('${f.id}')" class="text-xs font-bold text-white bg-amber-500 rounded-lg px-3 py-1.5 hover:bg-amber-600 mr-1">⚡ RESOLVER</button>`:''}
+         <button onclick="imprimirFixturePDF('fase:${f.id}')" title="PDF de la programación de la eliminatoria (con escudos, horas y sedes)" class="text-[10px] font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 mr-1 hover:bg-paper">🖨 PDF</button>
+         <button onclick="modalFase('${f.id}')" title="Gestión de la eliminatoria: cambiar día, imagen de programación y de resultados" class="text-[10px] font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 mr-1 hover:bg-paper">⚙ FASE</button>
+         <button onclick="toggleVisibleFase('${f.id}',${visF?'false':'true'})" title="Controla si esta eliminatoria se muestra en el módulo público" class="text-[10px] font-bold rounded-lg px-3 py-1.5 mr-1 ${visF?'text-ink-400 border border-line hover:bg-paper':'bg-amber-100 text-amber-700 border border-amber-300'}">${visF?'👁 VISIBLE EN PÚBLICO':'🚫 OCULTA EN PÚBLICO'}</button>
          <button onclick="modalNuevoPartido('fase','${f.id}')" class="text-xs font-bold text-brand-600 border border-brand-100 rounded-lg px-3 py-1.5 hover:bg-brand-50">+ PARTIDO</button>`)}
       ${porFase[f.id].sort((a,b)=>ordEt(a.etapa)-ordEt(b.etapa)||(a.etapa||'').localeCompare(b.etapa||'')).map(fila).join('')}
-    </div>`).join('');
+    </div>`;}).join('');
   $('tab-fixture').innerHTML=
     `<div class="flex justify-end gap-2 mb-3 flex-wrap">
       <button onclick="exportarExcelFixture()" title="Excel con todas las fechas: día y relación de partidos" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">⬇ EXCEL FIXTURE</button>
@@ -3967,6 +3972,39 @@ async function renderFixture(){
       <button onclick="modalLlaves()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">🏆 GENERAR LLAVES</button>
       <button onclick="modalFixture()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">⚙️ GENERAR FIXTURE</button>`:''}</div>`
     + ((htmlFechas+htmlFases) || '<p class="text-ink-400 text-sm">Sin partidos.</p>');
+}
+/* ---- Eliminatoria como una fecha más: visibilidad + gestión de la fase ---- */
+async function toggleVisibleFase(fid,mostrar){
+  const {error}=await sb.from('partido').update({visible:mostrar}).eq('fase_id',fid).not('etapa','is',null);
+  if(error){toast(errNegocio(error));return;}
+  toast(mostrar?'👁 Eliminatoria PUBLICADA ✔ — el público ya ve sus llaves':'🚫 Eliminatoria OCULTA — sus llaves NO aparecen en el público mientras la trabajas');
+  await renderFixture();
+}
+async function modalFase(fid){
+  const f=FASES.find(x=>x.id===fid); if(!f) return;
+  const ms=(await sb.from('partido').select('id,fecha,estado').eq('fase_id',fid).not('etapa','is',null)).data||[];
+  const jugados=ms.filter(m=>['finalizado','walkover','en_vivo'].includes(m.estado)).length;
+  const dias=[...new Set(ms.map(m=>m.fecha).filter(Boolean))].sort();
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⚙ ${f.nombre.toUpperCase()}</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">${ms.length} llave(s) · ${jugados} jugada(s)/en vivo${dias.length?' · día(s): '+dias.map(d=>d.split('-').reverse().join('/')).join(' · '):''}</p>
+
+    <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1.5">Cambiar día de juego <span class="normal-case font-normal">(solo llaves aún no jugadas)</span></p>
+    <div class="flex gap-2 mb-4">
+      <input id="fs-dia" type="date" value="${dias[0]||''}" class="flex-1 border border-line rounded-xl px-3 py-2 text-sm font-semibold"/>
+      <button onclick="cambiarDiaFase('${fid}')" class="bg-ink-900 text-white text-xs font-bold px-4 rounded-xl hover:bg-ink-700">APLICAR A LA FASE</button>
+    </div>
+
+    <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1.5">Compartir</p>
+    <button onclick="generarImagenJornada('fase:${fid}')" class="w-full bg-ink-900 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-ink-700 mb-2">🖼 DESCARGAR IMAGEN DE LA PROGRAMACIÓN</button>
+    <button onclick="generarImagenJornada('fase:${fid}','resultados')" class="w-full bg-emerald-700 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-emerald-800 mb-2">🏁 DESCARGAR IMAGEN DE RESULTADOS</button>
+    <button onclick="imprimirFixturePDF('fase:${fid}')" class="w-full bg-white border border-line text-ink-500 text-xs font-bold py-2.5 rounded-xl hover:bg-paper">🖨 PDF DE LA PROGRAMACIÓN (A4)</button>`);
+}
+async function cambiarDiaFase(fid){
+  const dia=$('fs-dia').value; if(!dia){toast('⚠ Elige el día');return;}
+  const {data,error}=await sb.from('partido').update({fecha:dia}).eq('fase_id',fid).not('etapa','is',null).in('estado',['programado','suspendido']).select('id');
+  if(error){toast(errNegocio(error));return;}
+  toast(`📅 Día aplicado a ${(data||[]).length} llave(s) ✔`);
+  cerrarModal(); await renderFixture();
 }
 /* ---- Horarios por jornada: visibles u ocultos en el público ---- */
 async function toggleHorarios(jid,mostrar){
@@ -4302,15 +4340,20 @@ async function replicarFixture(){
 
 /* ---- Fixture completo en PDF: vista de impresión A4 con logos de equipos.
    Desde el diálogo de impresión se guarda como PDF o se imprime. ---- */
-/* jid opcional: PDF de UNA fecha (programación del día); sin él, el fixture completo */
+/* jid opcional: PDF de UNA fecha (programación del día); sin él, el fixture
+   completo. También acepta 'fase:<id>' para la programación de una ELIMINATORIA. */
 async function imprimirFixturePDF(jid){
-  let q=sb.from('partido').select('*').eq('categoria_id',CAT.id).not('jornada_id','is',null);
-  if(jid) q=q.eq('jornada_id',jid);
+  const esFase=String(jid||'').startsWith('fase:');
+  const faseId=esFase?String(jid).slice(5):null;
+  const faseObj=esFase?FASES.find(x=>x.id===faseId):null;
+  let q=sb.from('partido').select('*').eq('categoria_id',CAT.id);
+  q=esFase?q.eq('fase_id',faseId).not('etapa','is',null):q.not('jornada_id','is',null);
+  if(jid&&!esFase) q=q.eq('jornada_id',jid);
   const {data:pms,error}=await q;
   if(error){toast(errNegocio(error));return;}
-  if(!(pms||[]).length){toast(jid?'⚠ Esta fecha no tiene partidos':'⚠ Esta categoría aún no tiene fechas generadas');return;}
+  if(!(pms||[]).length){toast(jid?'⚠ No hay partidos aquí todavía':'⚠ Esta categoría aún no tiene fechas generadas');return;}
   const porJ={}; (pms||[]).forEach(m=>{(porJ[m.jornada_id]=porJ[m.jornada_id]||[]).push(m);});
-  const js=[...JORNADAS].sort((a,b)=>(a.numero||0)-(b.numero||0)).filter(j=>porJ[j.id]);
+  const js=esFase?[]:[...JORNADAS].sort((a,b)=>(a.numero||0)-(b.numero||0)).filter(j=>porJ[j.id]);
   const esc=t=>String(t??'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
   const diaTxt=f=>f?new Date(f+'T00:00:00').toLocaleDateString('es-PE',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'}):'por confirmar';
   const nom=id=>id?esc(nomEq(EQUIPOS[id]||{})||'Por definir'):'Por definir';
@@ -4320,11 +4363,21 @@ async function imprimirFixturePDF(jid){
       :`<span class="esc esc-ini" style="background:${cl.color||'#334155'}">${esc(iniciales(cl.nombre||'?'))}</span>`;
   };
   const logoT=TORNEO.logo_url||MARCA.logo_url;
-  const bloques=js.map(j=>{
-    const lista=porJ[j.id].sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')||(a.hora||'').localeCompare(b.hora||''));
+  // grupos genéricos: por FECHA (jornadas) o por ETAPA (eliminatoria)
+  const ORD_ET=['Octavos de final','Cuartos de final','Semifinal','Tercer puesto','Final'];
+  let grupos;
+  if(esFase){
+    const ge={}; (pms||[]).forEach(m=>{const k=(m.etapa||'Llaves').split(' #')[0];(ge[k]=ge[k]||[]).push(m);});
+    grupos=Object.keys(ge).sort((a,b)=>{const ia=ORD_ET.indexOf(a),ib=ORD_ET.indexOf(b);return (ia<0?99:ia)-(ib<0?99:ib);})
+      .map(k=>({titulo:k.toUpperCase(),jf:null,lista:ge[k]}));
+  } else {
+    grupos=js.map(j=>({titulo:'FECHA '+(j.numero??''),jf:j.fecha||null,lista:porJ[j.id]}));
+  }
+  const bloques=grupos.map(g=>{
+    const lista=g.lista.sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'')||(a.hora||'').localeCompare(b.hora||'')||(a.etapa||'').localeCompare(b.etapa||''));
     // los partidos de una misma fecha pueden jugarse en días distintos
     const diasJ=[...new Set(lista.map(m=>m.fecha||''))];
-    const dia=diasJ.filter(Boolean).sort().map(diaTxt).join(' · ')||diaTxt(j.fecha||null);
+    const dia=diasJ.filter(Boolean).sort().map(diaTxt).join(' · ')||diaTxt(g.jf);
     let ultDia=null;
     const filas=lista.map(m=>{
       const fin=['finalizado','walkover'].includes(m.estado);
@@ -4338,7 +4391,7 @@ async function imprimirFixturePDF(jid){
         <span class="sede">${esc(m.sede||'')}${m.cancha?' · '+esc(m.cancha):''}</span>
       </div>`;}).join('');
     return `<div class="fecha-blq">
-      <div class="fecha-cab"><span>FECHA ${j.numero??''}</span><span class="fecha-dia">${esc(dia)}</span></div>
+      <div class="fecha-cab"><span>${esc(g.titulo)}</span><span class="fecha-dia">${esc(dia)}</span></div>
       ${filas}
     </div>`;
   }).join('');
@@ -4373,11 +4426,11 @@ async function imprimirFixturePDF(jid){
     .barra{position:sticky;top:0;background:#111;color:#fff;padding:10px;text-align:center;font-size:13px;z-index:9}
     .barra button{background:#d9232e;color:#fff;border:0;border-radius:8px;padding:8px 18px;font-weight:bold;font-size:13px;cursor:pointer;margin-right:10px}
   </style></head><body>
-  <div class="no-print barra"><button onclick="print()">🖨 IMPRIMIR / GUARDAR PDF</button>${js.length} fecha(s) — en el diálogo elige "Guardar como PDF"</div>
+  <div class="no-print barra"><button onclick="print()">🖨 IMPRIMIR / GUARDAR PDF</button>${grupos.length} ${esFase?'etapa(s)':'fecha(s)'} — en el diálogo elige "Guardar como PDF"</div>
   <div class="hoja">
     <div class="cab">
       ${logoT?`<img src="${logoT}"/>`:''}
-      <div><div class="cab-t2">${jid?`Programación · Fecha ${(js[0]||{}).numero||''}`:'Fixture oficial'}</div><div class="cab-t1">${esc(TORNEO.nombre)}</div><div class="cab-t3">${esc(CAT.nombre_display||'')}</div></div>
+      <div><div class="cab-t2">${esFase?`Programación · ${esc((faseObj||{}).nombre||'Eliminatoria')}`:jid?`Programación · Fecha ${(js[0]||{}).numero||''}`:'Fixture oficial'}</div><div class="cab-t1">${esc(TORNEO.nombre)}</div><div class="cab-t3">${esc(CAT.nombre_display||'')}</div></div>
     </div>
     ${bloques}
     <div class="pie">⚡ POWERED BY LIGUIFY · liguify.com</div>
@@ -5205,11 +5258,23 @@ function cargarImg(url){
 }
 async function generarImagenJornada(jid,modo){
   const resultados=modo==='resultados';
-  const j=JORNADAS.find(x=>x.id===jid); if(!j) return;
-  const {data:ms,error}=await sb.from('partido').select('*').eq('jornada_id',jid).order('hora').order('cancha');
+  // acepta también 'fase:<id>' para la imagen de una ELIMINATORIA completa
+  const esFase=String(jid||'').startsWith('fase:');
+  const faseId=esFase?String(jid).slice(5):null;
+  const faseObj=esFase?FASES.find(x=>x.id===faseId):null;
+  const j=esFase?{numero:null}:JORNADAS.find(x=>x.id===jid); if(!esFase&&!j) return;
+  const q=esFase
+    ?sb.from('partido').select('*').eq('fase_id',faseId).not('etapa','is',null).order('fecha').order('hora').order('etapa')
+    :sb.from('partido').select('*').eq('jornada_id',jid).order('hora').order('cancha');
+  const {data:ms,error}=await q;
   if(error){toast(errNegocio(error));return;}
-  if(!ms.length){toast('⚠ Esta fecha no tiene partidos');return;}
-  if(resultados&&!ms.some(m=>['finalizado','walkover'].includes(m.estado))){toast('⚠ Esta fecha aún no tiene resultados cargados');return;}
+  if(!ms.length){toast('⚠ No hay partidos aquí todavía');return;}
+  if(resultados&&!ms.some(m=>['finalizado','walkover'].includes(m.estado))){toast('⚠ Aún no hay resultados cargados aquí');return;}
+  // en la eliminatoria, la columna de cancha muestra la ETAPA cuando no hay cancha
+  const etCorta=e=>String(e||'').replace('Octavos de final','8VOS').replace('Cuartos de final','4TOS')
+    .replace('Semifinal','SEMIF.').replace('Tercer puesto','3ER PUESTO').replace('Final','FINAL');
+  if(esFase) ms.forEach(m=>{if(!(m.cancha||'').trim()) m.cancha=etCorta(m.etapa);});
+  const tituloLinea=esFase?((faseObj||{}).nombre||'ELIMINATORIA').toUpperCase():'FECHA '+j.numero;
   // UNA IMAGEN POR SEDE Y DÍA: la sede y el día van en la cabecera y en cada
   // fila solo queda la cancha (texto corto que no invade el nombre visitante).
   // Se agrupa también por día porque una fecha puede repartirse en dos jornadas
@@ -5227,7 +5292,7 @@ async function generarImagenJornada(jid,modo){
     const cl=CLUBES[(EQUIPOS[id]||{}).club_id]||{};
     escudos[id]={img:await cargarImg(cl.escudo_url), color:cl.color||'#334155', ini:iniciales(cl.nombre||'?')};
   }));
-  const dia=await diaDeJornada(jid);
+  const dia=esFase?([...new Set(ms.map(m=>m.fecha).filter(Boolean))].sort()[0]||null):await diaDeJornada(jid);
   const diaTxt=dia?new Date(dia+'T00:00:00').toLocaleDateString('es-PE',{weekday:'long',day:'numeric',month:'long'}).toUpperCase():'DÍA POR CONFIRMAR';
 
   const lienzo=(lista,sede,headComun,altoComun)=>{
@@ -5268,7 +5333,7 @@ async function generarImagenJornada(jid,modo){
     x.fillText(TORNEO.nombre.toUpperCase(),216,132);
     x.fillStyle='rgba(255,255,255,.55)'; x.font='600 30px Inter';
     x.fillText((CAT.nombre_display||('Categoría '+CAT.anio_nacimiento+' / '+CAT.modalidad))+'  ·  '+MARCA.nombre,218,178);
-    const linFecha=(resultados?'RESULTADOS · ':'')+'FECHA '+j.numero+'  ·  '+diaTxt;
+    const linFecha=(resultados?'RESULTADOS · ':'')+tituloLinea+'  ·  '+diaTxt;
     x.fillStyle='#ffd166'; x.font=fitText(linFecha,'54px "Bebas Neue"',830);
     x.fillText(linFecha,218,242);
     if(lugarCab){
@@ -5343,7 +5408,7 @@ async function generarImagenJornada(jid,modo){
         cv.toBlob(b=>{
           const a=document.createElement('a');
           a.href=URL.createObjectURL(b);
-          a.download=`${resultados?'resultados':'programacion'}-fecha-${j.numero}${sedeNom?'-'+slug(sedeNom):''}${variosDias&&diaGrupo?'-'+diaGrupo:''}.png`;
+          a.download=`${resultados?'resultados':'programacion'}-${esFase?slug((faseObj||{}).nombre||'eliminatoria'):'fecha-'+j.numero}${sedeNom?'-'+slug(sedeNom):''}${variosDias&&diaGrupo?'-'+diaGrupo:''}.png`;
           a.click();
           setTimeout(()=>URL.revokeObjectURL(a.href),5000);
           n++; res();
