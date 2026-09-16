@@ -62,7 +62,7 @@ tailwind.config={theme:{extend:{
     <div id="marca-card"></div>
     <div class="flex items-center justify-between mb-3 mt-6 flex-wrap gap-2">
       <h2 id="h2-torneos" class="font-display text-2xl tracking-wide">TORNEOS DE LA MARCA</h2>
-      <div class="flex gap-2">        <button onclick="modalReclamosMarca()" title="Reclamos de TODOS los torneos de la marca, filtrados por activos" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">⚖ RECLAMOS</button>
+      <div class="flex gap-2">        <button onclick="modalReclamosMarca()" title="Reclamos de TODOS los torneos de la marca, filtrados por activos" class="relative bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">⚖ RECLAMOS<span id="bdg-reclamos" class="hidden absolute -top-2 -right-2 bg-brand-500 text-white text-[10px] font-bold rounded-full min-w-[20px] h-5 px-1 items-center justify-center shadow"></span></button>
         <button onclick="modalDuplicados()" id="btn-duplicados" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper" title="Jugadores con el mismo documento en más de un equipo de la marca">🔎 DUPLICADOS</button>
         <button onclick="modalNuevoTorneo()" id="btn-nuevo-torneo" class="hidden bg-brand-500 text-white font-bold px-4 py-2 rounded-xl text-sm hover:bg-brand-600">+ NUEVO TORNEO</button>
       </div>
@@ -349,6 +349,21 @@ async function cargarTorneos(){
     renderListaTorneos();
   }
   show('s-torneos');
+  actualizarBadgeReclamos();   // 🔴 en segundo plano: ¿hay reclamos activos en la marca?
+}
+/* Burbuja roja en ⚖ RECLAMOS cuando hay reclamos activos (generado / en
+   proceso / pendiente de devolución) en cualquier torneo de la marca */
+async function actualizarBadgeReclamos(){
+  const bdg=$('bdg-reclamos'); if(!bdg) return;
+  bdg.classList.add('hidden'); bdg.classList.remove('flex');
+  const marcaId=MARCA&&MARCA.id;
+  try{
+    const ts=(TORNEOS_TODOS||[]).filter(t=>t.estado!=='archivado');
+    const res=await Promise.all(ts.map(t=>sb.rpc('reclamos_torneo',{p_torneo:t.id}).then(r=>r.data||[]).catch(()=>[])));
+    if(!MARCA||MARCA.id!==marcaId) return;   // el usuario ya cambió de marca
+    const n=res.flat().filter(r=>['generado','en_proceso','pendiente_devolucion'].includes(r.estado)).length;
+    if(n>0){ bdg.textContent=n>9?'9+':n; bdg.classList.remove('hidden'); bdg.classList.add('flex'); }
+  }catch(_){}
 }
 
 /* ---- 🎛 MODO MESA: solo los partidos de HOY + verificación por torneo.
@@ -1807,6 +1822,7 @@ async function estadoReclamo(nuevo){
   try{await sb.functions.invoke('enviar-aviso-reclamo',{body:{reclamo_id:RCA_ID}});}catch(_){}
   toast('⚖ Reclamo → '+((RCA_ESTADOS[nuevo]||[nuevo])[0])+' ✔ — emails enviados');
   abrirReclamoAdmin(RCA_ID);
+  actualizarBadgeReclamos();
 }
 
 /* ============ 📊 REPORTES DEL TORNEO ============ */
