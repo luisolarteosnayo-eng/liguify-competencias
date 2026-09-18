@@ -4250,12 +4250,16 @@ async function albumEquipo(formato='png'){
   const S=formato==='pdf'?2:1;   // PDF en alta: mismo diseño rasterizado al doble (A3 @300 DPI)
   const cv=document.createElement('canvas'); cv.width=W*S; cv.height=H*S;
   const x=cv.getContext('2d'); x.scale(S,S);
+  x.imageSmoothingEnabled=true; x.imageSmoothingQuality='high';
   x.fillStyle=mixCl(0.9); x.fillRect(0,0,W,H);
   x.save(); x.globalAlpha=.25; x.strokeStyle=mixCl(0.6); x.lineWidth=1;
   for(let i=-H;i<W;i+=52){x.beginPath();x.moveTo(i,0);x.lineTo(i+H,H);x.stroke();}
   x.restore();
+  // logos SIN deformar: contain dentro del círculo blanco (mejor resolución visual)
   const dib=(img,cx,cy,r,ini)=>{x.save();x.beginPath();x.arc(cx,cy,r,0,7);x.clip();
-    if(img){x.fillStyle='#fff';x.fillRect(cx-r,cy-r,r*2,r*2);x.drawImage(img,cx-r,cy-r,r*2,r*2);}
+    if(img){x.fillStyle='#fff';x.fillRect(cx-r,cy-r,r*2,r*2);
+      const s=Math.min((r*2-Math.max(4,r*0.12))/img.width,(r*2-Math.max(4,r*0.12))/img.height);
+      x.drawImage(img,cx-img.width*s/2,cy-img.height*s/2,img.width*s,img.height*s);}
     else{x.fillStyle='#2b3550';x.fillRect(cx-r,cy-r,r*2,r*2);x.fillStyle='#fff';x.font=`800 ${Math.round(r*.6)}px Inter`;x.textAlign='center';x.textBaseline='middle';x.fillText(ini||'',cx,cy+2);}
     x.restore();x.textAlign='left';x.textBaseline='alphabetic';};
   const fitText=(t,font,max)=>{let s=parseInt(font.match(/(\d+)px/)[1]);
@@ -4302,39 +4306,35 @@ async function albumEquipo(formato='png'){
       x.fillText(iniciales((c.j.nombres||'')+' '+(c.j.apellidos||'')),fx+side/2,fy+side/2);
       x.textAlign='left'; x.textBaseline='alphabetic';
     }
-    // logo del TORNEO (arriba-derecha) y ESCUDO del club (derecha, sobre el borde de la foto)
+    // logo del TORNEO (arriba-derecha)
     const lr=Math.round(CW*0.105);
     dib(logoT,fx+side-lr-4,fy+lr+4,lr,iniciales(TORNEO.nombre));
-    dib(escudo,fx+side-lr-4,fy+side-2,lr,iniciales(cl.nombre||'?'));
-    // banda NOMBRE + DATOS (color del club oscurecido, siempre legible)
+    // banda NOMBRE + DATOS (color del club oscurecido, siempre legible) — sin pastilla del club
     const zoneY=fy+side, zoneH=cy0+CH-b-zoneY;
-    const g=Math.max(3,Math.round(CW*0.022));
-    const nh=Math.round(zoneH*0.52), ph=Math.round(zoneH*0.28);
+    const nh=Math.round(zoneH*0.7);
+    const bandY=zoneY+Math.round((zoneH-nh)/2);
     const inset=Math.round(CW*0.07);
+    const lr2=Math.round(CW*0.14);   // escudo del club, más grande y nítido
     x.fillStyle=bandCl;
-    x.beginPath(); x.roundRect(cx0+b+inset,zoneY+g,CW-b*2-inset*2,nh,Math.round(CW*0.03)); x.fill();
+    x.beginPath(); x.roundRect(cx0+b+inset,bandY,CW-b*2-inset*2,nh,Math.round(CW*0.03)); x.fill();
     const primer=esCT
       ? `${(c.j.nombres||'').trim()} ${(c.j.apellidos||'').trim()}`.trim().toUpperCase()||'—'
       : ((c.j.nombres||'').trim().split(/\s+/)[0]||'—').toUpperCase()+(c.capitan?' (C)':'');
     const datos=esCT?(c.rol||'COMANDO TÉCNICO').toUpperCase()
       :[c.dorsal!=null?'#'+c.dorsal:null,(c.sub||'').toUpperCase()||null].filter(Boolean).join('  |  ')||'JUGADOR';
+    // el texto vive SOLO en la zona libre a la izquierda del escudo
+    const bandL=cx0+b+inset, escL=fx+side-lr2*2-4;
+    const tCx=(bandL+escL)/2, tMax=Math.max(30,escL-bandL-12);
     x.textAlign='center'; x.textBaseline='middle';
     x.fillStyle='#fff';
-    x.font=fitText(primer,`${Math.round(nh*0.52)}px "Bebas Neue"`,CW-b*2-inset*2-14-(lr));
-    x.fillText(primer,cx0+CW/2,zoneY+g+nh*0.36);
+    x.font=fitText(primer,`${Math.round(nh*0.5)}px "Bebas Neue"`,tMax);
+    x.fillText(primer,tCx,bandY+nh*0.34);
     x.fillStyle='rgba(255,255,255,.8)';
-    x.font=fitText(datos,`700 ${Math.round(nh*0.22)}px Inter`,CW-b*2-inset*2-16);
-    x.fillText(datos,cx0+CW/2,zoneY+g+nh*0.76);
-    // pastilla del CLUB (blanca, como la del equipo en Panini)
-    const py=zoneY+g+nh+g;
-    x.fillStyle='#fff';
-    x.beginPath(); x.roundRect(cx0+b+inset*1.6,py,CW-b*2-inset*3.2,ph,ph/2); x.fill();
-    x.strokeStyle='rgba(0,0,0,.12)'; x.lineWidth=1; x.stroke();
-    x.fillStyle='#171e2e';
-    const clubTxt=nomEq(EQUIPO).toUpperCase();
-    x.font=fitText(clubTxt,`800 ${Math.round(ph*0.48)}px Inter`,CW-b*2-inset*3.2-14);
-    x.fillText(clubTxt,cx0+CW/2,py+ph/2+1);
+    x.font=fitText(datos,`700 ${Math.round(nh*0.21)}px Inter`,tMax);
+    x.fillText(datos,tCx,bandY+nh*0.74);
     x.textAlign='left'; x.textBaseline='alphabetic';
+    // ESCUDO del club AL FINAL (nada lo tapa): derecha, sobre la costura foto/banda
+    dib(escudo,fx+side-lr2-2,zoneY+Math.round(zoneH*0.35),lr2,iniciales(cl.nombre||'?'));
     x.restore();
   });
   // guías de corte solo en A3 (marca sutil en la calle central, fuera de los cromos)
