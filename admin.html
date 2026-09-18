@@ -4175,7 +4175,7 @@ async function toggleHorarios(jid,mostrar){
    (sin recorte) y con el puesto del jugador bajo el nombre. ---- */
 function modalAlbum(){
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">🖼 ÁLBUM DEL EQUIPO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
-    <p class="text-xs text-ink-500 mb-4">Elige el formato del álbum A3 (dos mitades A4 con calle de corte).</p>
+    <p class="text-xs text-ink-500 mb-4">Con <b>hasta 16 jugadores</b> en la LBF el álbum sale en <b>una página A4</b> (sin comando técnico); con más, en <b>A3</b> (dos mitades A4 con calle de corte) incluyendo al comando técnico.</p>
     <button onclick="cerrarModal();albumEquipo('png')" class="w-full bg-white border border-line rounded-2xl px-5 py-4 text-left hover:border-brand-500/40 hover:shadow-md transition mb-3">
       <span class="font-display text-xl tracking-wide block">🖼 GENERAR IMAGEN</span>
       <span class="text-xs text-ink-500">PNG (2480×1754) — para redes sociales y pantalla.</span></button>
@@ -4215,26 +4215,36 @@ async function albumEquipo(formato='png'){
   const bandCl=lumCl>150?darkCl(0.4):darkCl(0.85);                            // banda de nombre siempre legible
   const cardsJ=ins.map(i=>{const j=jm[i.jugador_id]||{};return {tipo:'j',dorsal:i.dorsal,capitan:i.capitan,j,foto:j.foto_url||null,sub:j.posicion||''};})
     .sort((a,b)=>ordCamiseta(a,b,(a.j.nombres||'')+' '+(a.j.apellidos||''),(b.j.nombres||'')+' '+(b.j.apellidos||'')));
-  const cards=[...cardsJ,
+  // Regla de formato: ≤16 jugadores en LBF → álbum de UNA página A4 y SIN
+  // comando técnico; >16 → A3 (dos mitades A4) incluyendo al comando técnico.
+  const soloA4=cardsJ.length<=16;
+  const cards=soloA4?cardsJ:[...cardsJ,
     ...cts.map(c=>{const j=jm[c.persona_id]||{};return {tipo:'ct',rol:c.rol,j,foto:j.foto_url||null,sub:c.rol};})
   ];
   await Promise.all(cards.map(async c=>{c.img=c.foto?await cargarImg(c.foto):null;}));
-  // ---- lienzo A3 horizontal con CALLE CENTRAL (corte en dos A4) ----
-  const W=2480,H=1754,M=70,HEAD=290,FOOT=70,GAP=20,GUT=90;
-  const Hc=H-HEAD-FOOT-30, total=cards.length, R=1.5;   // alto de carta = ancho×1.5 (foto vertical completa)
-  const Wh=(W-M*2-GUT)/2;                                // ancho útil de cada media hoja A4
+  // ---- lienzo: A4 vertical (≤16 jugadores) o A3 horizontal con CALLE CENTRAL ----
+  const W=soloA4?1240:2480, H=1754, M=70, HEAD=290, FOOT=70, GAP=soloA4?16:20, GUT=90;
+  const Hc=H-HEAD-FOOT-30, total=cards.length, R=1.5;   // alto de carta = ancho×1.5
   let best={cw:0,cph:3};
-  for(let cph=2;cph<=8;cph++){                           // columnas POR MITAD (total = 2×cph)
-    const cols=cph*2, rows=Math.ceil(total/cols);
-    const cwW=(Wh-(cph-1)*GAP)/cph;
-    const cwH=((Hc-(rows-1)*GAP)/rows)/R;
-    const cw=Math.min(cwW,cwH);
-    if(cw>best.cw) best={cw,cph};
+  if(soloA4){
+    const Wh=W-M*2;
+    for(let cols=2;cols<=5;cols++){
+      const rws=Math.ceil(total/cols);
+      const cw=Math.min((Wh-(cols-1)*GAP)/cols, ((Hc-(rws-1)*GAP)/rws)/R);
+      if(cw>best.cw) best={cw,cph:cols};
+    }
+  } else {
+    const Wh=(W-M*2-GUT)/2;                              // ancho útil de cada media hoja A4
+    for(let cph=2;cph<=8;cph++){                         // columnas POR MITAD (total = 2×cph)
+      const cols=cph*2, rws=Math.ceil(total/cols);
+      const cw=Math.min((Wh-(cph-1)*GAP)/cph, ((Hc-(rws-1)*GAP)/rws)/R);
+      if(cw>best.cw) best={cw,cph};
+    }
   }
-  const CW=Math.floor(best.cw), CPH=best.cph, COLS=CPH*2, CH=Math.floor(CW*R);
+  const CW=Math.floor(best.cw), CPH=best.cph, COLS=soloA4?CPH:CPH*2, CH=Math.floor(CW*R);
   const rows=Math.ceil(total/COLS);
   const halfW=CPH*CW+(CPH-1)*GAP;
-  const XIZQ=(W-(halfW*2+GUT))/2, XDER=XIZQ+halfW+GUT;
+  const XIZQ=soloA4?(W-halfW)/2:(W-(halfW*2+GUT))/2, XDER=XIZQ+halfW+GUT;
   const gridH=rows*CH+(rows-1)*GAP;
   const Y0=HEAD+30+(Hc-gridH)/2;
   const S=formato==='pdf'?2:1;   // PDF en alta: mismo diseño rasterizado al doble (A3 @300 DPI)
@@ -4327,22 +4337,26 @@ async function albumEquipo(formato='png'){
     x.textAlign='left'; x.textBaseline='alphabetic';
     x.restore();
   });
-  // guías de corte (marca sutil en la calle central, fuera de los cromos)
-  x.strokeStyle='rgba(0,0,0,.2)'; x.lineWidth=1; x.setLineDash([10,12]);
-  x.beginPath(); x.moveTo(W/2,HEAD+8); x.lineTo(W/2,H-FOOT); x.stroke(); x.setLineDash([]);
+  // guías de corte solo en A3 (marca sutil en la calle central, fuera de los cromos)
+  if(!soloA4){
+    x.strokeStyle='rgba(0,0,0,.2)'; x.lineWidth=1; x.setLineDash([10,12]);
+    x.beginPath(); x.moveTo(W/2,HEAD+8); x.lineTo(W/2,H-FOOT); x.stroke(); x.setLineDash([]);
+  }
   x.fillStyle='#5b6478'; x.font='600 28px Inter'; x.textAlign='center';
   x.fillText('⚡ Powered by Liguify · liguify.com/'+(MARCA.slug||''),W/2,H-28);
   x.textAlign='left';
   window.__CV=cv;
-  const base=`album-a3-${(nomEq(EQUIPO)||'equipo').replace(/[^\w]+/g,'-').toLowerCase()}`;
+  const base=`album-${soloA4?'a4':'a3'}-${(nomEq(EQUIPO)||'equipo').replace(/[^\w]+/g,'-').toLowerCase()}`;
   try{
     if(formato==='pdf'){
       if(!(await cargarJsPDF())){toast('⚠ No se pudo cargar el generador de PDF — revisa tu conexión e inténtalo de nuevo');return;}
       const {jsPDF}=window.jspdf;
-      const pdf=new jsPDF({orientation:'landscape',unit:'mm',format:'a3',compress:true});
-      pdf.addImage(cv.toDataURL('image/jpeg',0.95),'JPEG',0,0,420,297);
+      const pdf=soloA4
+        ?new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true})
+        :new jsPDF({orientation:'landscape',unit:'mm',format:'a3',compress:true});
+      pdf.addImage(cv.toDataURL('image/jpeg',0.95),'JPEG',0,0,soloA4?210:420,297);
       pdf.save(base+'-alta-300dpi.pdf');
-      toast('📄 PDF A3 en alta descargado ✔ — 300 DPI, listo para la imprenta');
+      toast(`📄 PDF ${soloA4?'A4':'A3'} en alta descargado ✔ — 300 DPI, listo para la imprenta`);
     }else{
       cv.toBlob(b=>{
         const a=document.createElement('a');
@@ -4350,7 +4364,7 @@ async function albumEquipo(formato='png'){
         a.download=base+'.png';
         a.click();
         setTimeout(()=>URL.revokeObjectURL(a.href),5000);
-        toast('🖼 Álbum A3 horizontal descargado ✔ — imprímelo a tamaño A3 o compártelo en redes');
+        toast(soloA4?'🖼 Álbum A4 (una página, sin comando técnico) descargado ✔':'🖼 Álbum A3 horizontal descargado ✔ — imprímelo a tamaño A3 o compártelo en redes');
       },'image/png');
     }
   }catch(e){toast('⚠ No se pudo exportar el álbum: '+(e.message||e));}
