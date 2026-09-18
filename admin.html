@@ -4206,6 +4206,13 @@ async function albumEquipo(formato='png'){
   const cl=CLUBES[EQUIPO.club_id]||{};
   await Promise.all([document.fonts.load('80px "Bebas Neue"'),document.fonts.load('700 30px Inter'),document.fonts.load('800 26px Inter')]);
   const [logoT,escudo]=await Promise.all([cargarImg(TORNEO.logo_url||MARCA.logo_url),cargarImg(cl.escudo_url)]);
+  // 🎨 paleta del CLUB (estilo Panini: el cromo vive en los colores del equipo)
+  const hexCl=(cl.color||'').replace('#','');
+  const rgbCl=/^[0-9a-f]{6}$/i.test(hexCl)?[0,2,4].map(i=>parseInt(hexCl.slice(i,i+2),16)):[43,53,80];
+  const mixCl=t=>`rgb(${rgbCl.map(v=>Math.round(v+(255-v)*t)).join(',')})`;   // hacia blanco
+  const darkCl=t=>`rgb(${rgbCl.map(v=>Math.round(v*t)).join(',')})`;         // hacia negro
+  const lumCl=0.299*rgbCl[0]+0.587*rgbCl[1]+0.114*rgbCl[2];
+  const bandCl=lumCl>150?darkCl(0.4):darkCl(0.85);                            // banda de nombre siempre legible
   const cardsJ=ins.map(i=>{const j=jm[i.jugador_id]||{};return {tipo:'j',dorsal:i.dorsal,capitan:i.capitan,j,foto:j.foto_url||null,sub:j.posicion||''};})
     .sort((a,b)=>ordCamiseta(a,b,(a.j.nombres||'')+' '+(a.j.apellidos||''),(b.j.nombres||'')+' '+(b.j.apellidos||'')));
   const cards=[...cardsJ,
@@ -4233,8 +4240,8 @@ async function albumEquipo(formato='png'){
   const S=formato==='pdf'?2:1;   // PDF en alta: mismo diseño rasterizado al doble (A3 @300 DPI)
   const cv=document.createElement('canvas'); cv.width=W*S; cv.height=H*S;
   const x=cv.getContext('2d'); x.scale(S,S);
-  x.fillStyle='#101626'; x.fillRect(0,0,W,H);
-  x.save(); x.globalAlpha=.05; x.strokeStyle='#fff'; x.lineWidth=1;
+  x.fillStyle=mixCl(0.9); x.fillRect(0,0,W,H);
+  x.save(); x.globalAlpha=.25; x.strokeStyle=mixCl(0.6); x.lineWidth=1;
   for(let i=-H;i<W;i+=52){x.beginPath();x.moveTo(i,0);x.lineTo(i+H,H);x.stroke();}
   x.restore();
   const dib=(img,cx,cy,r,ini)=>{x.save();x.beginPath();x.arc(cx,cy,r,0,7);x.clip();
@@ -4247,65 +4254,83 @@ async function albumEquipo(formato='png'){
   dib(logoT,150,145,78,iniciales(TORNEO.nombre));
   dib(escudo,W-150,145,78,iniciales(cl.nombre||'?'));
   x.textAlign='center';
-  x.fillStyle='#ffd166'; x.font='600 34px Inter'; x.fillText('ÁLBUM OFICIAL',W/2,88);
-  x.fillStyle='#ffffff'; x.font=fitText(nomEq(EQUIPO).toUpperCase(),'128px "Bebas Neue"',W-560);
+  x.fillStyle=bandCl; x.font='600 34px Inter'; x.fillText('ÁLBUM OFICIAL',W/2,88);
+  x.fillStyle='#171e2e'; x.font=fitText(nomEq(EQUIPO).toUpperCase(),'128px "Bebas Neue"',W-560);
   x.fillText(nomEq(EQUIPO).toUpperCase(),W/2,196);
-  x.fillStyle='rgba(255,255,255,.55)'; x.font='600 36px Inter';
+  x.fillStyle='#5b6478'; x.font='600 36px Inter';
   x.fillText(`${TORNEO.nombre.toUpperCase()} · ${(CAT.nombre_display||'').toUpperCase()}`,W/2,256);
-  x.fillStyle='#d4af37'; x.fillRect(M,282,W-M*2,5);
+  x.fillStyle=mixCl(0); x.fillRect(M,282,W-M*2,5);
   x.textAlign='left';
-  // cromos: mitad izquierda y mitad derecha (la calle central queda libre)
-  const pad=Math.max(8,Math.round(CW*0.045));
-  const SH=Math.round(CW*0.34);                          // franja nombre+puesto (2 líneas)
+  // cromos ESTILO PANINI: campo en tinte del club, numeral decorativo gigante,
+  // FOTO CUADRADA tal cual (sin editar el fondo), logo del torneo y escudo,
+  // banda con nombre + datos y pastilla del club. Calle central libre.
   cards.forEach((c,k)=>{
     const col=k%COLS, row=Math.floor(k/COLS);
     const cx0=(col<CPH?XIZQ+col*(CW+GAP):XDER+(col-CPH)*(CW+GAP)), cy0=Y0+row*(CH+GAP);
     const esCT=c.tipo==='ct';
+    const r0=Math.round(CW*0.05), b=Math.max(5,Math.round(CW*0.035));
+    // sticker: borde BLANCO (marco Panini) con línea exterior sutil
     x.fillStyle='#fff';
-    x.beginPath(); x.roundRect(cx0,cy0,CW,CH,Math.round(CW*0.06)); x.fill();
-    x.strokeStyle='#d4af37'; x.lineWidth=Math.max(3,CW*0.022); x.stroke();
-    // foto COMPLETA (contain, sin recorte) sobre fondo claro
-    const fw=CW-pad*2, fh=CH-pad*3-SH;
-    x.save(); x.beginPath(); x.roundRect(cx0+pad,cy0+pad,fw,fh,Math.round(CW*0.035)); x.clip();
+    x.beginPath(); x.roundRect(cx0,cy0,CW,CH,r0); x.fill();
+    x.strokeStyle='rgba(0,0,0,.12)'; x.lineWidth=1.5; x.stroke();
+    x.save(); x.beginPath(); x.roundRect(cx0+b,cy0+b,CW-b*2,CH-b*2,Math.round(r0*0.6)); x.clip();
+    // campo en el tinte del club + numeral decorativo gigante (dorsal / CT)
+    x.fillStyle=mixCl(0.8); x.fillRect(cx0,cy0,CW,CH);
+    x.save(); x.globalAlpha=.16; x.fillStyle=mixCl(0);
+    x.font=`${Math.round(CW*0.95)}px "Bebas Neue"`; x.textAlign='center';
+    x.fillText(esCT?'CT':String(c.dorsal??''),cx0+CW/2,cy0+CH*0.58);
+    x.restore(); x.textAlign='left';
+    // FOTO CUADRADA (cover, sesgada hacia la cara) — el fondo del jugador NO se toca
+    const side=CW-b*2, fx=cx0+b, fy=cy0+b;
     if(c.img){
-      x.fillStyle='#eef1f6'; x.fillRect(cx0+pad,cy0+pad,fw,fh);
-      const s=Math.min(fw/c.img.width,fh/c.img.height);
-      x.drawImage(c.img,cx0+pad+(fw-c.img.width*s)/2,cy0+pad+(fh-c.img.height*s)/2,c.img.width*s,c.img.height*s);
+      const s=Math.max(side/c.img.width, side/c.img.height);
+      const sw=side/s, sh=side/s, sx=(c.img.width-sw)/2, sy2=(c.img.height-sh)*0.2;
+      x.drawImage(c.img,sx,sy2,sw,sh,fx,fy,side,side);
     }else{
-      x.fillStyle='#2b3550'; x.fillRect(cx0+pad,cy0+pad,fw,fh);
-      x.fillStyle='#8b93a7'; x.font=`800 ${Math.round(fw*0.3)}px Inter`; x.textAlign='center'; x.textBaseline='middle';
-      x.fillText(iniciales((c.j.nombres||'')+' '+(c.j.apellidos||'')),cx0+CW/2,cy0+pad+fh/2);
+      x.fillStyle=mixCl(0.55); x.fillRect(fx,fy,side,side);
+      x.fillStyle=bandCl; x.font=`800 ${Math.round(side*0.3)}px Inter`; x.textAlign='center'; x.textBaseline='middle';
+      x.fillText(iniciales((c.j.nombres||'')+' '+(c.j.apellidos||'')),fx+side/2,fy+side/2);
       x.textAlign='left'; x.textBaseline='alphabetic';
     }
-    x.restore();
-    // franja: nombre + puesto/rol (CT en dorado; jugadores en oscuro)
-    const sy=cy0+pad*2+fh;
-    x.fillStyle=esCT?'#d4af37':'#171e2e';
-    x.beginPath(); x.roundRect(cx0+pad,sy,CW-pad*2,SH,Math.round(CW*0.035)); x.fill();
-    // jugadores: solo primer nombre · comando técnico: nombres y apellidos
+    // logo del TORNEO (arriba-derecha) y ESCUDO del club (derecha, sobre el borde de la foto)
+    const lr=Math.round(CW*0.105);
+    dib(logoT,fx+side-lr-4,fy+lr+4,lr,iniciales(TORNEO.nombre));
+    dib(escudo,fx+side-lr-4,fy+side-2,lr,iniciales(cl.nombre||'?'));
+    // banda NOMBRE + DATOS (color del club oscurecido, siempre legible)
+    const zoneY=fy+side, zoneH=cy0+CH-b-zoneY;
+    const g=Math.max(3,Math.round(CW*0.022));
+    const nh=Math.round(zoneH*0.52), ph=Math.round(zoneH*0.28);
+    const inset=Math.round(CW*0.07);
+    x.fillStyle=bandCl;
+    x.beginPath(); x.roundRect(cx0+b+inset,zoneY+g,CW-b*2-inset*2,nh,Math.round(CW*0.03)); x.fill();
     const primer=esCT
       ? `${(c.j.nombres||'').trim()} ${(c.j.apellidos||'').trim()}`.trim().toUpperCase()||'—'
       : ((c.j.nombres||'').trim().split(/\s+/)[0]||'—').toUpperCase()+(c.capitan?' (C)':'');
-    const sub=(c.sub||'').toUpperCase();
+    const datos=esCT?(c.rol||'COMANDO TÉCNICO').toUpperCase()
+      :[c.dorsal!=null?'#'+c.dorsal:null,(c.sub||'').toUpperCase()||null].filter(Boolean).join('  |  ')||'JUGADOR';
     x.textAlign='center'; x.textBaseline='middle';
-    x.fillStyle=esCT?'#171e2e':'#fff';
-    x.font=fitText(primer,`${Math.round(SH*0.42)}px "Bebas Neue"`,CW-pad*2-(esCT?16:Math.round(CW*0.24)));
-    x.fillText(primer,cx0+CW/2+(esCT?0:Math.round(CW*0.03)),sy+SH*(sub?0.32:0.5));
-    if(sub){
-      x.fillStyle=esCT?'rgba(23,30,46,.75)':'rgba(255,255,255,.65)';
-      x.font=fitText(sub,`700 ${Math.round(SH*0.2)}px Inter`,CW-pad*2-16);
-      x.fillText(sub,cx0+CW/2,sy+SH*0.74);
-    }
-    if(!esCT&&c.dorsal!=null){
-      x.fillStyle='#ffd166'; x.font=`${Math.round(SH*0.44)}px "Bebas Neue"`; x.textAlign='left';
-      x.fillText(String(c.dorsal),cx0+pad+Math.round(CW*0.05),sy+SH/2+1);
-    }
+    x.fillStyle='#fff';
+    x.font=fitText(primer,`${Math.round(nh*0.52)}px "Bebas Neue"`,CW-b*2-inset*2-14-(lr));
+    x.fillText(primer,cx0+CW/2,zoneY+g+nh*0.36);
+    x.fillStyle='rgba(255,255,255,.8)';
+    x.font=fitText(datos,`700 ${Math.round(nh*0.22)}px Inter`,CW-b*2-inset*2-16);
+    x.fillText(datos,cx0+CW/2,zoneY+g+nh*0.76);
+    // pastilla del CLUB (blanca, como la del equipo en Panini)
+    const py=zoneY+g+nh+g;
+    x.fillStyle='#fff';
+    x.beginPath(); x.roundRect(cx0+b+inset*1.6,py,CW-b*2-inset*3.2,ph,ph/2); x.fill();
+    x.strokeStyle='rgba(0,0,0,.12)'; x.lineWidth=1; x.stroke();
+    x.fillStyle='#171e2e';
+    const clubTxt=nomEq(EQUIPO).toUpperCase();
+    x.font=fitText(clubTxt,`800 ${Math.round(ph*0.48)}px Inter`,CW-b*2-inset*3.2-14);
+    x.fillText(clubTxt,cx0+CW/2,py+ph/2+1);
     x.textAlign='left'; x.textBaseline='alphabetic';
+    x.restore();
   });
   // guías de corte (marca sutil en la calle central, fuera de los cromos)
-  x.strokeStyle='rgba(255,255,255,.18)'; x.lineWidth=1; x.setLineDash([10,12]);
+  x.strokeStyle='rgba(0,0,0,.2)'; x.lineWidth=1; x.setLineDash([10,12]);
   x.beginPath(); x.moveTo(W/2,HEAD+8); x.lineTo(W/2,H-FOOT); x.stroke(); x.setLineDash([]);
-  x.fillStyle='#8b93a7'; x.font='600 28px Inter'; x.textAlign='center';
+  x.fillStyle='#5b6478'; x.font='600 28px Inter'; x.textAlign='center';
   x.fillText('⚡ Powered by Liguify · liguify.com/'+(MARCA.slug||''),W/2,H-28);
   x.textAlign='left';
   window.__CV=cv;
