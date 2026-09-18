@@ -4112,6 +4112,7 @@ async function renderFixture(){
       ${header(medalla(f.nombre)+' '+f.nombre.toUpperCase(),
         `${porFase[f.id].some(m=>!m.local_id||!m.visita_id)?`<button onclick="modalResolver('${f.id}')" class="text-xs font-bold text-white bg-amber-500 rounded-lg px-3 py-1.5 hover:bg-amber-600 mr-1">⚡ RESOLVER</button>`:''}
          <button onclick="imprimirFixturePDF('fase:${f.id}')" title="PDF de la programación de la eliminatoria (con escudos, horas y sedes)" class="text-[10px] font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 mr-1 hover:bg-paper">🖨 PDF</button>
+         <button onclick="imprimirPlanillasJornada('fase:${f.id}')" title="Imprimir las planillas de juego de todas las llaves de la eliminatoria (para apuntar en campo)" class="text-[10px] font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 mr-1 hover:bg-paper">🖨 PLANILLAS</button>
          <button onclick="modalFase('${f.id}')" title="Gestión de la eliminatoria: cambiar día, imagen de programación y de resultados" class="text-[10px] font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 mr-1 hover:bg-paper">⚙ FASE</button>
          <button onclick="toggleVisibleFase('${f.id}',${visF?'false':'true'})" title="Controla si esta eliminatoria se muestra en el módulo público" class="text-[10px] font-bold rounded-lg px-3 py-1.5 mr-1 ${visF?'text-ink-400 border border-line hover:bg-paper':'bg-amber-100 text-amber-700 border border-amber-300'}">${visF?'👁 VISIBLE EN PÚBLICO':'🚫 OCULTA EN PÚBLICO'}</button>
          <button onclick="modalNuevoPartido('fase','${f.id}')" class="text-xs font-bold text-brand-600 border border-brand-100 rounded-lg px-3 py-1.5 hover:bg-brand-50">+ PARTIDO</button>`)}
@@ -4636,8 +4637,15 @@ async function imprimirFixturePDF(jid){
 
 /* ---- Planillas de juego imprimibles por fecha (para apuntar en campo) ---- */
 async function imprimirPlanillasJornada(jid){
-  const j=JORNADAS.find(x=>x.id===jid);
-  const {data:pms,error}=await sb.from('partido').select('*').eq('jornada_id',jid).order('hora');
+  // acepta también 'fase:<id>' para las planillas de una ELIMINATORIA completa
+  const esFase=String(jid||'').startsWith('fase:');
+  const faseId=esFase?String(jid).slice(5):null;
+  const faseObj=esFase?FASES.find(x=>x.id===faseId):null;
+  const j=esFase?null:JORNADAS.find(x=>x.id===jid);
+  const q=esFase
+    ?sb.from('partido').select('*').eq('fase_id',faseId).not('etapa','is',null).order('fecha').order('hora').order('etapa')
+    :sb.from('partido').select('*').eq('jornada_id',jid).order('hora');
+  const {data:pms,error}=await q;
   if(error){toast(errNegocio(error));return;}
   const ms=(pms||[]).filter(m=>m.local_id&&m.visita_id);
   if(!ms.length){toast('⚠ Esta fecha no tiene partidos con equipos definidos');return;}
@@ -4682,7 +4690,7 @@ async function imprimirPlanillasJornada(jid){
     <div class="cab">
       <div class="cab-marca">PLANILLA DE JUEGO</div>
       <div class="cab-t">${esc(TORNEO.nombre)} · ${esc(CAT.nombre_display||'')}</div>
-      <div class="cab-f">FECHA ${j?.numero??''} · ${m.fecha||''}${m.hora?' · '+m.hora.slice(0,5):''}${m.sede?' · '+esc(m.sede):''}${m.cancha?' · '+esc(m.cancha):''}</div>
+      <div class="cab-f">${esFase?esc(m.etapa||((faseObj||{}).nombre||'ELIMINATORIA')):('FECHA '+(j?.numero??''))} · ${m.fecha||''}${m.hora?' · '+m.hora.slice(0,5):''}${m.sede?' · '+esc(m.sede):''}${m.cancha?' · '+esc(m.cancha):''}</div>
     </div>
     <div class="vs"><span class="vs-n vs-der">${nom(m.local_id)}</span><span class="vs-box"></span><span class="vs-sep">:</span><span class="vs-box"></span><span class="vs-n">${nom(m.visita_id)}</span></div>
     <div class="dos-col">${colEquipo(m.local_id)}${colEquipo(m.visita_id)}</div>
@@ -4693,7 +4701,7 @@ async function imprimirPlanillasJornada(jid){
       <div><div class="f-l"></div>Delegado ${nom(m.visita_id)}</div>
     </div>
   </div>`;
-  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Planillas · FECHA ${j?.numero??''} · ${esc(CAT.nombre_display||'')}</title><style>
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Planillas · ${esFase?esc((faseObj||{}).nombre||'Eliminatoria'):('FECHA '+(j?.numero??''))} · ${esc(CAT.nombre_display||'')}</title><style>
     *{margin:0;padding:0;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     @page{size:A4 portrait;margin:9mm}
     body{background:#eee}
