@@ -5019,15 +5019,19 @@ async function modalEquipoIdealTorneo(){
   const js=(await sb.from('jornada').select('id,numero,categoria_id').in('categoria_id',cats.map(c=>c.id))).data||[];
   const JN=Object.fromEntries(js.map(j=>[j.id,j]));
   const rows=js.length?(await sb.from('equipo_ideal').select('jornada_id,en_torneo').in('jornada_id',js.map(j=>j.id))).data||[]:[];
-  // Figuras de partido por jornada (también son candidatas al equipo del torneo)
-  const figR=[]; const jidsAll=js.map(j=>j.id);
+  // Figuras de partido y partidos JUGADOS por jornada (una fecha jugada se lista
+  // aunque nadie haya marcado ⭐ ni figuras: el admin puede armarla con ➕ AGREGAR)
+  const figR=[], finR=[]; const jidsAll=js.map(j=>j.id);
   for(let k=0;k<jidsAll.length;k+=150){
-    figR.push(...((await sb.from('partido').select('jornada_id').in('jornada_id',jidsAll.slice(k,k+150)).not('figura_inscripcion_id','is',null)).data||[]));
+    const lote=jidsAll.slice(k,k+150);
+    figR.push(...((await sb.from('partido').select('jornada_id').in('jornada_id',lote).not('figura_inscripcion_id','is',null)).data||[]));
+    finR.push(...((await sb.from('partido').select('jornada_id').in('jornada_id',lote).in('estado',['finalizado','walkover'])).data||[]));
   }
   const porNum={};
   const ini=k=>porNum[k]=porNum[k]||{jug:0,sel:0,fig:0,cats:new Set()};
   rows.forEach(r=>{const j=JN[r.jornada_id]; if(!j) return; const p=ini(j.numero); p.jug++; if(r.en_torneo) p.sel++; p.cats.add(j.categoria_id);});
   figR.forEach(r=>{const j=JN[r.jornada_id]; if(!j) return; const p=ini(j.numero); p.fig++; p.cats.add(j.categoria_id);});
+  finR.forEach(r=>{const j=JN[r.jornada_id]; if(!j) return; const p=ini(j.numero); p.cats.add(j.categoria_id);});
   const nums=Object.keys(porNum).map(Number).sort((a,b)=>a-b);
   EIT={cats,js,num:null,data:[],form:(TORNEO.modalidad_default||'F9')};
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⭐ EQUIPO IDEAL DEL TORNEO</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
