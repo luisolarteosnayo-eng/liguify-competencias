@@ -5051,9 +5051,11 @@ async function modalEquipoIdealTorneo(){
     :'<p class="text-sm text-ink-400">Aún no hay jugadores marcados para el equipo ideal en ninguna fecha.</p>'}`, true);
   if(nums.length) cargarEIT();
 }
+let EIT_REQ=0;
 async function cargarEIT(){
-  EIT.num=+$('eit-f').value;
-  $('eit-body').innerHTML='Cargando…';
+  const req=++EIT_REQ;                 // guardián: si el usuario cambia de fecha
+  EIT.num=+$('eit-f').value;           // mientras esta carga sigue en vuelo,
+  $('eit-body').innerHTML='Cargando…'; // el resultado viejo se descarta
   const data=[];
   for(const c of EIT.cats){
     const j=EIT.js.find(x=>x.categoria_id===c.id&&x.numero===EIT.num); if(!j) continue;
@@ -5073,6 +5075,7 @@ async function cargarEIT(){
     d.forEach(p=>{p.jornada_id=j.id; p.cat=(c.nombre_display||('Cat. '+c.anio_nacimiento)).replace(/^Categor[ií]a\s+/i,'').toUpperCase(); p.catCorta=String(c.anio_nacimiento); p.en_torneo=!!sel[p.inscripcion_id]; p.esFigura=figSet.has(p.inscripcion_id); p.soloFigura=!tieneFila.has(p.inscripcion_id);});
     data.push(...d);
   }
+  if(req!==EIT_REQ) return;            // llegó tarde: ya hay una carga más nueva
   EIT.data=data; renderEIT(); renderEITAdd();
 }
 /* ---- ➕ AGREGAR JUGADOR al equipo del torneo (cualquier jugador de la fecha) ---- */
