@@ -1885,7 +1885,7 @@ async function reporteDocPendiente(){
     return {n:js.length,
       aut:js.filter(j=>!j.autorizacion_url).length,
       foto:js.filter(j=>!j.foto_url).length,
-      dni:js.filter(j=>!j.doc_scan_frente_url||!j.doc_scan_reverso_url).length};};
+      dni:js.filter(j=>!j.doc_scan_frente_url).length};};   // con la FOTO FRONTAL del DNI basta (la trasera no cuenta como pendiente)
   const acc={}, porClub={}, todos=new Set();
   ins.forEach(i=>{
     const club=CLN[EQC[i.equipo_id]]||'—';
