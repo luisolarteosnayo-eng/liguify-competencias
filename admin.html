@@ -17,6 +17,8 @@ tailwind.config={theme:{extend:{
   .screen{display:none}.screen.active{display:block}
   .tabbtn.active{background:#171e2e;color:#fff}
   input,select{outline:none}
+  .espera-spin{width:38px;height:38px;border:4px solid #e5e2dc;border-top-color:#171e2e;border-radius:50%;animation:esp-rot .8s linear infinite}
+  @keyframes esp-rot{to{transform:rotate(360deg)}}
   @media (max-width:640px){
     input,select,textarea{font-size:16px}     /* evita el zoom automático de iOS */
     .fila-persona{row-gap:6px}
@@ -182,6 +184,15 @@ tailwind.config={theme:{extend:{
 </div>
 <div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 bg-ink-900 text-white text-sm font-semibold px-5 py-3 rounded-xl shadow-xl z-[60] hidden max-w-lg text-center"></div>
 
+<!-- ⏳ overlay de proceso en curso: bloquea la pantalla mientras corre un proceso largo -->
+<div id="espera" class="fixed inset-0 bg-black/50 z-[55] hidden items-center justify-center p-4">
+  <div class="bg-white rounded-2xl px-8 py-6 flex flex-col items-center gap-3 shadow-2xl max-w-xs text-center">
+    <div class="espera-spin"></div>
+    <p id="espera-msg" class="text-sm font-bold text-ink-900">Procesando…</p>
+    <p class="text-[10px] text-ink-400 uppercase tracking-wide font-semibold">Un momento por favor</p>
+  </div>
+</div>
+
 <script>
 const sb = supabase.createClient(
   'https://bpsczjjomgzhnjxnzmhj.supabase.co',
@@ -200,6 +211,11 @@ const optsCatalogo=(atributo,sel)=>'<option value="">—</option>'+
 let CLUBES={}, EQUIPOS={}, ZONAS=[], FASES=[], JORNADAS=[];
 
 function toast(m){const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.add('hidden'),4200);}
+/* ⏳ indicador de proceso en curso: apilable (procesos anidados restauran el mensaje anterior) */
+const ESPERA_MSGS=[];
+function mostrarEspera(m){ESPERA_MSGS.push(m||'Procesando…');$('espera-msg').textContent=ESPERA_MSGS[ESPERA_MSGS.length-1];const e=$('espera');e.classList.remove('hidden');e.classList.add('flex');}
+function ocultarEspera(){ESPERA_MSGS.pop();if(ESPERA_MSGS.length){$('espera-msg').textContent=ESPERA_MSGS[ESPERA_MSGS.length-1];return;}const e=$('espera');e.classList.add('hidden');e.classList.remove('flex');}
+async function conEspera(m,fn){mostrarEspera(m);await new Promise(r=>setTimeout(r,60));/* deja pintar el overlay antes de trabajo síncrono pesado */try{return await fn();}finally{ocultarEspera();}}
 function msg(texto,tipo){const e=$('msg'); if(!texto){e.classList.add('hidden');return;}
   e.className='text-sm font-semibold rounded-2xl px-4 py-3 mb-4 '+(tipo==='err'?'bg-brand-50 border border-brand-100 text-brand-600':'bg-emerald-50 border border-emerald-200 text-emerald-700');
   e.textContent=texto; e.classList.remove('hidden');}
@@ -6447,6 +6463,51 @@ async function renderTabla(){
         <td class="text-center font-extrabold">${r.pts}</td></tr>`).join('')}</tbody></table></div>`;
   }).join('')+golHTML+rkHTML;
 }
+
+/* ⏳ Procesos que tardan varios segundos: se envuelven con el overlay de espera.
+   Los que ya muestran "Cargando…/Generando…" dentro de su propio modal no van aquí. */
+const PROCESOS_LARGOS={
+  previsualizarProgramacion:'Analizando la programación…',
+  aplicarProgramacion:'Aplicando la programación…',
+  imprimirProgramacionTorneo:'Generando el PDF de la programación…',
+  generarFixture:'Generando el fixture…',
+  replicarFixture:'Replicando el fixture…',
+  crearPlantilla:'Creando la plantilla de la fase…',
+  crearLlaves:'Creando las llaves…',
+  aplicarResolucion:'Resolviendo la fase…',
+  importarERP:'Importando los equipos del ERP…',
+  importarPlantel:'Importando el plantel…',
+  imprimirFixturePDF:'Generando el PDF del fixture…',
+  imprimirPlanillasJornada:'Generando las planillas…',
+  imprimirPlanillasTorneo:'Generando las planillas…',
+  pdfComandoTecnico:'Generando el PDF del comando técnico…',
+  exportarExcelFixture:'Generando el Excel…',
+  exportarExcelJornada:'Generando el Excel…',
+  importarExcelJornada:'Leyendo el Excel…',
+  aplicarImportacion:'Aplicando los resultados…',
+  generarImagenJornada:'Generando la imagen…',
+  generarImagenTabla:'Generando la imagen de la tabla…',
+  compartirGoleadores:'Generando la imagen de goleadores…',
+  generarImagenEIT:'Generando la imagen del equipo ideal…',
+  generarImagenEquipoIdeal:'Generando la imagen del equipo ideal…',
+  imagenDocPendiente:'Generando la imagen del reporte…',
+  excelDocPendiente:'Generando el Excel…',
+  albumEquipo:'Generando el álbum…',
+  generarSuspensiones:'Generando las suspensiones…',
+  eliminarJornada:'Eliminando la fecha…',
+  intercambiarJornada:'Intercambiando las fechas…',
+  guardarResultado:'Guardando el resultado…',
+  enviarAviso:'Enviando el aviso…',
+  estadoReclamo:'Procesando el reclamo…',
+  subirImagen:'Subiendo la imagen…',
+  subirFotoJugador:'Subiendo la foto…',
+  subirDoc:'Subiendo el documento…',
+  subirDocTorneo:'Subiendo el documento…'
+};
+Object.entries(PROCESOS_LARGOS).forEach(([n,m])=>{
+  const f=window[n]; if(typeof f!=='function') return;
+  window[n]=(...a)=>conEspera(m,()=>f(...a));
+});
 
 iniciar();
 </script>

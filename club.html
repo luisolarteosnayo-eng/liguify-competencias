@@ -17,6 +17,8 @@ tailwind.config={theme:{extend:{
   .screen{display:none}.screen.active{display:block}
   .tabbtn.active{background:#171e2e;color:#fff}
   input,select{outline:none}
+  .espera-spin{width:38px;height:38px;border:4px solid #e5e2dc;border-top-color:#171e2e;border-radius:50%;animation:esp-rot .8s linear infinite}
+  @keyframes esp-rot{to{transform:rotate(360deg)}}
   @media (max-width:640px){
     input,select,textarea{font-size:16px}     /* evita el zoom automático de iOS */
     .fila-persona{row-gap:6px}
@@ -98,6 +100,15 @@ tailwind.config={theme:{extend:{
 </div>
 <div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 bg-ink-900 text-white text-sm font-semibold px-5 py-3 rounded-xl shadow-xl z-[60] hidden max-w-lg text-center"></div>
 
+<!-- ⏳ overlay de proceso en curso: bloquea la pantalla mientras corre un proceso largo -->
+<div id="espera" class="fixed inset-0 bg-black/50 z-[55] hidden items-center justify-center p-4">
+  <div class="bg-white rounded-2xl px-8 py-6 flex flex-col items-center gap-3 shadow-2xl max-w-xs text-center">
+    <div class="espera-spin"></div>
+    <p id="espera-msg" class="text-sm font-bold text-ink-900">Procesando…</p>
+    <p class="text-[10px] text-ink-400 uppercase tracking-wide font-semibold">Un momento por favor</p>
+  </div>
+</div>
+
 <script>
 const sb = supabase.createClient(
   'https://bpsczjjomgzhnjxnzmhj.supabase.co',
@@ -116,6 +127,11 @@ const optsCatalogo=(atributo,sel)=>'<option value="">—</option>'+
 
 function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));$(id).classList.add('active');window.scrollTo(0,0);}
 function toast(t){const e=$('toast');e.textContent=t;e.classList.remove('hidden');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.add('hidden'),5000);}
+/* ⏳ indicador de proceso en curso: apilable (procesos anidados restauran el mensaje anterior) */
+const ESPERA_MSGS=[];
+function mostrarEspera(m){ESPERA_MSGS.push(m||'Procesando…');$('espera-msg').textContent=ESPERA_MSGS[ESPERA_MSGS.length-1];const e=$('espera');e.classList.remove('hidden');e.classList.add('flex');}
+function ocultarEspera(){ESPERA_MSGS.pop();if(ESPERA_MSGS.length){$('espera-msg').textContent=ESPERA_MSGS[ESPERA_MSGS.length-1];return;}const e=$('espera');e.classList.add('hidden');e.classList.remove('flex');}
+async function conEspera(m,fn){mostrarEspera(m);await new Promise(r=>setTimeout(r,60));/* deja pintar el overlay antes de trabajo síncrono pesado */try{return await fn();}finally{ocultarEspera();}}
 function msg(t,tipo){const e=$('msg');if(!t){e.classList.add('hidden');return;}e.textContent=t;e.className=`text-sm font-semibold rounded-2xl px-4 py-3 mb-4 ${tipo==='err'?'bg-brand-50 text-brand-700 border border-brand-100':'bg-emerald-50 text-emerald-700 border border-emerald-200'}`;}
 function abrirModal(html,ancho){const b=$('modal-body');b.innerHTML=html;b.style.maxWidth=ancho?'880px':'';const m=$('modal');m.classList.remove('hidden');m.classList.add('flex');}
 function cerrarModal(){const m=$('modal');m.classList.add('hidden');m.classList.remove('flex');}
@@ -1874,6 +1890,25 @@ async function renderTablaEq(){
       <span class="text-[10px] text-white/50">comparativo de tus equipos en ${EQ.torneo} · solo partidos finalizados</span></div>`+h;
   }).catch(()=>{const el=$('rend-club-eq'); if(el) el.innerHTML='';});
 }
+
+/* ⏳ Procesos que tardan varios segundos: se envuelven con el overlay de espera. */
+const PROCESOS_LARGOS={
+  imprimirProgramacionClub:'Generando el PDF de la programación…',
+  copiarPlantel:'Copiando el plantel…',
+  exportarExcelFixtureClub:'Generando el Excel…',
+  imprimirFixtureClub:'Generando el PDF del fixture…',
+  subirFotoJugador:'Subiendo la foto…',
+  subirDoc:'Subiendo el documento…',
+  activarConAutorizacion:'Guardando la autorización…',
+  subirAdjReclamo:'Subiendo la imagen…',
+  subirFotoDescargo:'Subiendo la imagen…',
+  guardarReclamoClub:'Guardando el reclamo…',
+  enviarDescargo:'Enviando el descargo…'
+};
+Object.entries(PROCESOS_LARGOS).forEach(([n,m])=>{
+  const f=window[n]; if(typeof f!=='function') return;
+  window[n]=(...a)=>conEspera(m,()=>f(...a));
+});
 
 iniciar();
 </script>
