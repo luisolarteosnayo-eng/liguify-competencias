@@ -1029,7 +1029,7 @@ async function verificarPersona(){
           out.innerHTML=banner(false,'NO PERTENECE A ESTE TORNEO')+`<p class="text-xs text-ink-500 mb-2 text-center">El carnet es del torneo <b>${d.torneo||'—'}</b>.</p>`+fichaRPC(d,'JUGADOR'+(d.dorsal!=null?' · #'+d.dorsal:''));
           return;
         }
-        const pHoy=insTok?await partidoHoyHTML(insTok.id,insTok.equipo_id,!!d.valido):'';
+        const pHoy=insTok?await partidoHoyHTML(insTok.id,insTok.equipo_id,!!d.valido,!d.inhabilitado&&!d.sancion_global&&d.en_lbf!==false):'';
         out.innerHTML=fichaRPC(d,'JUGADOR'+(d.dorsal!=null?' · #'+d.dorsal:''))+`
         <div class="border border-line rounded-xl px-3 py-1 text-sm mb-2">
           ${[['Identidad verificada',d.verificado],['En Lista de Buena Fe',d.en_lbf],[d.requiere_autorizacion?'Habilitado (autorización de Padre/Tutor)':'Habilitado (el torneo no exige autorización)',d.habilitado??(d.estado==='activo')],['Sin sanción del torneo',!d.inhabilitado],['Sin sanción global',!d.sancion_global]].map(([l,c])=>`<div class="flex justify-between py-1 border-b border-line last:border-0"><span class="text-ink-500 text-xs">${l}</span><b class="${c?'text-emerald-600':'text-brand-600'}">${c?'✔':'✖'}</b></div>`).join('')}
@@ -1090,7 +1090,8 @@ async function verificarPersona(){
     const pHoyIns={};
     await Promise.all(ins.map(async i=>{
       const validoIns=!sancion&&i.en_lbf&&habil(i)&&!i.inhabilitado;
-      pHoyIns[i.id]=await partidoHoyHTML(i.id,i.equipo_id,validoIns);
+      const permitidoIns=!sancion&&i.en_lbf&&!i.inhabilitado;   // info incompleta NO bloquea la asistencia
+      pHoyIns[i.id]=await partidoHoyHTML(i.id,i.equipo_id,validoIns,permitidoIns);
     }));
     out.innerHTML=`
       ${banner(okGlobal, okGlobal?'VÁLIDO EN ESTE TORNEO':(ins.length||cts.length?'CON OBSERVACIONES':'NO INSCRITO EN ESTE TORNEO'))}
@@ -1129,7 +1130,11 @@ async function verificarPersona(){
 /* Partido de HOY del equipo del jugador + GRABAR ASISTENCIA (acredita la
    participación: acreditacion_partido + planilla.jugo=true, la J) */
 let VF_METODO='dni_scan';
-async function partidoHoyHTML(insId,equipoId,valido){
+async function partidoHoyHTML(insId,equipoId,valido,permitido){
+  // permitido: puede grabar asistencia AUNQUE no esté VÁLIDO (información
+  // incompleta: pendiente / sin autorización). Sanción, inhabilitación o
+  // estar fuera de la LBF sí bloquean.
+  if(permitido===undefined) permitido=valido;
   if(!equipoId) return '';
   const hoy=new Date().toISOString().slice(0,10);
   const {data:pms}=await sb.from('partido').select('*').or(`local_id.eq.${equipoId},visita_id.eq.${equipoId}`).eq('fecha',hoy);
@@ -1157,7 +1162,9 @@ async function partidoHoyHTML(insId,equipoId,valido){
     ${SUSP[m.id]?`<p class="text-xs font-bold text-brand-600 mt-1">⛔ SUSPENDIDO — 🟥 en la fecha ${SUSP[m.id].roja} · cumple ${SUSP[m.id].fechas} fecha(s) · vuelve en la fecha ${SUSP[m.id].vuelve}. NO puede jugar este partido.</p>`
       :ya.has(m.id)?'<p class="text-xs font-bold text-emerald-700 mt-1">✔ ASISTENCIA REGISTRADA</p>'
       :valido?`<button onclick="marcarAsistencia('${m.id}','${insId}')" class="w-full mt-1.5 bg-emerald-700 text-white text-xs font-bold py-2 rounded-lg hover:bg-emerald-800">✔ GRABAR ASISTENCIA</button>`
-      :'<p class="text-[11px] text-brand-600 font-bold mt-1">No se puede registrar asistencia: el jugador no está VÁLIDO.</p>'}
+      :permitido?`<p class="text-[11px] text-amber-600 font-bold mt-1">⚠ Información incompleta (pendiente / sin autorización): la asistencia SÍ se registra igual.</p>
+        <button onclick="marcarAsistencia('${m.id}','${insId}')" class="w-full mt-1 bg-amber-500 text-ink-900 text-xs font-bold py-2 rounded-lg hover:bg-amber-400">⚠ GRABAR ASISTENCIA (PENDIENTE)</button>`
+      :'<p class="text-[11px] text-brand-600 font-bold mt-1">No se puede registrar asistencia: jugador inhabilitado, sancionado o fuera de la LBF.</p>'}
   </div>`).join('');
 }
 async function marcarAsistencia(partidoId,insId){
