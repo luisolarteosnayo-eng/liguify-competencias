@@ -62,6 +62,7 @@ set search_path = competencias, public
 as $$
 declare v_cat uuid;
 begin
+  if auth.uid() is null then return case when tg_op = 'DELETE' then old else new end; end if;  -- SQL Editor / service_role: exento
   v_cat := case when tg_op = 'DELETE' then old.categoria_id else new.categoria_id end;
   if not competencias.es_admin_marca(competencias.marca_de_categoria(v_cat)) then
     raise exception 'Solo el admin de la marca puede crear o eliminar partidos';
