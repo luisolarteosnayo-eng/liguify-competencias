@@ -25,6 +25,7 @@ set search_path = competencias, public
 as $$
 declare v_marca uuid;
 begin
+  if auth.uid() is null then return new; end if;   -- SQL Editor / service_role: exento
   v_marca := competencias.marca_de_categoria(new.categoria_id);
   if competencias.es_admin_marca(v_marca) then
     return new;                                   -- admin: sin restricciones
