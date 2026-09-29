@@ -1068,16 +1068,16 @@ async function verificarPersona(){
       if(insN&&insN.length){VF_METODO='nfc';const r2=await sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,pais_documento,foto_url,verificado').eq('id',insN[0].jugador_id).single(); j=r2.data;}
     }
     if(!j){out.innerHTML=banner(false,'NO ENCONTRADO EN LIGUIFY');return;}
-    await fotosDelTorneo([j]);   // foto del torneo (si el club subió una específica)
-    // sanción global vigente
+    // ⚡ foto del torneo, sanción global, inscripciones y CT — TODO EN PARALELO
+    // (antes eran 3 pasos en cadena; en cancha cada escaneo ahorra ~1 segundo)
     const hoy=new Date().toISOString().slice(0,10);
-    const {data:sg}=await sb.from('sancion_global').select('id,vigencia_desde,vigencia_hasta').eq('jugador_id',j.id);
-    const sancion=(sg||[]).some(s=>s.vigencia_desde<=hoy&&(!s.vigencia_hasta||s.vigencia_hasta>=hoy));
-    // inscripciones y CT de la persona EN ESTE TORNEO
-    const [insQ,ctQ]=await Promise.all([
+    const [,sgQ,insQ,ctQ]=await Promise.all([
+      fotosDelTorneo([j]),   // foto del torneo (si el club subió una específica)
+      sb.from('sancion_global').select('id,vigencia_desde,vigencia_hasta').eq('jugador_id',j.id),
       sb.from('inscripcion_lbf').select('id,dorsal,estado,en_lbf,inhabilitado,equipo_id,equipo:equipo_id(nombre,club:club_id(nombre)),categoria:categoria_id(nombre_display,torneo_id)').eq('jugador_id',j.id),
       sb.from('comando_tecnico').select('id,rol,estado,inhabilitado,equipo:equipo_id(nombre,club:club_id(nombre)),categoria:categoria_id(nombre_display,torneo_id)').eq('persona_id',j.id)
     ]);
+    const sancion=((sgQ.data)||[]).some(s=>s.vigencia_desde<=hoy&&(!s.vigencia_hasta||s.vigencia_hasta>=hoy));
     const deTorneo=r=>r.categoria&&r.categoria.torneo_id===TORNEO.id;
     const ins=(insQ.data||[]).filter(deTorneo), cts=(ctQ.data||[]).filter(deTorneo);
     // Habilitación según la config del torneo: si NO exige autorización de
@@ -1137,20 +1137,29 @@ async function partidoHoyHTML(insId,equipoId,valido,permitido){
   if(permitido===undefined) permitido=valido;
   if(!equipoId) return '';
   const hoy=new Date().toISOString().slice(0,10);
-  const {data:pms}=await sb.from('partido').select('*').or(`local_id.eq.${equipoId},visita_id.eq.${equipoId}`).eq('fecha',hoy);
+  // ⚡ partido de hoy, acreditaciones y suspensiones EN PARALELO (antes: 5 pasos en cadena)
+  const [pmsQ,acsQ,susQ]=await Promise.all([
+    sb.from('partido').select('*').or(`local_id.eq.${equipoId},visita_id.eq.${equipoId}`).eq('fecha',hoy),
+    sb.from('acreditacion_partido').select('partido_id').eq('inscripcion_id',insId),
+    sb.from('suspension').select('fechas,partido:partido_id(jornada:jornada_id(numero))').eq('inscripcion_id',insId)
+  ]);
+  const pms=pmsQ.data;
   if(!pms||!pms.length) return '<p class="w-full text-[11px] text-ink-400 mt-1">Sin partido programado HOY para su equipo.</p>';
-  const {data:acs}=await sb.from('acreditacion_partido').select('partido_id').eq('inscripcion_id',insId).in('partido_id',pms.map(m=>m.id));
-  const ya=new Set((acs||[]).map(a=>a.partido_id));
+  const pmIds=new Set(pms.map(m=>m.id));
+  const ya=new Set((acsQ.data||[]).map(a=>a.partido_id).filter(id=>pmIds.has(id)));
   const ids=[...new Set(pms.flatMap(m=>[m.local_id,m.visita_id]).filter(Boolean))];
-  const {data:eqs}=await sb.from('equipo').select('id,nombre,club:club_id(nombre)').in('id',ids);
-  const nm=Object.fromEntries((eqs||[]).map(e=>[e.id,e.nombre||(e.club||{}).nombre||'—']));
+  const sus=susQ.data||[];
+  const jids=[...new Set(pms.map(m=>m.jornada_id).filter(Boolean))];
+  const [eqsQ,jnQ]=await Promise.all([
+    sb.from('equipo').select('id,nombre,club:club_id(nombre)').in('id',ids),
+    (sus.length&&jids.length)?sb.from('jornada').select('id,numero').in('id',jids):Promise.resolve({data:[]})
+  ]);
+  const nm=Object.fromEntries((eqsQ.data||[]).map(e=>[e.id,e.nombre||(e.club||{}).nombre||'—']));
   // ⛔ suspensión vigente por tarjeta roja: roja en la fecha R → cumple R+1..R+fechas
   const SUSP={};
   try{
-    const {data:sus}=await sb.from('suspension').select('fechas,partido:partido_id(jornada:jornada_id(numero))').eq('inscripcion_id',insId);
-    if(sus&&sus.length){
-      const jn=await sb.from('jornada').select('id,numero').in('id',[...new Set(pms.map(m=>m.jornada_id).filter(Boolean))]);
-      const JNUM=Object.fromEntries((jn.data||[]).map(j=>[j.id,j.numero]));
+    if(sus.length){
+      const JNUM=Object.fromEntries((jnQ.data||[]).map(j=>[j.id,j.numero]));
       pms.forEach(m=>{const nJ=JNUM[m.jornada_id]; if(nJ==null) return;
         sus.forEach(s=>{const r=s.partido&&s.partido.jornada?s.partido.jornada.numero:null;
           if(r!=null&&nJ>r&&nJ<=r+s.fechas) SUSP[m.id]={roja:r,fechas:s.fechas,vuelve:r+s.fechas+1};});});

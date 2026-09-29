@@ -116,7 +116,7 @@ const sb = supabase.createClient(
   { db:{schema:'competencias'}, auth:{storageKey:'sb-competencias-club'} }   // cajón propio; jamás toca ERP/Academias/Admin
 );
 const $=id=>document.getElementById(id);
-let MIS=[], EQ=null, REQ_AUT=false;
+let MIS=[], EQ=null, REQ_AUT=false, UID='';
 let CATALOGO={};
 async function cargarCatalogo(){
   const {data}=await sb.from('catalogo_atributo').select('*').eq('activo',true).order('orden');
@@ -135,6 +135,27 @@ async function conEspera(m,fn){mostrarEspera(m);await new Promise(r=>setTimeout(
 function msg(t,tipo){const e=$('msg');if(!t){e.classList.add('hidden');return;}e.textContent=t;e.className=`text-sm font-semibold rounded-2xl px-4 py-3 mb-4 ${tipo==='err'?'bg-brand-50 text-brand-700 border border-brand-100':'bg-emerald-50 text-emerald-700 border border-emerald-200'}`;}
 function abrirModal(html,ancho){const b=$('modal-body');b.innerHTML=html;b.style.maxWidth=ancho?'880px':'';const m=$('modal');m.classList.remove('hidden');m.classList.add('flex');}
 function cerrarModal(){const m=$('modal');m.classList.add('hidden');m.classList.remove('flex');}
+/* ⚡ CACHÉ LOCAL: la última versión pintada de cada pantalla se guarda en el
+   navegador y se muestra AL INSTANTE en la siguiente visita, mientras los
+   datos frescos llegan de la red y la vuelven a pintar. */
+const CACHE_PREF='lgfc1:';
+function cacheGet(k){try{const r=localStorage.getItem(CACHE_PREF+k);return r?JSON.parse(r):null;}catch(_){return null;}}
+function cacheSet(k,v){
+  try{localStorage.setItem(CACHE_PREF+k,JSON.stringify(v));}
+  catch(_){ try{Object.keys(localStorage).filter(x=>x.startsWith(CACHE_PREF)).forEach(x=>localStorage.removeItem(x));
+    localStorage.setItem(CACHE_PREF+k,JSON.stringify(v));}catch(__){} }
+}
+function pintarSnapshot(nombre,ids){
+  const c=cacheGet('snap:'+nombre); if(!c) return false;
+  ids.forEach(id=>{const el=$(id); if(el&&c[id]!=null) el.innerHTML=c[id];});
+  return true;
+}
+function guardarSnapshot(nombre,ids){
+  const c={}; let tam=0;
+  ids.forEach(id=>{const el=$(id); if(el){c[id]=el.innerHTML; tam+=c[id].length;}});
+  if(tam>500000) return;
+  cacheSet('snap:'+nombre,c);
+}
 const iniciales=n=>(n||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
 /* Pastilla "VER VIDEO" clicable desde la lista (no abre el detalle del partido) */
 const videoPill=u=>`<div class="flex justify-center mt-1.5"><a href="${u}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Ver el video del partido"
@@ -210,6 +231,7 @@ async function guardarPassword(){
 async function iniciar(){
   const {data:{session}}=await sb.auth.getSession();
   if(!session){show('s-login');return;}
+  UID=session.user.id;
   $('hdr-user').textContent=session.user.email;
   $('hdr-out').classList.remove('hidden');
   $('hdr-key').classList.remove('hidden');
@@ -219,6 +241,8 @@ async function iniciar(){
 
 /* ============ THE HUB (agrupado por torneo) ============ */
 async function cargarHub(){
+  // ⚡ pinta al instante lo último conocido de este usuario y revalida al fondo
+  if(pintarSnapshot('hub:'+UID,['hub-inv','hub-lista'])) show('s-hub');
   const [inv,eqs]=await Promise.all([sb.rpc('mis_invitaciones'),sb.rpc('mis_equipos_club')]);
   // invitaciones pendientes → tarjetas de aceptación
   $('hub-inv').innerHTML=(inv.data||[]).map(i=>`
@@ -247,6 +271,7 @@ async function cargarHub(){
     </div>`;
   } else renderHubLista();
   show('s-hub');
+  guardarSnapshot('hub:'+UID,['hub-inv','hub-lista']);
 }
 /* Hub: por defecto solo torneos EN CURSO (y en preparación); los FINALIZADOS
    quedan tras un botón. Los archivados no se muestran. */
@@ -667,13 +692,22 @@ async function abrirEquipo(id){
     if(u&&el) el.innerHTML=`<img src="${u}" class="absolute inset-0 w-full h-full object-cover"/>`;
   });
   tabs('tabla');
+  // ⚡ pinta al instante la última versión conocida y muestra la pantalla YA
+  const snap=pintarSnapshot('ceq:'+EQ.equipo_id,['eq-kpis','tab-tabla','tab-plantel','tab-partidos']);
+  if(!snap){ $('tab-tabla').innerHTML='<p class="text-xs text-ink-400 py-8 text-center">Cargando…</p>'; $('tab-plantel').innerHTML=''; $('tab-partidos').innerHTML=''; $('eq-kpis').innerHTML=''; }
+  show('s-equipo');
   renderKPIs('eq-kpis',[EQ.categoria_id]);
   EQ_LISTO=false;
+  // ⚡ tabla, goleadores y ranking arrancan YA, en paralelo con plantel y partidos
+  const preTab={
+    tabla:sb.from('vista_tabla_zona').select('*').eq('categoria_id',EQ.categoria_id),
+    gol:goleadoresHTML(EQ.categoria_id),
+    rk:rankingHTML(EQ.categoria_id,'renderTablaEq')
+  };
   await Promise.all([renderPlantel(),renderPartidos()]);   // dejan listas las secciones de resultados y estadísticas
-  await renderTablaEq();
+  await renderTablaEq(preTab);
   EQ_LISTO=true;
-  show('s-equipo');
-  show('s-equipo');
+  guardarSnapshot('ceq:'+EQ.equipo_id,['eq-kpis','tab-tabla','tab-plantel','tab-partidos']);
 }
 
 /* ---- PLANTEL (LBF) ---- */
@@ -1360,14 +1394,13 @@ async function renderPartidos(){
   if(error){$('tab-partidos').innerHTML='';return;}
   const ids=[...new Set((pms||[]).flatMap(m=>[m.local_id,m.visita_id]).filter(Boolean))];
   let eqs={};
-  if(ids.length){
-    const es=await sb.from('equipo').select('id,nombre,club_id').in('id',ids);
-    const cs=await sb.from('club').select('id,nombre,escudo_url,color').in('id',(es.data||[]).map(e=>e.club_id));
-    const cl=Object.fromEntries((cs.data||[]).map(c=>[c.id,c]));
-    eqs=Object.fromEntries((es.data||[]).map(e=>[e.id,{nombre:e.nombre||(cl[e.club_id]||{}).nombre||'—', club:cl[e.club_id]||{}}]));
-  }
+  // ⚡ equipos CON su club en una sola consulta, y las planillas EN PARALELO
+  const [esQ]=await Promise.all([
+    ids.length?sb.from('equipo').select('id,nombre,club:club_id(id,nombre,escudo_url,color)').in('id',ids):Promise.resolve({data:[]}),
+    cargarPlanillas((pms||[]).filter(m=>['finalizado','walkover'].includes(m.estado)).map(m=>m.id))   // goles y tarjetas bajo el marcador
+  ]);
+  eqs=Object.fromEntries((esQ.data||[]).map(e=>[e.id,{nombre:e.nombre||(e.club||{}).nombre||'—', club:e.club||{}}]));
   CLUB_PIDX={}; (pms||[]).forEach(m=>CLUB_PIDX[m.id]=m); CLUB_EQNOM=eqs;
-  await cargarPlanillas((pms||[]).filter(m=>['finalizado','walkover'].includes(m.estado)).map(m=>m.id));   // goles y tarjetas bajo el marcador
   const lado=(id,der)=>{const e=eqs[id];if(!e)return '<span class="italic text-ink-400">Por definir</span>';
     const b=`<span class="relative inline-grid place-items-center w-7 h-7 rounded-lg text-white text-[10px] font-bold shrink-0 overflow-hidden" style="background:${e.club.escudo_url?'#fff':(e.club.color||'#334155')}">${e.club.escudo_url?`<img src="${e.club.escudo_url}" class="absolute inset-0 w-full h-full object-contain"/>`:iniciales(e.club.nombre)}</span>`;
     return der?`${b} ${e.nombre}`:`${e.nombre} ${b}`;};
@@ -1418,10 +1451,9 @@ async function datosFixtureClub(){
   if(error){toast(errNegocio(error));return null;}
   if(!(pms||[]).length){toast('⚠ Tu categoría aún no tiene fixture publicado');return null;}
   const ids=[...new Set(pms.flatMap(m=>[m.local_id,m.visita_id]).filter(Boolean))];
-  const eqs=(await sb.from('equipo').select('id,nombre,club_id').in('id',ids)).data||[];
-  const cls=(await sb.from('club').select('id,nombre,escudo_url,color').in('id',[...new Set(eqs.map(e=>e.club_id))])).data||[];
-  const CL=Object.fromEntries(cls.map(c=>[c.id,c]));
-  const EQN=Object.fromEntries(eqs.map(e=>[e.id,{nom:e.nombre||(CL[e.club_id]||{}).nombre||'—', club:(CL[e.club_id]||{}).nombre||'', cl:CL[e.club_id]||{}}]));
+  // ⚡ equipos CON su club en una sola consulta
+  const eqs=(await sb.from('equipo').select('id,nombre,club:club_id(id,nombre,escudo_url,color)').in('id',ids)).data||[];
+  const EQN=Object.fromEntries(eqs.map(e=>[e.id,{nom:e.nombre||(e.club||{}).nombre||'—', club:(e.club||{}).nombre||'', cl:e.club||{}}]));
   const porJ={}; pms.forEach(m=>{const n=(m.jornada&&m.jornada.numero)||0;(porJ[n]=porJ[n]||[]).push(m);});
   const nums=Object.keys(porJ).map(Number).sort((a,b)=>a-b);
   return {pms,EQN,porJ,nums};
@@ -1861,8 +1893,14 @@ async function rankingHTML(categoriaId,renderFn){
     <p class="px-4 py-2 text-[10px] text-ink-400 border-t border-line">Ranking del torneo. Puntos por partidos jugados, goles, asistencias, figura del partido y equipo ideal según la posición del jugador; las tarjetas restan. # = puesto en ${RK_LINEA?'su línea dentro de la categoría':'la categoría'} · TORNEO = puesto en todo el torneo.</p>
   </div>`;
 }
-async function renderTablaEq(){
-  const {data,error}=await sb.from('vista_tabla_zona').select('*').eq('categoria_id',EQ.categoria_id);
+async function renderTablaEq(pre){
+  // ⚡ tabla + goleadores + ranking EN PARALELO (y precargados desde abrirEquipo)
+  const [tabQ,golHTML,rkHTML]=await Promise.all([
+    pre&&pre.tabla?pre.tabla:sb.from('vista_tabla_zona').select('*').eq('categoria_id',EQ.categoria_id),
+    pre&&pre.gol?pre.gol:goleadoresHTML(EQ.categoria_id),
+    pre&&pre.rk?pre.rk:rankingHTML(EQ.categoria_id,'renderTablaEq')
+  ]);
+  const {data,error}=tabQ;
   if(error){$('tab-tabla').innerHTML='';return;}
   const zonas=[...new Set((data||[]).map(r=>r.zona))].sort();
   const tablaHTML=zonas.map(z=>{
@@ -1881,7 +1919,7 @@ async function renderTablaEq(){
         <td class="text-center text-sm text-ink-400">${r.gc}</td></tr>`).join('')}</tbody></table></div>`;
   }).join('')||'<p class="text-ink-400 text-sm bg-white border border-line rounded-2xl p-6 text-center mb-4">Tu equipo aún no está asignado a una zona.</p>';
   // Orden de la pestaña: RESULTADOS (partidos jugados) · TABLA DE POSICIONES · ESTADÍSTICAS DEL TORNEO · GOLEADORES · RENDIMIENTO DEL CLUB
-  $('tab-tabla').innerHTML=RESULTADOS_HTML+tablaHTML+(STATS_HTML?STATS_HTML.replace('rounded-2xl overflow-hidden mt-4','rounded-2xl overflow-hidden mb-4'):'')+await goleadoresHTML(EQ.categoria_id)+await rankingHTML(EQ.categoria_id,'renderTablaEq')+`<div id="rend-club-eq" class="mt-4"><p class="text-xs text-ink-400 py-4 text-center">Calculando el rendimiento del club…</p></div>`;
+  $('tab-tabla').innerHTML=RESULTADOS_HTML+tablaHTML+(STATS_HTML?STATS_HTML.replace('rounded-2xl overflow-hidden mt-4','rounded-2xl overflow-hidden mb-4'):'')+golHTML+rkHTML+`<div id="rend-club-eq" class="mt-4"><p class="text-xs text-ink-400 py-4 text-center">Calculando el rendimiento del club…</p></div>`;
   // 📊 rendimiento del club (todas sus categorías del torneo), embebido al final de la pestaña
   const rEqIds=(RECL_EQS[EQ.torneo_id]||[]).map(e=>e.id);
   htmlRendimiento(rEqIds).then(h=>{const el=$('rend-club-eq'); if(el) el.innerHTML=
