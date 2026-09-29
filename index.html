@@ -668,38 +668,48 @@ async function irTorneo(){
   $('t-nombre').textContent=TORNEO.nombre.toUpperCase();
   pintarLogoTorneo('t-logo');
   $('t-meta').textContent=`Temporada ${TORNEO.anio}${TORNEO.sede?' · '+TORNEO.sede:''}`;
-  // documentos del torneo (reglamento, bases…)
-  sb.from('torneo_documento').select('*').eq('torneo_id',TORNEO.id).order('created_at').then(({data})=>{
-    $('t-docs').innerHTML=(data&&data.length)?`<div class="flex flex-wrap gap-2">
-      ${data.map(d=>`<a href="${d.url}" target="_blank" download class="inline-flex items-center gap-1.5 bg-white border border-line rounded-xl px-4 py-2 text-sm font-bold text-ink-700 hover:shadow-md hover:text-brand-600 transition">📄 ${d.titulo} <span class="text-ink-400">⬇</span></a>`).join('')}
-    </div>`:'';
-  });
   // ⚡ pinta al instante la última versión conocida (existe solo en torneos multi-categoría)
-  const snapT=pintarSnapshot('torneo:'+TORNEO.id,['t-kpis','t-home','categorias','t-general']);
+  const snapT=pintarSnapshot('torneo:'+TORNEO.id,['t-docs','t-kpis','t-home','categorias','t-general']);
   if(snapT) show('s-categorias');
-  // categorías y clubes de la marca EN PARALELO (antes eran pasos en cadena)
-  const [csQ,clsQ]=await Promise.all([
-    sb.from('categoria').select('*').eq('torneo_id',TORNEO.id).order('anio_nacimiento',{ascending:false}),
-    sb.from('club').select('*').eq('marca_id',MARCA.id)
-  ]);
-  if(csQ.error){err(csQ.error.message);return;}
-  (clsQ.data||[]).forEach(c=>{CLUBES[c.id]=c;});
-  let cs=(csQ.data||[]).filter(c=>c.activa!==false);   // categorías INACTIVADAS por el admin no se muestran
+  // ⚡ FASE C: TODA la pantalla en UN solo viaje (RPC pantalla_torneo);
+  // si el RPC aún no existe en la BD, plan B con 2 tandas paralelas.
+  let cs,eqAll,msAll,jugCount,tabFilas;
+  const rpcT=await sb.rpc('pantalla_torneo',{p_torneo:TORNEO.id});
+  if(!rpcT.error&&rpcT.data&&rpcT.data.categorias){
+    const B=rpcT.data;
+    pintarDocsTorneo(B.documentos||[]);
+    (B.clubes||[]).forEach(c=>{CLUBES[c.id]=c;});
+    cs=B.categorias||[]; eqAll=B.equipos||[]; msAll=B.partidos||[];
+    jugCount=B.jugadores||0; tabFilas=B.tabla||[];
+  }else{
+    // documentos del torneo (reglamento, bases…)
+    sb.from('torneo_documento').select('*').eq('torneo_id',TORNEO.id).order('created_at').then(({data})=>pintarDocsTorneo(data||[]));
+    // categorías y clubes de la marca EN PARALELO
+    const [csQ,clsQ]=await Promise.all([
+      sb.from('categoria').select('*').eq('torneo_id',TORNEO.id).order('anio_nacimiento',{ascending:false}),
+      sb.from('club').select('*').eq('marca_id',MARCA.id)
+    ]);
+    if(csQ.error){err(csQ.error.message);return;}
+    (clsQ.data||[]).forEach(c=>{CLUBES[c.id]=c;});
+    cs=(csQ.data||[]).filter(c=>c.activa!==false);   // categorías INACTIVADAS por el admin no se muestran
+  }
   // Torneo de UNA sola categoria: el publico entra directo al detalle
   TORNEO_UNICAT=(cs||[]).length===1;
   if(TORNEO_UNICAT){ CAT=cs[0]; return irCategoria(); }
   TORNEO_CATS=cs;
   const catIds=cs.map(c=>c.id);
-  // ⚡ TODO lo que necesita la pantalla en UNA sola tanda paralela:
-  // equipos (tarjetas+home+tabla general), partidos (home+KPIs), jugadores y tabla
-  const [eqxQ,msQ,jugQ,tabQ]=await Promise.all([
-    sb.from('equipo').select('*').in('categoria_id',catIds),
-    sb.from('partido').select('*, jornada:jornada_id(numero,horarios_publicados)').in('categoria_id',catIds).order('fecha').order('hora'),
-    sb.from('vista_lbf_publica').select('inscripcion_id',{count:'exact',head:true}).in('categoria_id',catIds),
-    sb.from('vista_tabla_zona').select('*').in('categoria_id',catIds)
-  ]);
-  (eqxQ.data||[]).forEach(e=>{EQUIPOS[e.id]=e;});
-  const eqActivos=(eqxQ.data||[]).filter(e=>e.estado==='activo');
+  if(eqAll===undefined){
+    // plan B · segunda tanda paralela: equipos, partidos, jugadores y tabla
+    const [eqxQ,msQ,jugQ,tabQ]=await Promise.all([
+      sb.from('equipo').select('*').in('categoria_id',catIds),
+      sb.from('partido').select('*, jornada:jornada_id(numero,horarios_publicados)').in('categoria_id',catIds).order('fecha').order('hora'),
+      sb.from('vista_lbf_publica').select('inscripcion_id',{count:'exact',head:true}).in('categoria_id',catIds),
+      sb.from('vista_tabla_zona').select('*').in('categoria_id',catIds)
+    ]);
+    eqAll=eqxQ.data||[]; msAll=msQ.data||[]; jugCount=jugQ.count||0; tabFilas=tabQ.data||[];
+  }
+  eqAll.forEach(e=>{EQUIPOS[e.id]=e;});
+  const eqActivos=eqAll.filter(e=>e.estado==='activo');
   const NEQ={}; eqActivos.forEach(e=>{NEQ[e.categoria_id]=(NEQ[e.categoria_id]||0)+1;});
   $('categorias').innerHTML=cs.map(c=>`
     <button onclick='irCategoriaId("${c.id}")' class="group relative overflow-hidden bg-white border border-line rounded-2xl p-4 hover:border-brand-500/40 hover:-translate-y-0.5 hover:shadow-md transition text-left">
@@ -709,13 +719,19 @@ async function irTorneo(){
       <span class="absolute -right-6 -bottom-6 w-20 h-20 rounded-full bg-brand-500/10 group-hover:bg-brand-500/20 transition"></span>
     </button>`).join('') || '<p class="text-ink-400 text-sm col-span-full">Sin categorías aún.</p>';
   await Promise.all([
-    renderHomeTorneo(cs,{ms:msQ.data||[]}),
-    renderKPIs('t-kpis',catIds,{eqs:eqActivos,jugCount:jugQ.count||0,
-      pjs:(msQ.data||[]).filter(m=>['finalizado','walkover'].includes(m.estado))}),
-    renderTablaGeneral('t-general',TORNEO,cs,{filas:tabQ.data||[]})
+    renderHomeTorneo(cs,{ms:msAll}),
+    renderKPIs('t-kpis',catIds,{eqs:eqActivos,jugCount:jugCount,
+      pjs:msAll.filter(m=>['finalizado','walkover'].includes(m.estado))}),
+    renderTablaGeneral('t-general',TORNEO,cs,{filas:tabFilas})
   ]);
   show('s-categorias');
-  guardarSnapshot('torneo:'+TORNEO.id,['t-kpis','t-home','categorias','t-general']);
+  guardarSnapshot('torneo:'+TORNEO.id,['t-docs','t-kpis','t-home','categorias','t-general']);
+}
+/* Documentos del torneo (reglamento, bases…) — usado por el RPC y el plan B */
+function pintarDocsTorneo(data){
+  $('t-docs').innerHTML=(data&&data.length)?`<div class="flex flex-wrap gap-2">
+      ${data.map(d=>`<a href="${d.url}" target="_blank" download class="inline-flex items-center gap-1.5 bg-white border border-line rounded-xl px-4 py-2 text-sm font-bold text-ink-700 hover:shadow-md hover:text-brand-600 transition">📄 ${d.titulo} <span class="text-ink-400">⬇</span></a>`).join('')}
+    </div>`:'';
 }
 
 /* ---- 🏠 HOME DEL TORNEO: se está jugando · próximos · últimos resultados
@@ -875,30 +891,56 @@ async function irCategoria(){
   const sup=TORNEO_UNICAT?`${MARCA.nombre} · Temporada ${TORNEO.anio}`:TORNEO.nombre;
   $('c-sup').textContent=sup; $('c-sup').classList.toggle('hidden',!sup);
   pintarLogoTorneo('c-tlogo');
-  PARTC={};   // ⚡ se renueva la consulta compartida de partidos de la categoría
+  PARTC={}; CATB=null;   // ⚡ se renuevan la consulta compartida de partidos y el paquete de la pantalla
   // ⚡ pinta al instante la última versión conocida de la pantalla
-  if(pintarSnapshot('cat:'+CAT.id,['c-kpis','tab-tabla','tab-fixture','tab-llaves','tab-equipos'])) show('s-categoria');
-  // torneo de una sola categoria: los documentos del torneo se muestran aqui
-  if(TORNEO_UNICAT){ sb.from('torneo_documento').select('*').eq('torneo_id',TORNEO.id).order('created_at').then(({data})=>{ $('c-docs').innerHTML=(data&&data.length)?`<div class="flex flex-wrap gap-2 mb-4">${data.map(d=>`<a href="${d.url}" target="_blank" download class="inline-flex items-center gap-1.5 bg-white border border-line rounded-xl px-4 py-2 text-sm font-bold text-ink-700 hover:shadow-md hover:text-brand-600 transition">📄 ${d.titulo} <span class="text-ink-400">⬇</span></a>`).join('')}</div>`:''; }); } else $('c-docs').innerHTML='';
+  if(pintarSnapshot('cat:'+CAT.id,['c-kpis','c-docs','tab-tabla','tab-fixture','tab-llaves','tab-equipos'])) show('s-categoria');
   RK_LIM=10; RK_LINEA=null;   // el ranking vuelve al top 10 (TODOS) al cambiar de categoría
-  // equipos + clubes en caché (y los partidos compartidos arrancan YA, en paralelo)
-  const partP=partidosCat().catch(()=>null);
-  const [eqs,cls]=await Promise.all([
-    sb.from('equipo').select('*').eq('categoria_id',CAT.id),
-    sb.from('club').select('*').eq('marca_id',MARCA.id)
-  ]);
-  if(eqs.error||cls.error){err((eqs.error||cls.error).message);return;}
-  EQUIPOS=Object.fromEntries(eqs.data.map(e=>[e.id,e]));
-  CLUBES=Object.fromEntries(cls.data.map(c=>[c.id,c]));
-  renderTabs('tabla');
-  await Promise.all([renderKPIs('c-kpis',[CAT.id]),renderTabla(),renderFixture(),renderLlaves(),renderEquipos()]);
+  const docsHTML=data=>(data&&data.length)?`<div class="flex flex-wrap gap-2 mb-4">${data.map(d=>`<a href="${d.url}" target="_blank" download class="inline-flex items-center gap-1.5 bg-white border border-line rounded-xl px-4 py-2 text-sm font-bold text-ink-700 hover:shadow-md hover:text-brand-600 transition">📄 ${d.titulo} <span class="text-ink-400">⬇</span></a>`).join('')}</div>`:'';
+  // ⚡ FASE C: TODA la pantalla en UN solo viaje (RPC pantalla_categoria);
+  // si el RPC aún no existe en la BD, plan B con el camino en 2 tandas.
+  const rpcC=await sb.rpc('pantalla_categoria',{p_categoria:CAT.id});
+  if(!rpcC.error&&rpcC.data&&rpcC.data.equipos){
+    const B=rpcC.data;
+    CATB={id:CAT.id,tabla:B.tabla||[],goleadores:B.goleadores||[],ranking:B.ranking||null};
+    EQUIPOS=Object.fromEntries((B.equipos||[]).map(e=>[e.id,e]));
+    CLUBES=Object.fromEntries((B.clubes||[]).map(c=>[c.id,c]));
+    const ms=B.partidos||[];
+    PARTC={id:CAT.id,p:Promise.resolve(ms)};
+    // planillas ya incluidas en el paquete: se precargan y nadie vuelve a consultarlas
+    ms.filter(m=>['finalizado','walkover'].includes(m.estado)).forEach(m=>{PLAN_IDX[m.id]=[];});
+    (B.planillas||[]).forEach(r=>{(PLAN_IDX[r.partido_id]=PLAN_IDX[r.partido_id]||[]).push(r);});
+    $('c-docs').innerHTML=TORNEO_UNICAT?docsHTML(B.documentos):'';
+    renderTabs('tabla');
+    await Promise.all([
+      renderKPIs('c-kpis',[CAT.id],{eqs:(B.equipos||[]).filter(e=>e.estado==='activo'),jugCount:B.jugadores||0,
+        pjs:ms.filter(m=>['finalizado','walkover'].includes(m.estado))}),
+      renderTabla(),renderFixture(),renderLlaves(),renderEquipos()
+    ]);
+  }else{
+    // torneo de una sola categoria: los documentos del torneo se muestran aqui
+    if(TORNEO_UNICAT){ sb.from('torneo_documento').select('*').eq('torneo_id',TORNEO.id).order('created_at').then(({data})=>{ $('c-docs').innerHTML=docsHTML(data); }); } else $('c-docs').innerHTML='';
+    // equipos + clubes en caché (y los partidos compartidos arrancan YA, en paralelo)
+    partidosCat().catch(()=>null);
+    const [eqs,cls]=await Promise.all([
+      sb.from('equipo').select('*').eq('categoria_id',CAT.id),
+      sb.from('club').select('*').eq('marca_id',MARCA.id)
+    ]);
+    if(eqs.error||cls.error){err((eqs.error||cls.error).message);return;}
+    EQUIPOS=Object.fromEntries(eqs.data.map(e=>[e.id,e]));
+    CLUBES=Object.fromEntries(cls.data.map(c=>[c.id,c]));
+    renderTabs('tabla');
+    await Promise.all([renderKPIs('c-kpis',[CAT.id]),renderTabla(),renderFixture(),renderLlaves(),renderEquipos()]);
+  }
   show('s-categoria');
-  guardarSnapshot('cat:'+CAT.id,['c-kpis','tab-tabla','tab-fixture','tab-llaves','tab-equipos']);
+  guardarSnapshot('cat:'+CAT.id,['c-kpis','c-docs','tab-tabla','tab-fixture','tab-llaves','tab-equipos']);
 }
 /* ⚡ Los PARTIDOS de la categoría se consultan UNA sola vez y los comparten
    el fixture, los "últimos resultados" de la tabla y las llaves (antes eran
    3 consultas casi idénticas). Memo por categoría; se renueva en irCategoria. */
 let PARTC={};
+/* ⚡ Paquete de la pantalla (RPC pantalla_categoria): tabla, goleadores y
+   ranking top-10 vienen incluidos; los render los usan sin volver a consultar. */
+let CATB=null;
 function partidosCat(){
   if(PARTC.id===CAT.id&&PARTC.p) return PARTC.p;
   PARTC={id:CAT.id,p:(async()=>{
@@ -924,9 +966,14 @@ function renderTabs(act){
 /* Tabla: columnas Y desempate desde orden_tabla del torneo (T1) */
 const COLDEF={PJ:{h:'PJ',f:'pj'},PUNTOS:{h:'PTS',f:'pts'},PG:{h:'PG',f:'pg'},PE:{h:'PE',f:'pe'},PP:{h:'PP',f:'pp'},GF:{h:'GF',f:'gf'},GC:{h:'GC',f:'gc'},DIF_GOL:{h:'DG',f:'dg'}};
 async function goleadoresHTML(categoriaId){
-  const {data,error}=await sb.from('vista_goleadores').select('*').eq('categoria_id',categoriaId)
-    .gt('goles',0).order('goles',{ascending:false}).order('apellidos').limit(6);
-  if(error||!data||!data.length) return '';
+  let data;
+  if(CATB&&CATB.id===categoriaId){ data=CATB.goleadores; }   // ⚡ ya vino en el paquete
+  else{
+    const q=await sb.from('vista_goleadores').select('*').eq('categoria_id',categoriaId)
+      .gt('goles',0).order('goles',{ascending:false}).order('apellidos').limit(6);
+    if(q.error) return ''; data=q.data;
+  }
+  if(!data||!data.length) return '';
   return `<div class="bg-white rounded-2xl border border-line mb-4 overflow-hidden">
     <div class="px-4 py-3 border-b border-line font-display text-xl tracking-wide">⚽ GOLEADORES</div>
     ${data.map((g,i)=>`<div ${g.perfil_token?`onclick="window.open('/jugador/${g.perfil_token}','_blank')" title="Ver el perfil del jugador"`:''} class="flex items-center gap-3 px-4 py-2 border-b border-line last:border-0 ${i===0?'bg-amber-50/60':''} ${g.perfil_token?'cursor-pointer hover:bg-paper transition':''}">
@@ -943,9 +990,14 @@ async function goleadoresHTML(categoriaId){
    top 10 con link a top 50. El # es el puesto en la categoría (o en su línea). */
 let RK_LIM=10, RK_LINEA=null;
 async function rankingHTML(categoriaId,renderFn){
-  const r=await sb.rpc('ranking_categoria',{p_categoria:categoriaId,p_limite:RK_LIM,p_linea:RK_LINEA});
-  if(r.error||!r.data) return '';
-  const d=r.data, filas=d.filas||[];
+  let d;
+  if(CATB&&CATB.id===categoriaId&&CATB.ranking&&RK_LIM===10&&RK_LINEA===null){ d=CATB.ranking; }   // ⚡ paquete
+  else{
+    const r=await sb.rpc('ranking_categoria',{p_categoria:categoriaId,p_limite:RK_LIM,p_linea:RK_LINEA});
+    if(r.error||!r.data) return '';
+    d=r.data;
+  }
+  const filas=d.filas||[];
   if(!filas.length&&RK_LINEA===null) return '';
   const TABS=[[null,'TODOS'],['ARQ','ARQUEROS'],['DEF','DEFENSAS'],['MED','MEDIOCAMPISTAS'],['DEL','DELANTEROS']];
   const tabs=`<div class="flex flex-wrap gap-1.5 px-4 py-2.5 border-b border-line bg-paper/60">${TABS.map(([v,l])=>
@@ -979,7 +1031,7 @@ function setTablaModo(m){ TABLA_MODO=m; renderTabla(); }
 async function renderTabla(){
   // ⚡ tabla, goleadores, ranking y últimos resultados EN PARALELO (antes: en cadena)
   const [tabQ,golHTML,rkHTML,ultHTML]=await Promise.all([
-    sb.from('vista_tabla_zona').select('*').eq('categoria_id',CAT.id),
+    (CATB&&CATB.id===CAT.id)?{data:CATB.tabla}:sb.from('vista_tabla_zona').select('*').eq('categoria_id',CAT.id),
     goleadoresHTML(CAT.id),
     rankingHTML(CAT.id,'renderTabla'),
     ultimosResultadosHTML()
