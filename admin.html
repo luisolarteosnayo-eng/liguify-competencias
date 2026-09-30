@@ -501,7 +501,22 @@ function modalMarca(){
       <div id="mk-erp" class="text-sm">${MARCA.erp_org_id
         ?`<div class="flex items-center gap-2"><span class="flex-1 font-semibold text-emerald-700">✔ Vinculada a tu organización del ERP (#${MARCA.erp_org_id})</span>
            <button onclick="desvincularERP()" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-3 py-1.5 hover:bg-paper">DESVINCULAR</button></div>
-          <p class="text-[11px] text-ink-400 mt-1">Habilita el botón "💰 IMPORTAR DEL ERP" en cada categoría.</p>`
+          <p class="text-[11px] text-ink-400 mt-1">Habilita el botón "💰 IMPORTAR DEL ERP" en cada categoría.</p>
+          <div class="bg-paper border border-line rounded-xl p-3 mt-3">
+            <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1">💰 Cobranza automática a los clubes</p>
+            ${toggleC('mk-cob-act','Recordatorio de pago por email (semanal)',MARCA.cobranza_activa)}
+            ${toggleC('mk-cob-cc','Con copia al coordinador del club',MARCA.cobranza_cc_coordinador)}
+            <div class="grid grid-cols-2 gap-3 mt-1">
+              <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Día de envío</span>
+                <select id="mk-cob-dia" class="w-full border-b border-line py-1.5 font-semibold bg-transparent">
+                  ${['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'].map((d,i)=>`<option value="${i}" ${(MARCA.cobranza_dia??4)===i?'selected':''}>${d}</option>`).join('')}
+                </select></label>
+              ${campo('mk-cob-min','Saldo mínimo (S/.)',MARCA.cobranza_min??20,'number','min="0" step="0.01"')}
+            </div>
+            <label class="block text-sm mt-1"><span class="text-ink-400 font-semibold text-xs">Instrucciones de pago (van en el correo)</span>
+              <textarea id="mk-cob-instr" rows="2" placeholder="Yape 999 999 999 · BCP 123-4567890-0-11 (a nombre de…)" class="w-full border border-line rounded-xl p-2 mt-1 text-xs">${MARCA.cobranza_instrucciones||''}</textarea></label>
+            <p class="text-[10px] text-ink-400 mt-1">Cobra el saldo del ERP (inscripciones activas − pagos aprobados). Máximo 1 correo por club por semana; solo clubes con email registrado. Los coordinadores también ven su saldo al entrar al módulo CLUB.</p>
+          </div>`
         :`<button onclick="vincularERP()" class="text-xs font-bold text-brand-600 border border-brand-100 rounded-lg px-3 py-2 hover:bg-brand-50">🔗 VINCULAR CON MI ORGANIZACIÓN DEL ERP</button>
           <p class="text-[11px] text-ink-400 mt-1">Permite importar clubes y equipos de tus torneos del ERP sin duplicarlos. Si no usas el ERP, ignora esta sección.</p>`}</div>
     </div>
@@ -540,6 +555,13 @@ async function guardarMarca(){
       redes:$('mk-redes').value.trim()||null, descripcion:$('mk-desc').value.trim()||null};
     if(logo) upd.logo_url=logo;
     if(ES_SUPER&&$('mk-memb')) upd.membresia=$('mk-memb').value;
+    if($('mk-cob-act')){   // 💰 configuración de cobranza (solo visible con ERP vinculado)
+      upd.cobranza_activa=$('mk-cob-act').checked;
+      upd.cobranza_cc_coordinador=$('mk-cob-cc').checked;
+      upd.cobranza_dia=+$('mk-cob-dia').value;
+      upd.cobranza_min=Math.max(0,+$('mk-cob-min').value||0);
+      upd.cobranza_instrucciones=$('mk-cob-instr').value.trim()||null;
+    }
     const {data,error}=await sb.from('marca').update(upd).eq('id',MARCA.id).select().single();
     if(error){toast(errNegocio(error));return;}
     MARCA=data; cerrarModal(); toast('Marca actualizada ✔ — visible en el módulo público'); cargarTorneos();

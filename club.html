@@ -66,6 +66,7 @@ tailwind.config={theme:{extend:{
 
   <!-- THE HUB: MIS EQUIPOS -->
   <section id="s-hub" class="screen">
+    <div id="hub-saldo"></div>
     <div id="hub-inv"></div>
     <!-- OCULTO (decisión 2026-08-17): el acceso se gestiona solo por invitación
          por email (coordinador / sub-coordinador). El canje sigue funcionando
@@ -242,7 +243,8 @@ async function iniciar(){
 /* ============ THE HUB (agrupado por torneo) ============ */
 async function cargarHub(){
   // ⚡ pinta al instante lo último conocido de este usuario y revalida al fondo
-  if(pintarSnapshot('hub:'+UID,['hub-inv','hub-lista'])) show('s-hub');
+  if(pintarSnapshot('hub:'+UID,['hub-saldo','hub-inv','hub-lista'])) show('s-hub');
+  cargarSaldoClub();   // 💰 pago pendiente del club (ERP) — solo coordinadores
   const [inv,eqs]=await Promise.all([sb.rpc('mis_invitaciones'),sb.rpc('mis_equipos_club')]);
   // invitaciones pendientes → tarjetas de aceptación
   $('hub-inv').innerHTML=(inv.data||[]).map(i=>`
@@ -271,7 +273,47 @@ async function cargarHub(){
     </div>`;
   } else renderHubLista();
   show('s-hub');
-  guardarSnapshot('hub:'+UID,['hub-inv','hub-lista']);
+  guardarSnapshot('hub:'+UID,['hub-saldo','hub-inv','hub-lista']);
+}
+/* ---- 💰 PAGO PENDIENTE DEL CLUB (cuenta corriente del ERP) ----
+   Solo lo ve el COORDINADOR y solo si su club está vinculado al ERP y debe.
+   Saldo = cargos (inscripciones activas) − pagos aprobados, igual que el ERP. */
+let SALDO_ERP=[];
+async function cargarSaldoClub(){
+  const el=$('hub-saldo'); if(!el) return;
+  const {data,error}=await sb.rpc('mi_saldo_erp');
+  if(error){el.innerHTML='';return;}   // RPC aún no desplegado o sin permiso: silencio
+  SALDO_ERP=(data||[]).filter(r=>Number(r.saldo)>0);
+  if(!SALDO_ERP.length){el.innerHTML='';return;}
+  const fmt=n=>'S/ '+Number(n||0).toFixed(2);
+  const porClub={};
+  SALDO_ERP.forEach(r=>{const k=r.marca+'·'+r.club;(porClub[k]=porClub[k]||{marca:r.marca,club:r.club,total:0}).total+=Number(r.saldo);});
+  el.innerHTML=Object.values(porClub).map(c=>`
+    <div class="bg-brand-50 border-2 border-brand-100 rounded-2xl p-4 mb-3 flex items-center gap-3 flex-wrap">
+      <span class="text-2xl">💰</span>
+      <span class="flex-1 min-w-40 text-sm"><b>${c.club}</b> tiene un pago pendiente en <b>${c.marca}</b>:
+        <b class="text-brand-600">${fmt(c.total)}</b></span>
+      <button onclick="verSaldoClub()" class="bg-ink-900 text-white text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-ink-700">VER DETALLE</button>
+    </div>`).join('');
+}
+function verSaldoClub(){
+  const fmt=n=>'S/ '+Number(n||0).toFixed(2);
+  const total=SALDO_ERP.reduce((s,r)=>s+Number(r.saldo),0);
+  const instr=(SALDO_ERP.find(r=>r.instrucciones)||{}).instrucciones;
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">💰 ESTADO DE CUENTA</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-4">Cargos por inscripción menos pagos aprobados, según la cuenta corriente del organizador.</p>
+    ${SALDO_ERP.map(r=>`<div class="border border-line rounded-xl px-4 py-3 mb-2">
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <span class="text-sm"><b>${r.torneo}</b><span class="block text-[10px] text-ink-400">${r.club} · ${r.marca}</span></span>
+        <span class="font-display text-2xl ${Number(r.saldo)>0?'text-brand-600':'text-emerald-600'}">${fmt(r.saldo)}</span>
+      </div>
+      <div class="text-[11px] text-ink-500 mt-1.5">${((r.equipos)||[]).map(e=>`${e.categoria} · ${fmt(e.monto)}`).join('<br/>')}</div>
+      <div class="text-[11px] mt-1.5 flex justify-between"><span class="text-ink-400">Cargos ${fmt(r.cargos)} · Pagado <span class="text-emerald-600">${fmt(r.abonos)}</span></span></div>
+    </div>`).join('')}
+    <div class="flex items-center justify-between border-t-2 border-ink-900 pt-2 mt-3">
+      <span class="font-bold text-sm">TOTAL PENDIENTE</span><span class="font-display text-3xl text-brand-600">${fmt(total)}</span></div>
+    ${instr?`<div class="text-xs bg-paper border border-line rounded-xl px-4 py-3 mt-3"><b>¿Cómo pagar?</b><br/>${instr}</div>`:''}
+    <p class="text-[11px] text-ink-400 mt-3">Si ya pagaste, envía tu voucher al organizador para que lo apruebe; el saldo se actualiza automáticamente.</p>`);
 }
 /* Hub: por defecto solo torneos EN CURSO (y en preparación); los FINALIZADOS
    quedan tras un botón. Los archivados no se muestran. */
