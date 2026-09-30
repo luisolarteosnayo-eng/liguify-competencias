@@ -1,0 +1,8 @@
+-- ============================================================================
+-- 💰 COBRANZAS v8 · FIX: coordinador buscado en TODAS las fichas del club
+-- Un club (TALES) existe en varias marcas con el mismo erp_club_id; el
+-- coordinador está en una sola ficha. v7 elegía una ficha al azar → a veces
+-- coord_email salía null y el correo iba solo al email del ERP. v8 agrega
+-- todas las fichas del org: coordinador = primer no-nulo entre ellas.
+-- El SQL completo está en el historial del chat (v8). Ejecutado por Luis.
+-- ============================================================================
