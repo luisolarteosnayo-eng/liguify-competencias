@@ -504,8 +504,7 @@ function modalMarca(){
           <p class="text-[11px] text-ink-400 mt-1">Habilita el botón "💰 IMPORTAR DEL ERP" en cada categoría.</p>
           <div class="bg-paper border border-line rounded-xl p-3 mt-3">
             <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-1">💰 Cobranza a los clubes</p>
-            <p class="text-[11px] text-ink-500 mb-1.5">El correo de cobro se envía <b>manualmente desde el ERP</b> (Cuentas por Cobrar → seleccionar cobros → ENVIAR COBRO POR EMAIL), dirigido al <b>COORDINADOR del club</b>. Los coordinadores además ven su saldo al entrar al módulo CLUB.</p>
-            ${toggleC('mk-cob-cc','Correo con copia al email del club (si tiene)',MARCA.cobranza_cc_coordinador)}
+            <p class="text-[11px] text-ink-500 mb-1.5">El correo de cobro se envía <b>manualmente desde el ERP</b> (Cuentas por Cobrar → seleccionar cobros → ENVIAR COBRO POR EMAIL), dirigido al <b>coordinador del club Y al email del club</b> (sin duplicar si son el mismo). Los coordinadores además ven su saldo al entrar al módulo CLUB.</p>
             <label class="block text-sm mt-1"><span class="text-ink-400 font-semibold text-xs">Instrucciones de pago (van en el correo y en el módulo CLUB)</span>
               <textarea id="mk-cob-instr" rows="2" placeholder="Yape 999 999 999 · BCP 123-4567890-0-11 (a nombre de…)" class="w-full border border-line rounded-xl p-2 mt-1 text-xs">${MARCA.cobranza_instrucciones||''}</textarea></label>
           </div>`
@@ -547,8 +546,7 @@ async function guardarMarca(){
       redes:$('mk-redes').value.trim()||null, descripcion:$('mk-desc').value.trim()||null};
     if(logo) upd.logo_url=logo;
     if(ES_SUPER&&$('mk-memb')) upd.membresia=$('mk-memb').value;
-    if($('mk-cob-cc')){   // 💰 configuración de cobranza (solo visible con ERP vinculado)
-      upd.cobranza_cc_coordinador=$('mk-cob-cc').checked;
+    if($('mk-cob-instr')){   // 💰 instrucciones de pago (solo visible con ERP vinculado)
       upd.cobranza_instrucciones=$('mk-cob-instr').value.trim()||null;
     }
     const {data,error}=await sb.from('marca').update(upd).eq('id',MARCA.id).select().single();
