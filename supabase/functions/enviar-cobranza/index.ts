@@ -48,6 +48,7 @@ Deno.serve(async (req) => {
     if (!filas.length) return json({ ok: true, enviados: 0, sin_email: [], errores: [],
       nota: 'Sin datos: verifica que perteneces a la organización y que los cobros existen' });
 
+    const hoy = new Date().toLocaleDateString('es-PE', { timeZone: 'America/Lima' });
     let enviados = 0; const sin_email: string[] = []; const errores: string[] = [];
     for (const f of filas) {
       if (!f.email) { sin_email.push(String(f.club)); continue; }
@@ -66,7 +67,7 @@ Deno.serve(async (req) => {
             <p style="margin:0;font-size:11px;letter-spacing:3px;color:#fbbf24;font-weight:bold">${esc(f.empresa)} · ESTADO DE CUENTA</p>
             <h1 style="margin:6px 0 0;font-size:22px">${esc(f.club)}</h1>
           </div>
-          <p style="font-size:13px">Hola, este es el estado de cuenta de tu club con <b>${esc(f.empresa)}</b>.
+          <p style="font-size:13px">Hola, este es el estado de cuenta de tu club con <b>${esc(f.empresa)}</b> al ${hoy}.
             Tienes un saldo pendiente de <b style="color:#d9232e">${fmt(f.saldo_total)}</b>.</p>
           <table style="width:100%;font-size:13px;border-collapse:collapse">
             <tr style="font-size:10px;color:#8b93a7;text-transform:uppercase;letter-spacing:1px">
@@ -90,7 +91,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           from: 'Liguify <noreply@liguify.com>',
           to,
-          subject: `${f.empresa} · Pago pendiente de ${f.club}: ${fmt(f.saldo_total)}`,
+          subject: `${f.empresa} · Pago pendiente de ${f.club}: ${fmt(f.saldo_total)} · ${hoy}`,
           html,
         }),
       });
