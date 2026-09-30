@@ -310,7 +310,7 @@ async function cargarSaldoClub(){
         <div class="text-[11px] text-ink-400">Cargos ${fmt(r.cargos)} · Pagado <span class="text-emerald-600 font-semibold">${fmt(r.abonos)}</span></div>
       </div>`).join('')}
       <div class="px-5 py-3 bg-paper">
-        ${c.instr?`<p class="text-xs mb-1.5"><b>¿Cómo pagar?</b> ${c.instr}</p>`:''}
+        ${c.instr?`<p class="text-xs mb-1.5"><b>¿Cómo pagar?</b><br>${String(c.instr).replace(/\n/g,'<br>')}</p>`:''}
         <p class="text-[11px] text-ink-400">Si ya pagaste, envía tu voucher al organizador para que lo apruebe; el saldo se actualiza automáticamente.</p>
       </div>
     </div>`).join('');

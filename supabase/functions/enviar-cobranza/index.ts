@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
               <td></td><td></td>
               <td style="padding:9px 0;border-top:2px solid #171e2e;text-align:right;font-weight:bold;font-size:16px;color:#d9232e">${fmt(f.saldo_total)}</td></tr>
           </table>
-          ${f.instrucciones ? `<div style="font-size:13px;background:#faf9f7;border:1px solid #e9e6e0;border-radius:10px;padding:10px 14px;margin-top:12px"><b>¿Cómo pagar?</b><br/>${esc(f.instrucciones)}</div>` : ''}
+          ${f.instrucciones ? `<div style="font-size:13px;background:#faf9f7;border:1px solid #e9e6e0;border-radius:10px;padding:10px 14px;margin-top:12px"><b>¿Cómo pagar?</b><br/>${esc(f.instrucciones).replace(/\n/g, '<br/>')}</div>` : ''}
           <p style="font-size:12px;color:#5b6478;margin-top:12px">Si ya realizaste el pago, envía tu voucher al organizador para que lo apruebe; el saldo se actualiza automáticamente. Si crees que hay un error, responde este correo.</p>
           <p style="font-size:11px;color:#8b93a7;border-top:1px solid #e9e6e0;padding-top:10px;margin-top:18px">⚡ Powered by Liguify · liguify.com</p>
         </div>`;
