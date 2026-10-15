@@ -2693,14 +2693,44 @@ async function renderEquipos(){
       <div class="bg-ink-900 text-white px-5 py-2.5 font-display text-lg tracking-wide">ZONA ${z.nombre}</div>
       ${(porZona[z.id]||[]).map(eqId=>{const e=EQUIPOS[eqId]; if(!e||e.estado!=='activo') return '';
         return `<div class="flex items-center gap-3 px-5 py-2.5 border-b border-line last:border-0">
-          ${badgeEq(e)}<span class="flex-1 font-semibold text-sm">${nomEq(e)}</span>
+          ${badgeEq(e)}<span class="flex-1 font-semibold text-sm">${nomEq(e)}
+            ${e.ajuste_puntos?` <span class="text-[9px] font-bold ${e.ajuste_puntos<0?'bg-brand-100 text-brand-600':'bg-emerald-100 text-emerald-700'} rounded px-1.5 py-0.5" title="${e.ajuste_motivo||'Ajuste de puntos'}">${e.ajuste_puntos>0?'+':''}${e.ajuste_puntos} PTS</span>`:''}</span>
           ${btnLBF(e)}
           ${esAdmin()&&MOSTRAR_CODIGO_DELEGADO?`<button onclick="modalCodigoDelegado('${e.id}')" title="Acceso del delegado (código de un solo uso)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-paper">🎟</button>`:''}
-          ${esAdmin()?`<button onclick="modalZonaEquipo('${e.id}','${z.id}')" title="Mover de zona o quitar de la zona (validado contra sus partidos)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-paper">⇄ ZONA</button>
+          ${esAdmin()?`<button onclick="modalAjustePuntos('${e.id}')" title="Sanción/ajuste de puntos en la tabla (negativo descuenta); impacta también la tabla general acumulada" class="text-xs font-bold ${e.ajuste_puntos?'text-white bg-brand-500 border-brand-500':'text-ink-400 border-line'} border rounded-lg px-2 py-1.5 hover:bg-brand-50 hover:text-brand-600">± PTS</button>
+          <button onclick="modalZonaEquipo('${e.id}','${z.id}')" title="Mover de zona o quitar de la zona (validado contra sus partidos)" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-paper">⇄ ZONA</button>
           ${btnRetirar(e)}`:''}
         </div>`;}).join('')||'<p class="px-5 py-5 text-sm text-ink-400">Zona sin equipos.</p>'}
     </div>`).join('')+cardRetirados;
 }
+/* ⚖ SANCIÓN/AJUSTE DE PUNTOS por equipo: negativo descuenta (sanción),
+   positivo suma. Impacta la tabla de la categoría Y la tabla general
+   acumulada al instante (la vista de Postgres ya lo suma al PTS). */
+function modalAjustePuntos(eqId){
+  const e=EQUIPOS[eqId]; if(!e) return;
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⚖ SANCIÓN / AJUSTE DE PUNTOS</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-sm font-semibold mb-1">${nomEq(e)} <span class="text-xs text-ink-400 font-normal">· ${CAT.nombre_display||''}</span></p>
+    <p class="text-[11px] text-ink-400 mb-3">Negativo <b>descuenta</b> (sanción), positivo suma. Se refleja al instante en la tabla de la categoría y, si el torneo tiene <b>tabla general acumulada</b>, también ahí. No toca partidos ni goles.</p>
+    <div class="grid grid-cols-[110px_1fr] gap-3 mb-4">
+      <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Puntos (ej. -3)</span>
+        <input id="ap-pts" type="number" step="1" value="${e.ajuste_puntos||0}" class="w-full border-b border-line py-1.5 font-semibold text-center bg-transparent"/></label>
+      <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Motivo</span>
+        <input id="ap-mot" value="${(e.ajuste_motivo||'').replace(/"/g,'&quot;')}" placeholder="p. ej. W.O. en la fecha 3 · indisciplina" class="w-full border-b border-line py-1.5 bg-transparent"/></label>
+    </div>
+    <button onclick="guardarAjustePuntos('${eqId}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR</button>
+    ${e.ajuste_puntos?`<button onclick="$('ap-pts').value=0;guardarAjustePuntos('${eqId}')" class="w-full mt-2 bg-white border border-line text-ink-500 font-bold py-2 rounded-xl hover:bg-paper text-sm">QUITAR EL AJUSTE (volver a 0)</button>`:''}`);
+}
+async function guardarAjustePuntos(eqId){
+  const v=Math.trunc(+$('ap-pts').value||0);
+  const mot=$('ap-mot').value.trim()||null;
+  const {data,error}=await sb.from('equipo').update({ajuste_puntos:v,ajuste_motivo:v?mot:null}).eq('id',eqId).select().single();
+  if(error){toast(errNegocio(error));return;}
+  EQUIPOS[eqId]=data; cerrarModal();
+  toast(v?`⚖ ${nomEq(data)}: ${v>0?'+':''}${v} pts aplicados — ya se refleja en la tabla de la categoría y en la general`
+         :'Ajuste eliminado: el equipo vuelve a sus puntos reales ✔');
+  renderEquipos(); renderTabla();
+}
+
 /* ---- IMPORTAR EQUIPOS DESDE EL ERP (solo marcas vinculadas — §12) ---- */
 let ERP_EQ=[], ERP_SEL=new Set();
 const sugeridoERP=e=>String(CAT.anio_nacimiento)===(e.categoria||'').trim() && (!e.modalidad||e.modalidad===CAT.modalidad);
@@ -6689,6 +6719,8 @@ function setTablaModo(m){ TABLA_MODO=m; renderTabla(); }
 async function renderTabla(){
   const {data,error}=await sb.from('vista_tabla_zona').select('*').eq('categoria_id',CAT.id);
   if(error){$('tab-tabla').innerHTML='';return;}
+  // ⚖ etiqueta de sanción/ajuste de puntos (ya incluidos en el PTS)
+  const ajChip=r=>r.ajuste?` <span class="text-[9px] font-bold ${r.ajuste<0?'bg-brand-100 text-brand-600':'bg-emerald-100 text-emerald-700'} rounded px-1 py-0.5" title="Sanción/ajuste de la organización: ${r.ajuste>0?'+':''}${r.ajuste} pts, ya incluidos en el PTS">${r.ajuste>0?'+':''}${r.ajuste}</span>`:'';
   const zonas=[...new Set(data.map(r=>r.zona))].sort();
   const orden=(a,b)=>b.pts-a.pts||b.dg-a.dg||b.gf-a.gf;
   const toggle=zonas.length>1?`<div class="flex gap-2 mb-3">
@@ -6712,7 +6744,7 @@ async function renderTabla(){
           <table class="w-full min-w-[520px]"><thead><tr class="text-[10px] uppercase text-ink-400 border-b border-line"><th class="py-2 w-8"></th><th class="text-left">Equipo</th><th class="w-14">Zona</th><th class="w-9">PJ</th><th class="w-10">PTS</th><th class="w-9">DG</th><th class="w-9">GF</th><th class="w-9">GC</th></tr></thead>
           <tbody>${rows.map((r,i)=>`<tr class="border-b border-line last:border-0 ${i===0?'bg-emerald-50/60':''}">
             <td class="py-2 pl-2 text-ink-400 font-bold text-center">${i+1}</td>
-            <td class="font-semibold text-sm">${EQUIPOS[r.equipo_id]?badgeEq(EQUIPOS[r.equipo_id],5):''} ${r.equipo} ${i===0?'<span class="text-[9px] font-bold bg-emerald-100 text-emerald-700 rounded px-1.5 py-0.5 ml-1">MEJOR</span>':''}</td>
+            <td class="font-semibold text-sm">${EQUIPOS[r.equipo_id]?badgeEq(EQUIPOS[r.equipo_id],5):''} ${r.equipo}${ajChip(r)} ${i===0?'<span class="text-[9px] font-bold bg-emerald-100 text-emerald-700 rounded px-1.5 py-0.5 ml-1">MEJOR</span>':''}</td>
             <td class="text-center text-xs font-bold text-ink-500">${r._zona}</td>
             <td class="text-center text-sm text-ink-400">${r.pj}</td>
             <td class="text-center font-extrabold">${r.pts}</td>
@@ -6730,7 +6762,7 @@ async function renderTabla(){
       <table class="w-full min-w-[440px]"><thead><tr class="text-[10px] uppercase text-ink-400 border-b border-line"><th class="py-2 w-8"></th><th class="text-left">Equipo</th><th class="w-9">PJ</th><th class="w-9">DG</th><th class="w-10">PTS</th></tr></thead>
       <tbody>${rows.map((r,i)=>`<tr class="border-b border-line last:border-0">
         <td class="py-2 pl-2 text-ink-400 font-bold text-center">${i+1}</td>
-        <td class="font-semibold text-sm">${EQUIPOS[r.equipo_id]?badgeEq(EQUIPOS[r.equipo_id],5):''} ${r.equipo}</td>
+        <td class="font-semibold text-sm">${EQUIPOS[r.equipo_id]?badgeEq(EQUIPOS[r.equipo_id],5):''} ${r.equipo}${ajChip(r)}</td>
         <td class="text-center text-sm text-ink-400">${r.pj}</td>
         <td class="text-center text-sm font-semibold ${r.dg>0?'text-emerald-600':r.dg<0?'text-brand-600':'text-ink-400'}">${r.dg>0?'+':''}${r.dg}</td>
         <td class="text-center font-extrabold">${r.pts}</td></tr>`).join('')}</tbody></table></div>`;

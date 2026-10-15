@@ -823,8 +823,8 @@ async function renderTablaGeneral(contId,torneo,cats,pre){
   filas.forEach(f=>{
     const e=EQ[f.equipo_id]||{}, cl=CL[e.club_id]||{};
     const key=(e.club_id||'?')+'|'+norm(e.nombre);
-    const a=acc[key]=acc[key]||{nombre:e.nombre||cl.nombre||f.equipo,club:cl,pj:0,pg:0,pe:0,pp:0,gf:0,gc:0,pts:0,cats:new Set()};
-    a.pj+=f.pj||0;a.pg+=f.pg||0;a.pe+=f.pe||0;a.pp+=f.pp||0;a.gf+=f.gf||0;a.gc+=f.gc||0;a.pts+=f.pts||0;a.cats.add(f.categoria_id);
+    const a=acc[key]=acc[key]||{nombre:e.nombre||cl.nombre||f.equipo,club:cl,pj:0,pg:0,pe:0,pp:0,gf:0,gc:0,pts:0,aj:0,cats:new Set()};
+    a.pj+=f.pj||0;a.pg+=f.pg||0;a.pe+=f.pe||0;a.pp+=f.pp||0;a.gf+=f.gf||0;a.gc+=f.gc||0;a.pts+=f.pts||0;a.aj+=f.ajuste||0;a.cats.add(f.categoria_id);
   });
   const lista=Object.values(acc).map(a=>({...a,dg:a.gf-a.gc,ncat:a.cats.size}))
     .sort((a,b)=>b.pts-a.pts||b.dg-a.dg||b.gf-a.gf||a.pj-b.pj||a.nombre.localeCompare(b.nombre,'es'));
@@ -841,7 +841,7 @@ async function renderTablaGeneral(contId,torneo,cats,pre){
       <thead><tr class="bg-paper"><th class="px-3 py-2 text-[10px] font-bold text-ink-400 text-left">#</th><th class="px-2 py-2 text-[10px] font-bold text-ink-400 text-left">EQUIPO</th>${th('PJ',1)}${th('PG')}${th('PE')}${th('PP')}${th('GF')}${th('GC')}${th('DG',1)}${th('PTS',1)}</tr></thead>
       <tbody>${lista.map((a,i)=>`<tr class="border-t border-line ${i<3?'bg-amber-50/40':''}">
         <td class="px-3 py-2 font-display text-base ${i<3?'text-brand-600':'text-ink-400'}">${i+1}</td>
-        <td class="px-2 py-2"><span class="inline-flex items-center gap-2 font-bold">${escudo(a.club)}<span>${a.nombre}<span class="block text-[10px] text-ink-400 font-semibold">${a.ncat} categoría${a.ncat!==1?'s':''}</span></span></span></td>
+        <td class="px-2 py-2"><span class="inline-flex items-center gap-2 font-bold">${escudo(a.club)}<span>${a.nombre}${a.aj?` <span class="text-[9px] font-bold ${a.aj<0?'bg-brand-100 text-brand-600':'bg-emerald-100 text-emerald-700'} rounded px-1 py-0.5" title="Sanción/ajuste de la organización: ${a.aj>0?'+':''}${a.aj} pts, ya incluidos en el PTS">${a.aj>0?'+':''}${a.aj}</span>`:''}<span class="block text-[10px] text-ink-400 font-semibold">${a.ncat} categoría${a.ncat!==1?'s':''}</span></span></span></td>
         <td class="px-2 py-2 text-center">${a.pj}</td>${tdo(a.pg)}${tdo(a.pe)}${tdo(a.pp)}
         ${tdo(a.gf)}${tdo(a.gc)}<td class="px-2 py-2 text-center font-semibold">${a.dg>0?'+':''}${a.dg}</td>
         <td class="px-2 py-2 text-center font-display text-lg">${a.pts}</td></tr>`).join('')}</tbody>
@@ -1038,6 +1038,8 @@ async function renderTabla(){
   ]);
   const {data,error}=tabQ;
   if(error){$('tab-tabla').innerHTML='';err(error.message);return;}
+  // ⚖ etiqueta de sanción/ajuste de puntos (ya incluidos en el PTS)
+  const ajChip=r=>r.ajuste?` <span class="text-[9px] font-bold ${r.ajuste<0?'bg-brand-100 text-brand-600':'bg-emerald-100 text-emerald-700'} rounded px-1 py-0.5" title="Sanción/ajuste de la organización: ${r.ajuste>0?'+':''}${r.ajuste} pts, ya incluidos en el PTS">${r.ajuste>0?'+':''}${r.ajuste}</span>`:'';
   const orden=(TORNEO.orden_tabla&&TORNEO.orden_tabla.length?TORNEO.orden_tabla:['PJ','PUNTOS','DIF_GOL','GF','GC']).filter(k=>COLDEF[k]);
   const criterios=orden.filter(k=>k!=='PJ');   // PJ es informativa
   const cmp=(a,b)=>{ for(const k of criterios){ const f=COLDEF[k].f; const d=(k==='GC')?(a[f]-b[f]):(b[f]-a[f]); if(d) return d; } return String(a.equipo).localeCompare(b.equipo); };
@@ -1065,7 +1067,7 @@ async function renderTabla(){
             </tr></thead>
             <tbody>${rows.map((r,i)=>`<tr class="border-b border-line last:border-0 ${i===0?'bg-emerald-50/60':'hover:bg-paper'}">
               <td class="py-2.5 pl-2 text-ink-400 font-bold text-center">${i+1}</td>
-              <td><button onclick='irEquipoId("${r.equipo_id}")' class="flex items-center gap-2.5 font-semibold text-sm hover:text-brand-600">${EQUIPOS[r.equipo_id]?badge(EQUIPOS[r.equipo_id]):''}<span>${r.equipo}</span>${i===0?'<span class="text-[9px] font-bold bg-emerald-100 text-emerald-700 rounded px-1.5 py-0.5">MEJOR</span>':''}</button></td>
+              <td><button onclick='irEquipoId("${r.equipo_id}")' class="flex items-center gap-2.5 font-semibold text-sm hover:text-brand-600">${EQUIPOS[r.equipo_id]?badge(EQUIPOS[r.equipo_id]):''}<span>${r.equipo}${ajChip(r)}</span>${i===0?'<span class="text-[9px] font-bold bg-emerald-100 text-emerald-700 rounded px-1.5 py-0.5">MEJOR</span>':''}</button></td>
               <td class="text-center text-xs font-bold text-ink-500">${r._zona}</td>
               ${celdas(r)}
             </tr>`).join('')}</tbody></table></div>`;
@@ -1083,7 +1085,7 @@ async function renderTabla(){
         </tr></thead>
         <tbody>${rows.map((r,i)=>`<tr class="border-b border-line last:border-0 hover:bg-paper">
           <td class="py-2.5 pl-2 text-ink-400 font-bold text-center">${i+1}</td>
-          <td><button onclick='irEquipoId("${r.equipo_id}")' class="flex items-center gap-2.5 font-semibold text-sm hover:text-brand-600">${EQUIPOS[r.equipo_id]?badge(EQUIPOS[r.equipo_id]):''}<span>${r.equipo}</span></button></td>
+          <td><button onclick='irEquipoId("${r.equipo_id}")' class="flex items-center gap-2.5 font-semibold text-sm hover:text-brand-600">${EQUIPOS[r.equipo_id]?badge(EQUIPOS[r.equipo_id]):''}<span>${r.equipo}${ajChip(r)}</span></button></td>
           ${celdas(r)}
         </tr>`).join('')}</tbody></table></div>`;
   }).join('')+ultHTML+golHTML+rkHTML || '<p class="text-ink-400 text-sm">Sin equipos en zonas todavía.</p>';

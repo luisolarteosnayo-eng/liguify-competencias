@@ -1953,7 +1953,7 @@ async function renderTablaEq(pre){
       <table class="w-full min-w-[440px]"><thead><tr class="text-[10px] uppercase text-ink-400 border-b border-line"><th class="py-2 w-8"></th><th class="text-left">Equipo</th><th class="w-9">PJ</th><th class="w-10">PTS</th><th class="w-9">DG</th><th class="w-9">GF</th><th class="w-9">GC</th></tr></thead>
       <tbody>${rows.map((r,i)=>`<tr class="border-b border-line last:border-0 ${r.equipo_id===EQ.equipo_id?'bg-amber-50/70 font-bold':''}">
         <td class="py-2 pl-2 text-ink-400 font-bold text-center">${i+1}</td>
-        <td class="font-semibold text-sm">${r.equipo}${r.equipo_id===EQ.equipo_id?' <span class="text-[9px] font-bold bg-ink-900 text-white rounded px-1.5 py-0.5">TU EQUIPO</span>':''}</td>
+        <td class="font-semibold text-sm">${r.equipo}${r.ajuste?` <span class="text-[9px] font-bold ${r.ajuste<0?'bg-brand-100 text-brand-600':'bg-emerald-100 text-emerald-700'} rounded px-1 py-0.5" title="Sanción/ajuste de la organización: ${r.ajuste>0?'+':''}${r.ajuste} pts, ya incluidos en el PTS">${r.ajuste>0?'+':''}${r.ajuste}</span>`:''}${r.equipo_id===EQ.equipo_id?' <span class="text-[9px] font-bold bg-ink-900 text-white rounded px-1.5 py-0.5">TU EQUIPO</span>':''}</td>
         <td class="text-center text-sm text-ink-400">${r.pj}</td>
         <td class="text-center font-extrabold">${r.pts}</td>
         <td class="text-center text-sm font-semibold ${r.dg>0?'text-emerald-600':r.dg<0?'text-brand-600':'text-ink-400'}">${r.dg>0?'+':''}${r.dg}</td>
