@@ -1614,7 +1614,7 @@ async function aplicarProgramacion(dia){
    la marca está inscrito (con participación real) y sus roles de comando técnico. */
 function modalConsultaJugador(){
   abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">🪪 CONSULTA DE JUGADOR</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
-    <p class="text-xs text-ink-400 mb-3">Busca por DNI o por nombre y mira en qué equipos de <b>${MARCA.nombre}</b> está inscrito.</p>
+    <p class="text-xs text-ink-400 mb-3">Busca por DNI o por nombre y mira en qué equipos está o estuvo inscrito (todas tus marcas).</p>
     <div class="flex gap-2 mb-3">
       <input id="cj-q" onkeydown="if(event.key==='Enter')consultaJugador()" placeholder="DNI o nombre (mín. 3 caracteres)" class="flex-1 border border-line rounded-xl px-3 py-2 text-sm"/>
       <button onclick="consultaJugador()" class="bg-ink-900 text-white text-sm font-bold px-5 py-2 rounded-xl hover:bg-ink-700">BUSCAR</button>
@@ -1635,11 +1635,14 @@ async function consultaJugador(){
   if(!js||!js.length){out.innerHTML=`<p class="text-xs text-ink-400 bg-paper border border-line rounded-xl p-4 text-center">Sin resultados para “${q}” en la maestra de Liguify.</p>`;return;}
   const ids=js.map(j=>j.id);
   const [insQ,ctQ]=await Promise.all([
-    sb.from('inscripcion_lbf').select('id,jugador_id,dorsal,estado,en_lbf,inhabilitado,equipo:equipo_id(nombre,club:club_id(nombre)),categoria:categoria_id(nombre_display,torneo:torneo_id(id,nombre,marca_id))').in('jugador_id',ids),
-    sb.from('comando_tecnico').select('id,persona_id,rol,estado,inhabilitado,equipo:equipo_id(nombre,club:club_id(nombre)),categoria:categoria_id(nombre_display,torneo:torneo_id(id,nombre,marca_id))').in('persona_id',ids)
+    sb.from('inscripcion_lbf').select('id,jugador_id,dorsal,estado,en_lbf,inhabilitado,equipo:equipo_id(nombre,club:club_id(nombre)),categoria:categoria_id(nombre_display,torneo:torneo_id(id,nombre,marca_id,marca:marca_id(nombre)))').in('jugador_id',ids),
+    sb.from('comando_tecnico').select('id,persona_id,rol,estado,inhabilitado,equipo:equipo_id(nombre,club:club_id(nombre)),categoria:categoria_id(nombre_display,torneo:torneo_id(id,nombre,marca_id,marca:marca_id(nombre)))').in('persona_id',ids)
   ]);
-  const ins=(insQ.data||[]).filter(i=>i.categoria&&i.categoria.torneo&&i.categoria.torneo.marca_id===MARCA.id);
-  const cts=(ctQ.data||[]).filter(c=>c.categoria&&c.categoria.torneo&&c.categoria.torneo.marca_id===MARCA.id);
+  // TODAS las marcas a las que tienes acceso (RLS ya limita lo que no es tuyo)
+  const ins=(insQ.data||[]).filter(i=>i.categoria&&i.categoria.torneo);
+  const cts=(ctQ.data||[]).filter(c=>c.categoria&&c.categoria.torneo);
+  const marcaTag=r=>{const t=(r.categoria||{}).torneo||{};
+    return t.marca_id!==MARCA.id&&t.marca&&t.marca.nombre?` <span class="text-[9px] font-bold bg-sky-100 text-sky-700 rounded-full px-2 py-0.5">${t.marca.nombre}</span>`:'';};
   // participación REAL (mismo criterio que el candado de la BD)
   const insIds=ins.map(i=>i.id); const PART={};
   if(insIds.length){
@@ -1661,19 +1664,19 @@ async function consultaJugador(){
           <span class="block text-[11px] text-ink-400">${j.pais_documento||'PE'} ${j.nro_documento||'—'}${j.fecha_nacimiento?' · nac. '+j.fecha_nacimiento.split('-').reverse().join('/'):''}</span></span>
       </div>
       ${mi.length?mi.map(i=>`<div class="flex items-center gap-2 border-t border-line pt-2 mt-2 flex-wrap text-sm">
-        <span class="flex-1 min-w-[40%]"><b>${nomEq3(i)}</b>${i.dorsal!=null?' <span class="text-ink-400 text-xs">#'+i.dorsal+'</span>':''}
+        <span class="flex-1 min-w-[40%]"><b>${nomEq3(i)}</b>${i.dorsal!=null?' <span class="text-ink-400 text-xs">#'+i.dorsal+'</span>':''}${marcaTag(i)}
           <span class="block text-[10px] text-ink-400">${(i.categoria||{}).nombre_display||''} · ${((i.categoria||{}).torneo||{}).nombre||''}</span></span>
         ${PART[i.id]?chipC('bg-ink-900 text-white','⚽ JUGÓ '+PART[i.id].size):chipC('bg-emerald-100 text-emerald-700','SIN PARTICIPACIÓN')}
         ${i.inhabilitado?chipC('bg-brand-100 text-brand-600','INHABILITADO'):chipC(i.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700',i.estado==='activo'?'ACTIVO':'PENDIENTE')}
         ${i.en_lbf?'':chipC('bg-brand-100 text-brand-600','FUERA DE LBF')}
-      </div>`).join(''):`<p class="text-[11px] text-ink-400 border-t border-line pt-2 mt-2">Sin inscripciones como jugador en los torneos de ${MARCA.nombre}.</p>`}
+      </div>`).join(''):`<p class="text-[11px] text-ink-400 border-t border-line pt-2 mt-2">Sin inscripciones como jugador en tus torneos.</p>`}
       ${mc.map(c=>`<div class="flex items-center gap-2 border-t border-line pt-2 mt-2 flex-wrap text-sm">
-        <span class="flex-1 min-w-[40%]"><b>${nomEq3(c)}</b> <span class="text-[9px] font-bold bg-amber-400 text-ink-900 rounded px-1.5 py-0.5">🎓 CT · ${c.rol||''}</span>
+        <span class="flex-1 min-w-[40%]"><b>${nomEq3(c)}</b> <span class="text-[9px] font-bold bg-amber-400 text-ink-900 rounded px-1.5 py-0.5">🎓 CT · ${c.rol||''}</span>${marcaTag(c)}
           <span class="block text-[10px] text-ink-400">${(c.categoria||{}).nombre_display||''} · ${((c.categoria||{}).torneo||{}).nombre||''}</span></span>
         ${c.inhabilitado?chipC('bg-brand-100 text-brand-600','INHABILITADO'):chipC(c.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700',(c.estado||'').toUpperCase())}
       </div>`).join('')}
     </div>`;
-  }).join('')+`<p class="text-[10px] text-ink-400">Solo se muestran inscripciones en los torneos de <b>${MARCA.nombre}</b>. Para cruces entre marcas usa 🔎 DUPLICADOS.</p>`;
+  }).join('')+`<p class="text-[10px] text-ink-400">Se muestran las inscripciones de TODAS tus marcas (las de otra marca llevan su etiqueta azul).</p>`;
 }
 
 /* 🔎 DUPLICADOS: se eligen los torneos a comparar. Con uno solo se ven los
