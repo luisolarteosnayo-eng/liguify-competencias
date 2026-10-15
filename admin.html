@@ -66,6 +66,7 @@ tailwind.config={theme:{extend:{
       <h2 id="h2-torneos" class="font-display text-2xl tracking-wide">TORNEOS DE LA MARCA</h2>
       <div class="flex gap-2">        <button onclick="modalReclamosMarca()" title="Reclamos de TODOS los torneos de la marca, filtrados por activos" class="relative bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">⚖ RECLAMOS<span id="bdg-reclamos" class="hidden absolute -top-2 -right-2 bg-brand-500 text-white text-[10px] font-bold rounded-full min-w-[20px] h-5 px-1 items-center justify-center shadow"></span></button>
         <button onclick="modalDuplicados()" id="btn-duplicados" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper" title="Jugadores con el mismo documento en más de un equipo de la marca">🔎 DUPLICADOS</button>
+        <button onclick="modalConsultaJugador()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper" title="Busca un jugador por DNI o nombre y mira en qué equipos de la marca está inscrito">🪪 CONSULTA JUGADOR</button>
         <button onclick="modalNuevoTorneo()" id="btn-nuevo-torneo" class="hidden bg-brand-500 text-white font-bold px-4 py-2 rounded-xl text-sm hover:bg-brand-600">+ NUEVO TORNEO</button>
       </div>
     </div>
@@ -1609,6 +1610,72 @@ async function aplicarProgramacion(dia){
   toast(`📅 Programación (${dia}) aplicada ✔ — ${ok} partido(s) actualizados${err?` · ${err} con error: ${msg}`:''}. Publica la fecha con 👁 cuando esté confirmada.`);
   if(typeof renderFixture==='function'&&CAT&&CAT.id) await renderFixture();
 }
+/* 🪪 CONSULTA DE JUGADOR: busca por DNI o nombre y muestra en qué equipos de
+   la marca está inscrito (con participación real) y sus roles de comando técnico. */
+function modalConsultaJugador(){
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">🪪 CONSULTA DE JUGADOR</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-3">Busca por DNI o por nombre y mira en qué equipos de <b>${MARCA.nombre}</b> está inscrito.</p>
+    <div class="flex gap-2 mb-3">
+      <input id="cj-q" onkeydown="if(event.key==='Enter')consultaJugador()" placeholder="DNI o nombre (mín. 3 caracteres)" class="flex-1 border border-line rounded-xl px-3 py-2 text-sm"/>
+      <button onclick="consultaJugador()" class="bg-ink-900 text-white text-sm font-bold px-5 py-2 rounded-xl hover:bg-ink-700">BUSCAR</button>
+    </div>
+    <div id="cj-res" class="text-sm"></div>`,true);
+  setTimeout(()=>{const i=$('cj-q'); if(i) i.focus();},60);
+}
+async function consultaJugador(){
+  const q=$('cj-q').value.trim(), out=$('cj-res');
+  if(q.length<3){out.innerHTML='<p class="text-xs text-amber-600 font-bold">Escribe al menos 3 caracteres.</p>';return;}
+  out.innerHTML='<p class="text-xs text-ink-400 py-4">Buscando…</p>';
+  const like='%'+q.replace(/\s+/g,'%')+'%';
+  const {data:js,error}=await sb.from('jugador_maestro')
+    .select('id,nombres,apellidos,nro_documento,pais_documento,fecha_nacimiento,foto_url,verificado')
+    .or(`nro_documento.ilike.${like},nombres.ilike.${like},apellidos.ilike.${like}`)
+    .limit(15);
+  if(error){out.innerHTML=`<p class="text-xs text-brand-600 font-bold">${errNegocio(error)}</p>`;return;}
+  if(!js||!js.length){out.innerHTML=`<p class="text-xs text-ink-400 bg-paper border border-line rounded-xl p-4 text-center">Sin resultados para “${q}” en la maestra de Liguify.</p>`;return;}
+  const ids=js.map(j=>j.id);
+  const [insQ,ctQ]=await Promise.all([
+    sb.from('inscripcion_lbf').select('id,jugador_id,dorsal,estado,en_lbf,inhabilitado,equipo:equipo_id(nombre,club:club_id(nombre)),categoria:categoria_id(nombre_display,torneo:torneo_id(id,nombre,marca_id))').in('jugador_id',ids),
+    sb.from('comando_tecnico').select('id,persona_id,rol,estado,inhabilitado,equipo:equipo_id(nombre,club:club_id(nombre)),categoria:categoria_id(nombre_display,torneo:torneo_id(id,nombre,marca_id))').in('persona_id',ids)
+  ]);
+  const ins=(insQ.data||[]).filter(i=>i.categoria&&i.categoria.torneo&&i.categoria.torneo.marca_id===MARCA.id);
+  const cts=(ctQ.data||[]).filter(c=>c.categoria&&c.categoria.torneo&&c.categoria.torneo.marca_id===MARCA.id);
+  // participación REAL (mismo criterio que el candado de la BD)
+  const insIds=ins.map(i=>i.id); const PART={};
+  if(insIds.length){
+    const [pl,ac]=await Promise.all([
+      sb.from('planilla_partido').select('inscripcion_id,partido_id,jugo,goles,amarillas,rojas,minutos,asistencias').in('inscripcion_id',insIds),
+      sb.from('acreditacion_partido').select('inscripcion_id,partido_id').in('inscripcion_id',insIds)
+    ]);
+    (pl.data||[]).forEach(p=>{if(p.jugo||(p.goles||0)>0||(p.amarillas||0)>0||(p.rojas||0)>0||(p.minutos||0)>0||(p.asistencias||0)>0)(PART[p.inscripcion_id]=PART[p.inscripcion_id]||new Set()).add(p.partido_id);});
+    (ac.data||[]).forEach(a=>{(PART[a.inscripcion_id]=PART[a.inscripcion_id]||new Set()).add(a.partido_id);});
+  }
+  const chipC=(cls,tx)=>`<span class="text-[9px] font-bold ${cls} rounded-full px-2 py-0.5 whitespace-nowrap">${tx}</span>`;
+  const nomEq3=r=>(r.equipo&&(r.equipo.nombre||(r.equipo.club||{}).nombre))||'—';
+  out.innerHTML=js.map(j=>{
+    const mi=ins.filter(i=>i.jugador_id===j.id), mc=cts.filter(c=>c.persona_id===j.id);
+    return `<div class="border border-line rounded-2xl p-4 mb-3 bg-white">
+      <div class="flex items-center gap-3">
+        <span class="w-12 h-12 rounded-xl grid place-items-center text-white text-xs font-bold overflow-hidden relative shrink-0" style="background:#2b3550">${j.foto_url?`<img src="${j.foto_url}" class="absolute inset-0 w-full h-full object-cover"/>`:iniciales((j.nombres||'')+' '+(j.apellidos||''))}</span>
+        <span class="min-w-0"><b class="text-sm">${j.nombres||''} ${j.apellidos||''}</b> ${j.verificado?'<span class="text-emerald-500">✔</span>':''}
+          <span class="block text-[11px] text-ink-400">${j.pais_documento||'PE'} ${j.nro_documento||'—'}${j.fecha_nacimiento?' · nac. '+j.fecha_nacimiento.split('-').reverse().join('/'):''}</span></span>
+      </div>
+      ${mi.length?mi.map(i=>`<div class="flex items-center gap-2 border-t border-line pt-2 mt-2 flex-wrap text-sm">
+        <span class="flex-1 min-w-[40%]"><b>${nomEq3(i)}</b>${i.dorsal!=null?' <span class="text-ink-400 text-xs">#'+i.dorsal+'</span>':''}
+          <span class="block text-[10px] text-ink-400">${(i.categoria||{}).nombre_display||''} · ${((i.categoria||{}).torneo||{}).nombre||''}</span></span>
+        ${PART[i.id]?chipC('bg-ink-900 text-white','⚽ JUGÓ '+PART[i.id].size):chipC('bg-emerald-100 text-emerald-700','SIN PARTICIPACIÓN')}
+        ${i.inhabilitado?chipC('bg-brand-100 text-brand-600','INHABILITADO'):chipC(i.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700',i.estado==='activo'?'ACTIVO':'PENDIENTE')}
+        ${i.en_lbf?'':chipC('bg-brand-100 text-brand-600','FUERA DE LBF')}
+      </div>`).join(''):`<p class="text-[11px] text-ink-400 border-t border-line pt-2 mt-2">Sin inscripciones como jugador en los torneos de ${MARCA.nombre}.</p>`}
+      ${mc.map(c=>`<div class="flex items-center gap-2 border-t border-line pt-2 mt-2 flex-wrap text-sm">
+        <span class="flex-1 min-w-[40%]"><b>${nomEq3(c)}</b> <span class="text-[9px] font-bold bg-amber-400 text-ink-900 rounded px-1.5 py-0.5">🎓 CT · ${c.rol||''}</span>
+          <span class="block text-[10px] text-ink-400">${(c.categoria||{}).nombre_display||''} · ${((c.categoria||{}).torneo||{}).nombre||''}</span></span>
+        ${c.inhabilitado?chipC('bg-brand-100 text-brand-600','INHABILITADO'):chipC(c.estado==='activo'?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700',(c.estado||'').toUpperCase())}
+      </div>`).join('')}
+    </div>`;
+  }).join('')+`<p class="text-[10px] text-ink-400">Solo se muestran inscripciones en los torneos de <b>${MARCA.nombre}</b>. Para cruces entre marcas usa 🔎 DUPLICADOS.</p>`;
+}
+
 /* 🔎 DUPLICADOS: se eligen los torneos a comparar. Con uno solo se ven los
    cruces entre categorías de ese torneo; con varios, los cruces entre ellos. */
 async function modalDuplicados(){
