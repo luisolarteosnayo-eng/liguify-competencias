@@ -210,6 +210,7 @@ async function cargarCatalogo(){
 const optsCatalogo=(atributo,sel)=>'<option value="">—</option>'+
   (CATALOGO[atributo]||[]).map(v=>`<option ${v===sel?'selected':''}>${v}</option>`).join('');
 let CLUBES={}, EQUIPOS={}, ZONAS=[], FASES=[], JORNADAS=[];
+let SMV={};   // ⛔ sanciones de marca vigentes por jugador (se llena en renderLBF)
 
 function toast(m){const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.add('hidden'),4200);}
 /* ⏳ indicador de proceso en curso: apilable (procesos anidados restauran el mensaje anterior) */
@@ -1034,13 +1035,22 @@ async function verificarPersona(){
       const {data:d,error}=await sb.rpc('verificar_carnet_jugador',{p_token:tok});
       if(error)throw error;
       if(!d.error){
-        const {data:insTok}=await sb.from('inscripcion_lbf').select('id,dorsal,equipo_id,categoria:categoria_id(torneo_id)').eq('qr_token',tok).maybeSingle();
+        const {data:insTok}=await sb.from('inscripcion_lbf').select('id,dorsal,equipo_id,jugador_id,categoria:categoria_id(torneo_id)').eq('qr_token',tok).maybeSingle();
         if(insTok&&insTok.categoria&&insTok.categoria.torneo_id!==TORNEO.id){
           out.innerHTML=banner(false,'NO PERTENECE A ESTE TORNEO')+`<p class="text-xs text-ink-500 mb-2 text-center">El carnet es del torneo <b>${d.torneo||'—'}</b>.</p>`+fichaRPC(d,'JUGADOR'+(d.dorsal!=null?' · #'+d.dorsal:''));
           return;
         }
-        const pHoy=insTok?await partidoHoyHTML(insTok.id,insTok.equipo_id,!!d.valido,!d.inhabilitado&&!d.sancion_global&&d.en_lbf!==false):'';
+        // ⛔ sanción de MARCA vigente (suplantación, deuda…): bloquea también por carnet
+        let smQR=null;
+        if(insTok&&insTok.jugador_id){
+          const hoySm=new Date().toISOString().slice(0,10);
+          const r3=await sb.from('sancion_marca').select('motivo,vigencia_desde,vigencia_hasta').eq('marca_id',MARCA.id).eq('jugador_id',insTok.jugador_id).then(r=>r,()=>({data:[]}));
+          smQR=((r3.data)||[]).find(s=>s.vigencia_desde<=hoySm&&(!s.vigencia_hasta||s.vigencia_hasta>=hoySm))||null;
+          if(smQR) d.valido=false;
+        }
+        const pHoy=insTok?await partidoHoyHTML(insTok.id,insTok.equipo_id,!!d.valido,!smQR&&!d.inhabilitado&&!d.sancion_global&&d.en_lbf!==false):'';
         out.innerHTML=fichaRPC(d,'JUGADOR'+(d.dorsal!=null?' · #'+d.dorsal:''))+`
+        ${smQR?`<p class="text-xs font-bold text-brand-600 bg-brand-50 border-2 border-brand-500 rounded-xl px-3 py-2 mb-2">⛔ SANCIONADO POR LA ORGANIZACIÓN — ${smQR.motivo} · ${smQR.vigencia_hasta?'hasta '+smQR.vigencia_hasta.split('-').reverse().join('/'):'indefinida'}</p>`:''}`+`
         <div class="border border-line rounded-xl px-3 py-1 text-sm mb-2">
           ${[['Identidad verificada',d.verificado],['En Lista de Buena Fe',d.en_lbf],[d.requiere_autorizacion?'Habilitado (autorización de Padre/Tutor)':'Habilitado (el torneo no exige autorización)',d.habilitado??(d.estado==='activo')],['Sin sanción del torneo',!d.inhabilitado],['Sin sanción global',!d.sancion_global]].map(([l,c])=>`<div class="flex justify-between py-1 border-b border-line last:border-0"><span class="text-ink-500 text-xs">${l}</span><b class="${c?'text-emerald-600':'text-brand-600'}">${c?'✔':'✖'}</b></div>`).join('')}
         </div>
@@ -1081,13 +1091,17 @@ async function verificarPersona(){
     // ⚡ foto del torneo, sanción global, inscripciones y CT — TODO EN PARALELO
     // (antes eran 3 pasos en cadena; en cancha cada escaneo ahorra ~1 segundo)
     const hoy=new Date().toISOString().slice(0,10);
-    const [,sgQ,insQ,ctQ]=await Promise.all([
+    const [,sgQ,insQ,ctQ,smQ]=await Promise.all([
       fotosDelTorneo([j]),   // foto del torneo (si el club subió una específica)
       sb.from('sancion_global').select('id,vigencia_desde,vigencia_hasta').eq('jugador_id',j.id),
       sb.from('inscripcion_lbf').select('id,dorsal,estado,en_lbf,inhabilitado,equipo_id,equipo:equipo_id(nombre,club:club_id(nombre)),categoria:categoria_id(nombre_display,torneo_id)').eq('jugador_id',j.id),
-      sb.from('comando_tecnico').select('id,rol,estado,inhabilitado,equipo_id,equipo:equipo_id(nombre,club:club_id(nombre)),categoria:categoria_id(nombre_display,torneo_id)').eq('persona_id',j.id)
+      sb.from('comando_tecnico').select('id,rol,estado,inhabilitado,equipo_id,equipo:equipo_id(nombre,club:club_id(nombre)),categoria:categoria_id(nombre_display,torneo_id)').eq('persona_id',j.id),
+      sb.from('sancion_marca').select('motivo,vigencia_desde,vigencia_hasta').eq('marca_id',MARCA.id).eq('jugador_id',j.id).then(r=>r,()=>({data:[]}))
     ]);
-    const sancion=((sgQ.data)||[]).some(s=>s.vigencia_desde<=hoy&&(!s.vigencia_hasta||s.vigencia_hasta>=hoy));
+    const sancionG=((sgQ.data)||[]).some(s=>s.vigencia_desde<=hoy&&(!s.vigencia_hasta||s.vigencia_hasta>=hoy));
+    // ⛔ sanción de MARCA vigente (suplantación, deuda…): bloquea igual que la global
+    const sm=((smQ.data)||[]).find(s=>s.vigencia_desde<=hoy&&(!s.vigencia_hasta||s.vigencia_hasta>=hoy))||null;
+    const sancion=sancionG||!!sm;
     const deTorneo=r=>r.categoria&&r.categoria.torneo_id===TORNEO.id;
     const ins=(insQ.data||[]).filter(deTorneo), cts=(ctQ.data||[]).filter(deTorneo);
     // Habilitación según la config del torneo: si NO exige autorización de
@@ -1114,7 +1128,8 @@ async function verificarPersona(){
           <div class="min-w-0 flex-1">
             <p class="font-bold text-sm">${(j.nombres||'').toUpperCase()} ${(j.apellidos||'').toUpperCase()} ${j.verificado?'<span class="text-emerald-400">✔</span>':''}</p>
             <p class="text-[11px] text-white/60">${j.pais_documento||'PE'} ${j.nro_documento||''}</p>
-            ${sancion?'<p class="text-[11px] font-bold text-brand-500 mt-0.5">⛔ SANCIÓN GLOBAL VIGENTE</p>':''}
+            ${sancionG?'<p class="text-[11px] font-bold text-brand-500 mt-0.5">⛔ SANCIÓN GLOBAL VIGENTE (plataforma)</p>':''}
+            ${sm?`<p class="text-[11px] font-bold text-brand-500 mt-0.5">⛔ SANCIONADO POR LA ORGANIZACIÓN — ${sm.motivo} · ${sm.vigencia_hasta?'hasta '+sm.vigencia_hasta.split('-').reverse().join('/'):'indefinida'}</p>`:''}
           </div>
           <button onclick='historialFotos("${j.id}",${JSON.stringify(((j.nombres||'')+' '+(j.apellidos||'')).trim()).replace(/'/g,"&#39;")})' class="shrink-0 text-[10px] font-bold text-white/80 border border-white/25 rounded-lg px-2 py-1.5 hover:bg-white/10" title="Historial de fotos para verificar identidad">🕓 FOTOS</button>
         </div>
@@ -3237,16 +3252,21 @@ async function guardarClub(clubId){
   }catch(e){toast('Escudo: '+(e.message||e));}
 }
 async function renderLBF(){
+  SMV={};
   const {data:ins,error}=await sb.from('inscripcion_lbf').select('*').eq('equipo_id',EQUIPO.id).order('dorsal');
   if(error){$('lbf-lista').innerHTML='';msg(errNegocio(error),'err');return;}
   let jug={}; const PART={};   // inscripcion_id → Set de partidos con participación REAL (mismo criterio que el candado de la BD)
   if(ins.length){
     const insIds=ins.map(i=>i.id);
-    const [js,pl,ac]=await Promise.all([
+    const [js,pl,ac,smQ]=await Promise.all([
       sb.from('jugador_maestro').select('id,nombres,apellidos,nro_documento,pais_documento,tipo_documento,fecha_nacimiento,verificado,foto_url,doc_scan_frente_url,doc_scan_reverso_url,pie_habil,posicion,consentimiento_imagen,autorizacion_url').in('id',ins.map(i=>i.jugador_id)),
       sb.from('planilla_partido').select('inscripcion_id,partido_id,jugo,goles,amarillas,rojas,minutos,asistencias').in('inscripcion_id',insIds),
-      sb.from('acreditacion_partido').select('inscripcion_id,partido_id').in('inscripcion_id',insIds)
+      sb.from('acreditacion_partido').select('inscripcion_id,partido_id').in('inscripcion_id',insIds),
+      sb.from('sancion_marca').select('jugador_id,motivo,vigencia_desde,vigencia_hasta').eq('marca_id',MARCA.id).in('jugador_id',ins.map(i=>i.jugador_id)).then(r=>r,()=>({data:[]}))
     ]);
+    // ⛔ sanción de marca VIGENTE por jugador
+    const hoySM=new Date().toISOString().slice(0,10);
+    (smQ.data||[]).forEach(s=>{ if(s.vigencia_desde<=hoySM&&(!s.vigencia_hasta||s.vigencia_hasta>=hoySM)) SMV[s.jugador_id]=s; });
     await fotosDelTorneo(js.data||[]);
     jug=Object.fromEntries((js.data||[]).map(j=>[j.id,j]));
     (pl.data||[]).forEach(p=>{ if(p.jugo||(p.goles||0)>0||(p.amarillas||0)>0||(p.rojas||0)>0||(p.minutos||0)>0||(p.asistencias||0)>0) (PART[p.inscripcion_id]=PART[p.inscripcion_id]||new Set()).add(p.partido_id); });
@@ -3263,10 +3283,12 @@ async function renderLBF(){
       <span class="doc text-xs text-ink-500">🇵🇪 ${j.nro_documento||''}</span>
       <span class="flex items-center gap-1.5 ml-auto flex-wrap">
         ${PART[i.id]?`<span class="text-[10px] font-bold px-2 py-1 rounded-full bg-ink-900 text-white" title="Participación real registrada en ${PART[i.id].size} partido(s) (asistencia o estadísticas). El club no puede eliminarlo; como admin puedes ✏️ INHABILITAR o 🗑 eliminarlo borrando su participación">⚽ JUGÓ ${PART[i.id].size}</span>`:''}
+        ${SMV[i.jugador_id]?`<span class="text-[10px] font-bold px-2 py-1 rounded-full bg-brand-500 text-white" title="${SMV[i.jugador_id].motivo} · ${SMV[i.jugador_id].vigencia_hasta?'hasta '+SMV[i.jugador_id].vigencia_hasta.split('-').reverse().join('/'):'indefinida'} — aplica a TODOS los torneos de la marca">⛔ SANCIONADO</span>`:''}
         <span class="text-[10px] font-bold px-2 py-1 rounded-full ${i.inhabilitado?'bg-brand-100 text-brand-600':(i.estado==='activo'||!TORNEO.requiere_autorizacion)?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${i.inhabilitado?'INHABILITADO':i.estado==='activo'?'ACTIVO':(!TORNEO.requiere_autorizacion?'HABILITADO':'PENDIENTE')}</span>
         ${i.estado==='pendiente'&&TORNEO.requiere_autorizacion&&esAdmin()?`<button onclick="activarIns('${i.id}')" class="text-[10px] font-bold text-emerald-700 border border-emerald-300 rounded-lg px-2.5 py-1.5 hover:bg-emerald-50">ACTIVAR</button>`:''}
         ${esAdmin()?`<button onclick='modalEditIns(${JSON.stringify({id:i.id,dorsal:i.dorsal,capitan:i.capitan,estado:i.estado,inhabilitado:i.inhabilitado,nombre:(j.nombres||'')+' '+(j.apellidos||''),nombres:j.nombres||'',apellidos:j.apellidos||'',fnac:j.fecha_nacimiento||'',jugador_id:i.jugador_id,foto_url:j.foto_url||null,dfr:j.doc_scan_frente_url||null,drv:j.doc_scan_reverso_url||null,pie:j.pie_habil||null,pos:j.posicion||null,con:j.consentimiento_imagen?1:0,aut:j.autorizacion_url||null,doc:j.nro_documento||'',dpais:j.pais_documento||'PE',dtipo:j.tipo_documento||'DNI'}).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper" title="Editar foto, documento, dorsal, capitán, posición, pie hábil, consentimiento, estado e inhabilitación">✏️</button>
         <button onclick='modalPerfilJugador("${i.jugador_id}","${((j.nombres||'')+' '+(j.apellidos||'')).replace(/'/g,'')}")' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-amber-50 hover:text-amber-600" title="Perfil público del jugador: habilitar, link para compartir y acceso del padre/madre">⭐</button>
+        <button onclick='modalSancionJugador("${i.jugador_id}","${((j.nombres||'')+' '+(j.apellidos||'')).replace(/'/g,'')}")' class="text-xs font-bold ${SMV[i.jugador_id]?'text-white bg-brand-500 border-brand-500':'text-ink-400 border-line'} border rounded-lg px-2.5 py-1.5 hover:bg-brand-50 hover:text-brand-600" title="Sanción de MARCA por plazo (suplantación, deuda, indisciplina): aplica a TODOS los torneos de ${MARCA.nombre}">⛔</button>
         ${PART[i.id]
           ?`<button onclick='eliminarInsTotal("${i.id}","${((j.nombres||'')+' '+(j.apellidos||'')).replace(/'/g,'')}",${PART[i.id].size})' class="text-xs font-bold text-brand-600 border border-brand-100 rounded-lg px-2.5 py-1.5 hover:bg-brand-50" title="Jugó ${PART[i.id].size} partido(s). Como admin puedes eliminarlo de todas formas: se BORRAN sus estadísticas y acreditaciones de esos partidos (los marcadores no cambian). Si solo quieres frenarlo, usa ✏️ → INHABILITAR.">🗑</button>`
           :`<button onclick='quitarIns("${i.id}","${((j.nombres||'')+' '+(j.apellidos||'')).replace(/'/g,'')}")' class="text-xs font-bold text-emerald-700 border border-emerald-300 rounded-lg px-2.5 py-1.5 hover:bg-brand-50 hover:text-brand-600" title="Sin participación en el torneo: se puede quitar de la LBF y quedaría libre para otro equipo">✕</button>`}`:''}
@@ -3620,6 +3642,79 @@ async function quitarIns(insId,nombre){
   if(error){toast(errNegocio(error));return;}
   toast('Jugador quitado de la LBF'); renderLBF();
 }
+/* ⛔ SANCIÓN DE MARCA por jugador (suplantación, deuda, indisciplina…):
+   plazo definido o indefinido; aplica a TODOS los torneos de la marca.
+   Mientras esté vigente, la validación muestra ⛔ y no deja grabar asistencia. */
+let SAN_JID=null, SAN_NOM='';
+function modalSancionJugador(jid,nombre){
+  SAN_JID=jid; SAN_NOM=nombre;
+  const hoy=new Date().toISOString().slice(0,10);
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⛔ SANCIÓN DE MARCA</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-sm font-semibold mb-1">${nombre}</p>
+    <p class="text-[11px] text-ink-400 mb-3">Aplica a <b>TODOS los torneos de ${MARCA.nombre}</b>. Mientras esté vigente, la validación en cancha muestra ⛔ SANCIONADO y no permite grabar asistencia. No borra nada del jugador.</p>
+    <div id="san-lista" class="mb-3 text-sm">Cargando…</div>
+    <div class="bg-paper border border-line rounded-xl p-3">
+      <p class="font-bold text-ink-500 uppercase tracking-wider text-[10px] mb-2">Nueva sanción</p>
+      <div class="flex gap-2 mb-2">
+        <select id="san-tipo" class="border-b border-line py-1.5 font-semibold bg-transparent text-sm">
+          <option>Suplantación</option><option>Deuda</option><option>Indisciplina</option><option>Otro</option>
+        </select>
+        <input id="san-det" placeholder="detalle (opcional)" class="flex-1 border-b border-line py-1.5 text-sm bg-transparent"/>
+      </div>
+      <div class="grid grid-cols-2 gap-3 mb-3">
+        <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Desde</span>
+          <input id="san-desde" type="date" value="${hoy}" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
+        <label class="block text-sm"><span class="text-ink-400 font-semibold text-xs">Hasta (vacío = indefinida)</span>
+          <input id="san-hasta" type="date" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
+      </div>
+      <button onclick="guardarSancionMarca()" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">⛔ APLICAR SANCIÓN</button>
+    </div>`,true);
+  cargarSancionesJugador();
+}
+async function cargarSancionesJugador(){
+  const el=$('san-lista'); if(!el) return;
+  const {data,error}=await sb.from('sancion_marca').select('*').eq('marca_id',MARCA.id).eq('jugador_id',SAN_JID).order('created_at',{ascending:false});
+  if(error){el.innerHTML=`<p class="text-xs text-brand-600 font-bold">${errNegocio(error)}</p>`;return;}
+  const hoy=new Date().toISOString().slice(0,10), fmtF=f=>f?f.split('-').reverse().join('/'):null;
+  el.innerHTML=(data||[]).length?data.map(s=>{
+    const vig=s.vigencia_desde<=hoy&&(!s.vigencia_hasta||s.vigencia_hasta>=hoy);
+    return `<div class="border ${vig?'border-brand-500 bg-brand-50':'border-line'} rounded-xl px-3 py-2 mb-1.5 flex items-center gap-2 flex-wrap">
+      <span class="flex-1 min-w-[40%]"><b>${s.motivo}</b>
+        <span class="block text-[10px] text-ink-400">desde ${fmtF(s.vigencia_desde)} · ${s.vigencia_hasta?('hasta '+fmtF(s.vigencia_hasta)):'INDEFINIDA'}${s.levantada_at?' · levantada el '+fmtF(s.levantada_at.slice(0,10)):''}</span></span>
+      ${vig?'<span class="text-[9px] font-bold bg-brand-500 text-white rounded-full px-2 py-0.5">VIGENTE</span>'
+          :'<span class="text-[9px] font-bold bg-white border border-line text-ink-400 rounded-full px-2 py-0.5">CUMPLIDA</span>'}
+      ${vig?`<button onclick="levantarSancionMarca('${s.id}')" class="text-[10px] font-bold text-emerald-700 border border-emerald-300 rounded-lg px-2.5 py-1.5 hover:bg-emerald-50">LEVANTAR</button>`:''}
+      <button onclick="eliminarSancionMarca('${s.id}')" class="text-[10px] font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-brand-50 hover:text-brand-600" title="Eliminar del historial (solo si se registró por error)">✕</button>
+    </div>`;}).join(''):'<p class="text-xs text-ink-400 bg-white border border-line rounded-xl p-3 text-center">Sin sanciones registradas en esta marca.</p>';
+}
+async function guardarSancionMarca(){
+  const tipo=$('san-tipo').value, det=$('san-det').value.trim();
+  const desde=$('san-desde').value, hasta=$('san-hasta').value||null;
+  if(!desde){toast('⚠ Falta la fecha de inicio');return;}
+  if(hasta&&hasta<desde){toast('⚠ "Hasta" no puede ser anterior a "Desde"');return;}
+  const {data:{user}}=await sb.auth.getUser();
+  const {error}=await sb.from('sancion_marca').insert({marca_id:MARCA.id,jugador_id:SAN_JID,
+    motivo:det?`${tipo}: ${det}`:tipo,vigencia_desde:desde,vigencia_hasta:hasta,emitida_por:user?.id||null});
+  if(error){toast(errNegocio(error));return;}
+  toast(`⛔ Sanción aplicada a ${SAN_NOM} en toda la marca`);
+  $('san-det').value=''; $('san-hasta').value='';
+  cargarSancionesJugador(); renderLBF();
+}
+async function levantarSancionMarca(id){
+  if(!confirm(`¿Levantar la sanción de ${SAN_NOM}?\n\nTermina de inmediato y el jugador queda habilitado en la validación. La sanción queda en el historial como LEVANTADA.`))return;
+  const ayer=new Date(Date.now()-864e5).toISOString().slice(0,10);
+  const {data:{user}}=await sb.auth.getUser();
+  const {error}=await sb.from('sancion_marca').update({vigencia_hasta:ayer,levantada_por:user?.id||null,levantada_at:new Date().toISOString()}).eq('id',id);
+  if(error){toast(errNegocio(error));return;}
+  toast('Sanción levantada ✔'); cargarSancionesJugador(); renderLBF();
+}
+async function eliminarSancionMarca(id){
+  if(!confirm('¿Eliminar esta sanción del historial?\n\nSolo corresponde si se registró por error. Si la sanción ya se cumplió o la estás perdonando, usa LEVANTAR para conservar el historial.'))return;
+  const {error}=await sb.from('sancion_marca').delete().eq('id',id);
+  if(error){toast(errNegocio(error));return;}
+  toast('Sanción eliminada del historial'); cargarSancionesJugador(); renderLBF();
+}
+
 /* 👑 Eliminación TOTAL (solo admin): borra al jugador de la LBF junto con su
    participación (planillas, acreditaciones, eventos, figura). Los marcadores
    de los partidos NO cambian; se pierde su atribución individual. */
