@@ -712,9 +712,17 @@ async function renderKPIs(contId,catIds){
     ${tile(clubes,'Clubes')}${tile(equipos,'Equipos')}${tile(jug.count||0,'Jugadores')}${tile(pj,'Partidos jugados')}${tile(goles,'Goles','text-brand-600')}
   </div>`;
 }
+/* Torneo en BORRADOR: el club solo ve/carga su plantel; programación y
+   resultados aparecen cuando el organizador publica el torneo. */
+const torneoBorrador=()=>!!(EQ&&EQ.torneo_estado==='borrador');
 function tabs(act){
-  $('eq-tabs').innerHTML=[['tabla','Resultados y estadísticas'],['plantel','Plantel (LBF)'],['partidos','Programación']].map(([t,l])=>
-    `<button onclick="tabs('${t}')" class="tabbtn ${t===act?'active':''} text-sm font-bold px-4 py-2 rounded-xl border border-line bg-white">${l}</button>`).join('');
+  const TABS=torneoBorrador()
+    ?[['plantel','Plantel (LBF)']]
+    :[['tabla','Resultados y estadísticas'],['plantel','Plantel (LBF)'],['partidos','Programación']];
+  if(torneoBorrador()) act='plantel';
+  $('eq-tabs').innerHTML=TABS.map(([t,l])=>
+    `<button onclick="tabs('${t}')" class="tabbtn ${t===act?'active':''} text-sm font-bold px-4 py-2 rounded-xl border border-line bg-white">${l}</button>`).join('')
+    +(torneoBorrador()?`<span class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 font-semibold">🛠 Torneo en preparación — la programación y los resultados aparecerán cuando el organizador lo publique</span>`:'');
   ['tabla','plantel','partidos'].forEach(t=>$('tab-'+t).classList.toggle('hidden',t!==act));
 }
 async function abrirEquipo(id){
@@ -733,13 +741,21 @@ async function abrirEquipo(id){
     const u=data&&(data.logo_url||(data.marca||{}).logo_url); const el=$('eq-tlogo');
     if(u&&el) el.innerHTML=`<img src="${u}" class="absolute inset-0 w-full h-full object-cover"/>`;
   });
-  tabs('tabla');
+  tabs(torneoBorrador()?'plantel':'tabla');
   // ⚡ pinta al instante la última versión conocida y muestra la pantalla YA
   const snap=pintarSnapshot('ceq:'+EQ.equipo_id,['eq-kpis','tab-tabla','tab-plantel','tab-partidos']);
   if(!snap){ $('tab-tabla').innerHTML='<p class="text-xs text-ink-400 py-8 text-center">Cargando…</p>'; $('tab-plantel').innerHTML=''; $('tab-partidos').innerHTML=''; $('eq-kpis').innerHTML=''; }
   show('s-equipo');
   renderKPIs('eq-kpis',[EQ.categoria_id]);
   EQ_LISTO=false;
+  if(torneoBorrador()){
+    // 🛠 BORRADOR: solo el plantel; sin consultas de tabla/fixture/goleadores
+    $('tab-tabla').innerHTML=''; $('tab-partidos').innerHTML='';
+    await renderPlantel();
+    EQ_LISTO=true;
+    guardarSnapshot('ceq:'+EQ.equipo_id,['eq-kpis','tab-tabla','tab-plantel','tab-partidos']);
+    return;
+  }
   // ⚡ tabla, goleadores y ranking arrancan YA, en paralelo con plantel y partidos
   const preTab={
     tabla:sb.from('vista_tabla_zona').select('*').eq('categoria_id',EQ.categoria_id),
