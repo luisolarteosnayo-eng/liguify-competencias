@@ -1863,6 +1863,7 @@ async function modalReclamosMarca(filtro){
   abrirModal(`<div class="flex items-center justify-between mb-1 flex-wrap gap-2">
       <h3 class="font-display text-2xl tracking-wide">⚖ RECLAMOS · ${MARCA.nombre.toUpperCase()}</h3>
       <span class="flex items-center gap-2">
+        <button onclick="modalTextosReclamoMarca()" title="Editar las indicaciones y los datos de pago (Yape/cuenta) del formulario de reclamo, por torneo" class="text-xs font-bold text-ink-500 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper">⚙ TEXTOS</button>
         <select onchange="modalReclamosMarca(this.value)" class="border border-line rounded-lg px-2 py-1.5 text-xs font-bold bg-white">
           ${opts.map(([v,l])=>`<option value="${v}" ${v===RCM_FILTRO?'selected':''}>${l}</option>`).join('')}
         </select>
@@ -1898,20 +1899,37 @@ async function modalReclamosAdmin(){
         <span class="block w-full text-[11px] text-ink-500">${r.categoria} · <b>${r.reclamante}</b> reclama a <b>${r.reclamado}</b></span>
       </button>`).join(''):'<p class="text-sm text-ink-400 bg-paper border border-line rounded-xl p-6 text-center">Sin reclamos presentados en este torneo.</p>'}`,true);
 }
-function modalTextosReclamo(){
-  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⚙ TEXTOS DEL RECLAMO</h3><button onclick="modalReclamosAdmin()" class="text-ink-400 text-xl">✕</button></div>
+/* ⚙ Textos del reclamo (indicaciones + datos de pago Yape/cuenta): son POR
+   TORNEO. Se editan desde el torneo (⚖ RECLAMOS → ⚙ TEXTOS) o desde la marca
+   (⚖ RECLAMOS de la marca → ⚙ TEXTOS → elegir torneo). */
+let RCT_T=null, RCT_VOLVER='torneo';
+function rctVolver(){ return RCT_VOLVER==='marca'?modalReclamosMarca():modalReclamosAdmin(); }
+function modalTextosReclamoMarca(){
+  const ts=(TORNEOS_TODOS||[]).filter(t=>t.estado!=='archivado');
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⚙ TEXTOS DEL RECLAMO</h3><button onclick="modalReclamosMarca()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-3">Los textos (indicaciones y datos de pago Yape/cuenta) son <b>por torneo</b>. Elige cuál editar:</p>
+    ${ts.map(t=>`<button onclick='modalTextosReclamo(TORNEOS_TODOS.find(x=>x.id==="${t.id}"),"marca")' class="w-full bg-white border border-line rounded-xl px-4 py-2.5 mb-2 text-left hover:bg-paper flex items-center gap-2 flex-wrap">
+      <span class="font-bold text-sm flex-1">${t.nombre}</span>
+      ${t.reclamo_texto_pago?'<span class="text-[9px] font-bold bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5">💳 CON DATOS DE PAGO</span>':'<span class="text-[9px] font-bold bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">SIN DATOS DE PAGO</span>'}
+    </button>`).join('')||'<p class="text-sm text-ink-400">Sin torneos.</p>'}`);
+}
+function modalTextosReclamo(t,volver){
+  RCT_T=t||TORNEO; RCT_VOLVER=volver||'torneo';
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">⚙ TEXTOS DEL RECLAMO</h3><button onclick="rctVolver()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs font-bold text-ink-500 mb-3">${RCT_T.nombre}</p>
     <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Indicaciones (aparece al inicio del formulario)</span>
-      <textarea id="rct-intro" rows="5" class="w-full border border-line rounded-xl p-3 text-xs">${(TORNEO.reclamo_texto_intro||'').replace(/</g,'&lt;')}</textarea></label>
+      <textarea id="rct-intro" rows="5" class="w-full border border-line rounded-xl p-3 text-xs">${(RCT_T.reclamo_texto_intro||'').replace(/</g,'&lt;')}</textarea></label>
     <label class="block text-sm mb-4"><span class="text-ink-400 font-semibold text-xs">Datos de pago (Yape / cuenta)</span>
-      <textarea id="rct-pago" rows="2" class="w-full border border-line rounded-xl p-3 text-xs">${(TORNEO.reclamo_texto_pago||'').replace(/</g,'&lt;')}</textarea></label>
+      <textarea id="rct-pago" rows="3" class="w-full border border-line rounded-xl p-3 text-xs">${(RCT_T.reclamo_texto_pago||'').replace(/</g,'&lt;')}</textarea></label>
     <button onclick="guardarTextosReclamo()" class="w-full bg-ink-900 text-white font-bold py-2.5 rounded-xl hover:bg-ink-700">GUARDAR TEXTOS</button>`);
 }
 async function guardarTextosReclamo(){
   const intro=$('rct-intro').value.trim(), pago=$('rct-pago').value.trim();
-  const {error}=await sb.from('torneo').update({reclamo_texto_intro:intro,reclamo_texto_pago:pago}).eq('id',TORNEO.id);
+  const {error}=await sb.from('torneo').update({reclamo_texto_intro:intro,reclamo_texto_pago:pago}).eq('id',RCT_T.id);
   if(error){toast(errNegocio(error));return;}
-  TORNEO.reclamo_texto_intro=intro; TORNEO.reclamo_texto_pago=pago;
-  toast('⚙ Textos guardados ✔'); modalReclamosAdmin();
+  RCT_T.reclamo_texto_intro=intro; RCT_T.reclamo_texto_pago=pago;
+  if(TORNEO&&TORNEO.id===RCT_T.id){TORNEO.reclamo_texto_intro=intro;TORNEO.reclamo_texto_pago=pago;}
+  toast(`⚙ Textos de ${RCT_T.nombre} guardados ✔`); rctVolver();
 }
 async function abrirReclamoAdmin(id){
   const {data,error}=await sb.rpc('detalle_reclamo',{p_id:id});
