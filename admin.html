@@ -1963,6 +1963,7 @@ async function abrirReclamoAdmin(id){
       <textarea id="rca-resp" rows="3" class="w-full border border-line rounded-xl p-3 text-sm">${(d.respuesta||'').replace(/</g,'&lt;')}</textarea></label>
     <div class="mb-3">
       <p class="text-[10px] font-bold text-ink-400 uppercase tracking-wider mb-1.5">Imágenes de la respuesta <span class="normal-case font-normal">(máx. 3 — se ven en el detalle de ambos clubes)</span></p>
+      ${d.estado==='pendiente_devolucion'?'<p class="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5 mb-1.5">💸 Para cerrar es OBLIGATORIO adjuntar aquí el voucher de la devolución realizada por la organización.</p>':''}
       <span id="rca-resp-adj" class="inline-block align-middle"></span>
       <label class="inline-block align-middle text-xs font-bold text-ink-500 border border-line rounded-xl px-3 py-2 cursor-pointer hover:bg-paper">📸 AGREGAR IMAGEN<input id="rca-foto-in" type="file" accept="image/*" class="hidden" onchange="rcaAgregarFoto(this)"/></label>
     </div>
@@ -2000,6 +2001,11 @@ async function rcaAgregarFoto(inp){
 async function estadoReclamo(nuevo){
   const resp=$('rca-resp')?$('rca-resp').value.trim():'';
   if((nuevo==='rechazado'||nuevo==='pendiente_devolucion')&&!resp){toast('⚠ Escribe la respuesta/sustento antes de resolver');return;}
+  // 💸 Para CERRAR con devolución registrada es OBLIGATORIO adjuntar el
+  // voucher de la devolución (imagen de la respuesta, visible a ambos clubes)
+  if(nuevo==='cerrado'&&(RCA_RESP_FOTOS.length+RCA_RESP_NUEVAS.length)===0){
+    toast('⚠ Adjunta el VOUCHER DE LA DEVOLUCIÓN (📸 AGREGAR IMAGEN) antes de cerrar el reclamo');return;
+  }
   // subir las imágenes nuevas de la respuesta (si hay) y armar la lista final
   let fotos=null;
   if(RCA_RESP_NUEVAS.length||RCA_RESP_FOTOS.length!==((RCA_DET&&RCA_DET.respuesta_fotos)||[]).length){
