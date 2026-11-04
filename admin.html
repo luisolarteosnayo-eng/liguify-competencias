@@ -4467,7 +4467,8 @@ async function renderFixture(){
       <button onclick="imprimirFixturePDF()" title="PDF del fixture completo con logos de los equipos, para compartir o imprimir" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">🖨 PDF FIXTURE</button>${esAdmin()?`
       <button onclick="modalReplicar()" title="Copiar estas fechas y cruces a otras categorías del torneo (mismos clubes)" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">⧉ REPLICAR</button>
       <button onclick="modalLlaves()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">🏆 GENERAR LLAVES</button>
-      <button onclick="modalFixture()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">⚙️ GENERAR FIXTURE</button>`:''}</div>`
+      <button onclick="modalFixture()" class="bg-white border border-line font-bold px-4 py-2 rounded-xl text-sm hover:bg-paper">⚙️ GENERAR FIXTURE</button>
+      <button onclick="modalAgregarFecha()" title="Agrega una fecha extra al final del torneo eligiendo los cruces a mano (pueden repetirse rivales de fechas anteriores); suma puntos y estadísticas como cualquier fecha" class="bg-brand-500 text-white font-bold px-4 py-2 rounded-xl text-sm hover:bg-brand-600">➕ AGREGAR FECHA</button>`:''}</div>`
     + ((htmlFechas+htmlFases) || '<p class="text-ink-400 text-sm">Sin partidos.</p>');
 }
 /* ---- Eliminatoria como una fecha más: visibilidad + gestión de la fase ---- */
@@ -6205,6 +6206,75 @@ function modalNuevoPartido(tipo,refId){
     <button onclick="crearPartidoManual('${tipo}','${refId}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl mt-4 hover:bg-brand-600">AGREGAR PARTIDO</button>`);
   if(acts.length>1) setTimeout(()=>{$('np-v').selectedIndex=1;},50);
 }
+/* ➕ AGREGAR FECHA: crea la jornada siguiente (numero máx+1) con sus partidos
+   elegidos a mano. Los cruces PUEDEN repetirse respecto a fechas anteriores
+   (es una fecha extra); dentro de la MISMA fecha un equipo solo juega una vez
+   y ambos deben ser de la misma zona (para que sumen en su tabla). La fecha
+   computa en la tabla de posiciones como cualquier otra. */
+let AF_EQZ={}, AF_N=0;
+async function modalAgregarFecha(){
+  if(!ZONAS.length){toast('⚠ Crea una zona y asigna los equipos antes de agregar fechas');return;}
+  const ez=await sb.from('equipo_en_zona').select('zona_id,equipo_id').in('zona_id',ZONAS.map(z=>z.id));
+  AF_EQZ={}; (ez.data||[]).forEach(x=>{AF_EQZ[x.equipo_id]=x.zona_id;});
+  const num=Math.max(0,...(JORNADAS||[]).map(j=>+j.numero||0))+1;
+  const ult=(JORNADAS||[]).map(j=>j.fecha).filter(Boolean).sort().pop();
+  const dia=ult?new Date(new Date(ult+'T12:00:00').getTime()+7*864e5).toISOString().slice(0,10):new Date().toISOString().slice(0,10);
+  AF_N=0;
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">➕ AGREGAR FECHA ${num}</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-xs text-ink-400 mb-3">Fecha extra al final del torneo: elige los cruces a mano (los duelos <b>pueden repetirse</b> respecto a fechas anteriores). Suma puntos y estadísticas en la tabla como cualquier fecha. Un equipo solo puede jugar una vez en la fecha y ambos deben ser de la misma zona.</p>
+    <label class="block text-sm mb-3 w-44"><span class="text-ink-400 font-semibold text-xs">Día de juego</span>
+      <input id="af-dia" type="date" value="${dia}" class="w-full border-b border-line py-1.5 font-semibold bg-transparent"/></label>
+    <div id="af-filas"></div>
+    <button onclick="afAgregarFila()" class="w-full border border-dashed border-line rounded-xl py-2 text-xs font-bold text-ink-500 hover:bg-paper mb-3">+ PARTIDO</button>
+    <button onclick="crearFechaManual(${num})" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">CREAR FECHA ${num}</button>
+    <p class="text-[10px] text-ink-400 mt-2">Los partidos quedan PROGRAMADOS; la hora y la cancha puedes afinarlas luego con ✏️ o 📤 SUBIR PROGRAMACIÓN.</p>`,true);
+  afAgregarFila(); afAgregarFila();
+}
+function afOpts(){
+  return Object.values(EQUIPOS).filter(e=>e.estado==='activo'&&AF_EQZ[e.id])
+    .sort((a,b)=>nomEq(a).localeCompare(nomEq(b),'es'))
+    .map(e=>{const z=ZONAS.find(zz=>zz.id===AF_EQZ[e.id]);
+      return `<option value="${e.id}">${ZONAS.length>1?'['+(z?z.nombre:'?')+'] ':''}${nomEq(e)}</option>`;}).join('');
+}
+function afAgregarFila(){
+  const c=$('af-filas'); if(!c) return; const i=AF_N++;
+  c.insertAdjacentHTML('beforeend',`<div id="af-r-${i}" class="grid grid-cols-[1fr_auto_1fr_90px_auto] gap-2 items-center mb-2">
+    <select id="af-l-${i}" class="border border-line rounded-lg px-2 py-2 text-xs font-semibold bg-white"><option value="">— local —</option>${afOpts()}</select>
+    <span class="text-ink-400 text-[10px] font-bold">vs</span>
+    <select id="af-v-${i}" class="border border-line rounded-lg px-2 py-2 text-xs font-semibold bg-white"><option value="">— visita —</option>${afOpts()}</select>
+    <input id="af-h-${i}" type="time" class="border border-line rounded-lg px-2 py-1.5 text-xs font-semibold bg-white"/>
+    <button onclick="$('af-r-${i}').remove()" class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2 py-1.5 hover:bg-brand-50 hover:text-brand-600">✕</button>
+  </div>`);
+}
+async function crearFechaManual(num){
+  const dia=$('af-dia').value||null;
+  const filas=[];
+  for(let i=0;i<AF_N;i++){
+    const r=$('af-r-'+i); if(!r) continue;
+    const l=$('af-l-'+i).value, v=$('af-v-'+i).value, h=$('af-h-'+i).value||null;
+    if(!l&&!v) continue;
+    if(!l||!v){toast('⚠ Completa local y visita en todas las filas (o elimínalas con ✕)');return;}
+    if(l===v){toast('⚠ Un partido necesita dos equipos distintos');return;}
+    if(AF_EQZ[l]!==AF_EQZ[v]){toast('⚠ Local y visita deben ser de la MISMA zona para que el partido sume en su tabla');return;}
+    filas.push({l,v,h,z:AF_EQZ[l]});
+  }
+  if(!filas.length){toast('⚠ Agrega al menos un partido');return;}
+  const usados={};
+  for(const f of filas) for(const id of [f.l,f.v]){
+    if(usados[id]){toast(`⚠ ${nomEq(EQUIPOS[id]||{})} está en DOS partidos de esta fecha`);return;}
+    usados[id]=1;
+  }
+  const {data:j,error}=await sb.from('jornada').insert({categoria_id:CAT.id,numero:num,fecha:dia}).select().single();
+  if(error){toast(errNegocio(error));return;}
+  const rows=filas.map(f=>({categoria_id:CAT.id,jornada_id:j.id,zona_id:f.z,
+    fase_id:(ZONAS.find(z=>z.id===f.z)||{}).fase_id||null,
+    local_id:f.l,visita_id:f.v,estado:'programado',fecha:dia,hora:f.h}));
+  const ins=await sb.from('partido').insert(rows);
+  if(ins.error){toast(errNegocio(ins.error));return;}
+  cerrarModal(); toast(`➕ Fecha ${num} creada con ${rows.length} partido(s) — suma en la tabla como cualquier fecha ✔`);
+  abrirCategoria(CAT);
+}
+
 async function crearPartidoManual(tipo,refId){
   const l=$('np-l').value, v=$('np-v').value;
   if(l===v){toast('⚠ Elige dos equipos distintos');return;}
