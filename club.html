@@ -117,7 +117,7 @@ const sb = supabase.createClient(
   { db:{schema:'competencias'}, auth:{storageKey:'sb-competencias-club'} }   // cajón propio; jamás toca ERP/Academias/Admin
 );
 const $=id=>document.getElementById(id);
-let MIS=[], EQ=null, REQ_AUT=false, UID='';
+let MIS=[], EQ=null, REQ_AUT=false, UID='', DEUDA_ON=false, DEUDAS={};
 let CATALOGO={};
 async function cargarCatalogo(){
   const {data}=await sb.from('catalogo_atributo').select('*').eq('activo',true).order('orden');
@@ -773,7 +773,7 @@ let N_LBF=0, STATS_HTML='', RESULTADOS_HTML='', EQ_LISTO=false;   // STATS/RESUL
 async function renderPlantel(){
   const [insQ,tq,cq]=await Promise.all([
     sb.from('inscripcion_lbf').select('*').eq('equipo_id',EQ.equipo_id).order('dorsal'),
-    sb.from('torneo').select('requiere_autorizacion,duracion_partido,fecha_limite_carga_equipo').eq('id',EQ.torneo_id).single(),
+    sb.from('torneo').select('requiere_autorizacion,duracion_partido,fecha_limite_carga_equipo,deuda_club_asigna').eq('id',EQ.torneo_id).single(),
     sb.from('categoria').select('duracion_partido').eq('id',EQ.categoria_id).single()
   ]);
   const ins=insQ.data, error=insQ.error;
@@ -799,6 +799,15 @@ async function renderPlantel(){
       if(p.jugo||(p.goles||0)>0||(p.amarillas||0)>0||(p.rojas||0)>0||(p.minutos||0)>0||(p.asistencias||0)>0) PARTICIPO.add(p.inscripcion_id);
     });
     (ac.data||[]).forEach(a=>PARTICIPO.add(a.inscripcion_id));
+  }
+  // 💰 deudas de jugador reportadas por ESTE club (si el torneo lo habilita)
+  DEUDA_ON=!!(tq.data&&tq.data.deuda_club_asigna)&&EQ.rol!=='delegado';
+  DEUDAS={};
+  if(DEUDA_ON&&(ins||[]).length){
+    try{
+      const dq=await sb.from('deuda_jugador').select('id,jugador_id,monto,comentario').eq('club_id',EQ.club_id).in('jugador_id',ins.map(i=>i.jugador_id));
+      (dq.data||[]).forEach(d=>{DEUDAS[d.jugador_id]=d;});
+    }catch(_){}
   }
   // 🔒 fecha límite de carga: pasado el cierre, los cambios de LBF son solo del organizador
   const FLIM=(tq.data&&tq.data.fecha_limite_carga_equipo)||null;
@@ -826,8 +835,10 @@ async function renderPlantel(){
             ${(j.posicion||j.pie_habil)?`<span class="block text-[10px] text-ink-400 font-normal">${[j.posicion,j.pie_habil].filter(Boolean).join(' · ')}</span>`:''}</span>
           <span class="doc text-xs text-ink-500">${j.nro_documento||''}</span>
           <span class="flex items-center gap-1.5 ml-auto">
+            ${DEUDAS[i.jugador_id]?`<span class="text-[9px] font-bold bg-amber-500 text-white rounded-full px-2 py-0.5" title="Deuda con tu club: S/ ${(+DEUDAS[i.jugador_id].monto||0).toFixed(2)}${DEUDAS[i.jugador_id].comentario?' — '+DEUDAS[i.jugador_id].comentario:''}">💰 DEUDA</span>`:''}
             ${REQ_AUT&&!j.autorizacion_url?'<span class="text-[9px] font-bold bg-amber-100 text-amber-700 rounded-full px-2 py-0.5" title="Falta la autorización de Padre/Tutor">📄 AUT. PENDIENTE</span>':''}
             <span class="text-[10px] font-bold px-2 py-1 rounded-full ${i.inhabilitado?'bg-brand-100 text-brand-600':(i.estado==='activo'||!REQ_AUT)?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${i.inhabilitado?'INHABILITADO':i.estado==='activo'?'ACTIVO':(!REQ_AUT?'HABILITADO':'PENDIENTE')}</span>
+            ${DEUDA_ON?`<button onclick='modalDeudaJugador("${i.jugador_id}","${((j.nombres||'')+' '+(j.apellidos||'')).replace(/'/g,'')}")' class="text-xs font-bold ${DEUDAS[i.jugador_id]?'text-white bg-amber-500 border-amber-500':'text-ink-400 border-line'} border rounded-lg px-2.5 py-1.5 hover:bg-amber-50 hover:text-amber-700" title="Reportar o eliminar deuda del jugador con tu club (bloquea su inscripción en torneos con control de deuda)">💰</button>`:''}
             ${puedeEditar?`<button onclick='modalEditIns(${JSON.stringify(edit).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper" title="Editar foto, dorsal y capitán">✏️</button>
             ${!PARTICIPO.has(i.id)?`<button onclick='quitarIns("${i.id}","${((j.nombres||'')+' '+(j.apellidos||'')).replace(/'/g,'')}")' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-brand-50 hover:text-brand-600" title="Quitar de la LBF — todavía no ha jugado ningún partido en el torneo">✕</button>`:''}`:''}
           </span>
@@ -1306,6 +1317,41 @@ async function quitarIns(insId,nombre){
   const {error}=await sb.from('inscripcion_lbf').delete().eq('id',insId);
   if(error){toast(errNegocio(error));return;}
   toast('Jugador quitado de la LBF'); renderPlantel();
+}
+/* 💰 REPORTE DE DEUDA: el club reporta la deuda de un jugador; mientras exista,
+   el jugador no podrá inscribirse en los torneos de la marca con control de deuda */
+async function modalDeudaJugador(jid,nombre){
+  const d=DEUDAS[jid]||null;
+  abrirModal(`<div class="flex items-center justify-between mb-1"><h3 class="font-display text-2xl tracking-wide">💰 REPORTE DE DEUDA</h3><button onclick="cerrarModal()" class="text-ink-400 text-xl">✕</button></div>
+    <p class="text-sm font-semibold mb-2">${nombre}</p>
+    ${d?`<div class="bg-amber-50 border border-amber-300 rounded-xl p-3 mb-3">
+      <p class="text-xs font-bold text-amber-700 mb-1">⛔ DEUDA VIGENTE CON TU CLUB</p>
+      <p class="text-sm font-bold">S/ ${(+d.monto||0).toFixed(2)}</p>
+      ${d.comentario?`<p class="text-xs text-ink-400 mt-0.5">${d.comentario}</p>`:''}
+      <button onclick='eliminarDeudaJugador("${d.id}","${nombre.replace(/'/g,'')}")' class="mt-2 w-full border border-emerald-500 text-emerald-600 font-bold text-sm py-2 rounded-xl hover:bg-emerald-50">✔ ELIMINAR DEUDA (habilitar al jugador)</button>
+    </div>`:''}
+    <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Monto de la deuda (S/)</span>
+      <input id="dj-monto" type="number" min="0" step="0.01" value="${d?(+d.monto||0):''}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
+    <label class="block text-sm mb-3"><span class="text-ink-400 font-semibold text-xs">Comentario (motivo de la deuda)</span>
+      <textarea id="dj-com" rows="2" class="w-full border border-line rounded-xl p-2 font-semibold text-sm">${d&&d.comentario?d.comentario:''}</textarea></label>
+    <p class="text-[11px] text-ink-400 mb-4">Mientras la deuda exista, el jugador <b>no podrá inscribirse</b> en los torneos de la marca que apliquen el control de deuda (los clubes ⭐ VIP están exentos). Al eliminarla, el jugador queda habilitado de inmediato.</p>
+    <button onclick='guardarDeudaJugador("${jid}")' class="w-full bg-amber-500 text-white font-bold py-2.5 rounded-xl hover:bg-amber-600">${d?'ACTUALIZAR DEUDA':'ASIGNAR DEUDA'}</button>`);
+}
+async function guardarDeudaJugador(jid){
+  const monto=+($('dj-monto').value||0);
+  const com=$('dj-com').value.trim();
+  if(!(monto>0)){toast('Indica el monto de la deuda');return;}
+  const {error}=await sb.from('deuda_jugador').upsert(
+    {club_id:EQ.club_id,jugador_id:jid,monto,comentario:com||null,creada_por:UID},
+    {onConflict:'club_id,jugador_id'});
+  if(error){toast(errNegocio(error));return;}
+  cerrarModal(); toast('💰 Deuda registrada — el jugador queda bloqueado en los torneos con control de deuda'); renderPlantel();
+}
+async function eliminarDeudaJugador(id,nombre){
+  if(!confirm(`¿Eliminar la deuda de ${nombre}?\n\nEl jugador quedará habilitado para inscribirse nuevamente.`))return;
+  const {error}=await sb.from('deuda_jugador').delete().eq('id',id);
+  if(error){toast(errNegocio(error));return;}
+  cerrarModal(); toast('✔ Deuda eliminada — el jugador queda habilitado'); renderPlantel();
 }
 /* ⬇ COPIAR DE OTRO TORNEO: la LBF del club desde otro equipo (misma categoría primero) */
 let CP_FUENTES=[];

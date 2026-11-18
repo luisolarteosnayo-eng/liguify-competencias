@@ -211,6 +211,7 @@ const optsCatalogo=(atributo,sel)=>'<option value="">—</option>'+
   (CATALOGO[atributo]||[]).map(v=>`<option ${v===sel?'selected':''}>${v}</option>`).join('');
 let CLUBES={}, EQUIPOS={}, ZONAS=[], FASES=[], JORNADAS=[];
 let SMV={};   // ⛔ sanciones de marca vigentes por jugador (se llena en renderLBF)
+let DEU={};   // 💰 deudas de jugador reportadas por clubes de la marca (renderLBF)
 
 function toast(m){const t=$('toast');t.textContent=m;t.classList.remove('hidden');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.add('hidden'),4200);}
 /* ⏳ indicador de proceso en curso: apilable (procesos anidados restauran el mensaje anterior) */
@@ -880,6 +881,8 @@ function modalTorneo(t){
     ${toggleC('tc-del','Permitir delegados (modo Club)',t.permitir_delegados)}
     ${toggleC('tc-modif','Permitir modificación de equipo',t.permitir_modificacion_equipo)}
     ${toggleC('tc-aut','Requiere autorización de Padre/Tutor (encendido: PENDIENTE bloquea hasta subirla · apagado: los jugadores quedan habilitados sin validación)',t.requiere_autorizacion)}
+    ${toggleC('tc-deuda-asigna','💰 CLUB PUEDE ASIGNAR DEUDA DE JUGADOR (los clubes reportan deudas con monto y comentario desde su LBF)',t.deuda_club_asigna)}
+    ${toggleC('tc-deuda-control','🔒 APLICA CONTROL DEUDA DE JUGADOR (un jugador con deuda registrada por un club de la marca NO podrá inscribirse en este torneo; clubes ⭐ VIP exentos)',t.deuda_control)}
     <label class="block text-sm my-3"><span class="text-ink-400 font-semibold text-xs">Descripción</span>
       <textarea id="tc-desc" rows="2" class="w-full border border-line rounded-xl p-2.5 mt-1 text-sm">${t.descripcion||''}</textarea></label>
     <div class="border-t border-line pt-3 mb-4">
@@ -913,6 +916,8 @@ async function guardarTorneo(id){
       cargar_lbf:$('tc-clbf').checked, scan_dni_obligatorio:$('tc-scan').checked,
       permitir_delegados:$('tc-del').checked, permitir_modificacion_equipo:$('tc-modif').checked,
       requiere_autorizacion:$('tc-aut').checked,
+      deuda_club_asigna:$('tc-deuda-asigna')?$('tc-deuda-asigna').checked:false,
+      deuda_control:$('tc-deuda-control')?$('tc-deuda-control').checked:false,
       descripcion:$('tc-desc').value.trim()||null};
     if(logo) upd.logo_url=logo;
     const {error}=await sb.from('torneo').update(upd).eq('id',id);
@@ -3288,7 +3293,8 @@ function modalClub(clubId){
       <label><span class="text-ink-400 font-semibold text-xs">Nombre del club</span><input id="cb-n" value="${cl.nombre}" class="w-full border-b border-line py-1.5 font-semibold"/></label>
       <label><span class="text-ink-400 font-semibold text-xs">Color (si no hay escudo)</span><input id="cb-c" type="color" value="${cl.color||'#1d4ed8'}" class="w-full h-9 border border-line rounded-lg bg-white"/></label>
     </div>
-    <button onclick="guardarClub('${clubId}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600">GUARDAR CLUB</button>`);
+    ${toggleC('cb-vip','⭐ CLUB VIP — exento del control de deuda: puede inscribir jugadores aunque tengan deuda registrada con otro club',cl.vip)}
+    <button onclick="guardarClub('${clubId}')" class="w-full bg-brand-500 text-white font-bold py-2.5 rounded-xl hover:bg-brand-600 mt-3">GUARDAR CLUB</button>`);
 }
 async function guardarClub(clubId){
   try{
@@ -3296,6 +3302,7 @@ async function guardarClub(clubId){
     if(!n){toast('Ingresa el nombre del club');return;}
     const escudo=await subirImagen('cb-esc', `clubes/${clubId}`);
     const upd={nombre:n, color:$('cb-c').value};
+    if($('cb-vip')) upd.vip=$('cb-vip').checked;
     if(escudo) upd.escudo_url=escudo;
     const {data,error}=await sb.from('club').update(upd).eq('id',clubId).select().single();
     if(error){toast(errNegocio(error));return;}
@@ -3321,6 +3328,12 @@ async function renderLBF(){
     // ⛔ sanción de marca VIGENTE por jugador
     const hoySM=new Date().toISOString().slice(0,10);
     (smQ.data||[]).forEach(s=>{ if(s.vigencia_desde<=hoySM&&(!s.vigencia_hasta||s.vigencia_hasta>=hoySM)) SMV[s.jugador_id]=s; });
+    // 💰 deudas reportadas por clubes de la marca
+    DEU={};
+    try{
+      const dq=await sb.from('deuda_jugador').select('jugador_id,monto,comentario,club:club_id(nombre,marca_id)').in('jugador_id',ins.map(i=>i.jugador_id));
+      (dq.data||[]).forEach(d=>{ if(d.club&&d.club.marca_id===MARCA.id&&!DEU[d.jugador_id]) DEU[d.jugador_id]=d; });
+    }catch(_){}
     await fotosDelTorneo(js.data||[]);
     jug=Object.fromEntries((js.data||[]).map(j=>[j.id,j]));
     (pl.data||[]).forEach(p=>{ if(p.jugo||(p.goles||0)>0||(p.amarillas||0)>0||(p.rojas||0)>0||(p.minutos||0)>0||(p.asistencias||0)>0) (PART[p.inscripcion_id]=PART[p.inscripcion_id]||new Set()).add(p.partido_id); });
@@ -3338,6 +3351,7 @@ async function renderLBF(){
       <span class="flex items-center gap-1.5 ml-auto flex-wrap">
         ${PART[i.id]?`<span class="text-[10px] font-bold px-2 py-1 rounded-full bg-ink-900 text-white" title="Participación real registrada en ${PART[i.id].size} partido(s) (asistencia o estadísticas). El club no puede eliminarlo; como admin puedes ✏️ INHABILITAR o 🗑 eliminarlo borrando su participación">⚽ JUGÓ ${PART[i.id].size}</span>`:''}
         ${SMV[i.jugador_id]?`<span class="text-[10px] font-bold px-2 py-1 rounded-full bg-brand-500 text-white" title="${SMV[i.jugador_id].motivo} · ${SMV[i.jugador_id].vigencia_hasta?'hasta '+SMV[i.jugador_id].vigencia_hasta.split('-').reverse().join('/'):'indefinida'} — aplica a TODOS los torneos de la marca">⛔ SANCIONADO</span>`:''}
+        ${DEU[i.jugador_id]?`<span class="text-[10px] font-bold px-2 py-1 rounded-full bg-amber-500 text-white" title="Deuda reportada por ${(DEU[i.jugador_id].club||{}).nombre||'su club'}: S/ ${(+DEU[i.jugador_id].monto||0).toFixed(2)}${DEU[i.jugador_id].comentario?' — '+DEU[i.jugador_id].comentario:''} (bloquea inscribirlo en torneos con control de deuda)">💰 DEUDA</span>`:''}
         <span class="text-[10px] font-bold px-2 py-1 rounded-full ${i.inhabilitado?'bg-brand-100 text-brand-600':(i.estado==='activo'||!TORNEO.requiere_autorizacion)?'bg-emerald-100 text-emerald-700':'bg-amber-100 text-amber-700'}">${i.inhabilitado?'INHABILITADO':i.estado==='activo'?'ACTIVO':(!TORNEO.requiere_autorizacion?'HABILITADO':'PENDIENTE')}</span>
         ${i.estado==='pendiente'&&TORNEO.requiere_autorizacion&&esAdmin()?`<button onclick="activarIns('${i.id}')" class="text-[10px] font-bold text-emerald-700 border border-emerald-300 rounded-lg px-2.5 py-1.5 hover:bg-emerald-50">ACTIVAR</button>`:''}
         ${esAdmin()?`<button onclick='modalEditIns(${JSON.stringify({id:i.id,dorsal:i.dorsal,capitan:i.capitan,estado:i.estado,inhabilitado:i.inhabilitado,nombre:(j.nombres||'')+' '+(j.apellidos||''),nombres:j.nombres||'',apellidos:j.apellidos||'',fnac:j.fecha_nacimiento||'',jugador_id:i.jugador_id,foto_url:j.foto_url||null,dfr:j.doc_scan_frente_url||null,drv:j.doc_scan_reverso_url||null,pie:j.pie_habil||null,pos:j.posicion||null,con:j.consentimiento_imagen?1:0,aut:j.autorizacion_url||null,doc:j.nro_documento||'',dpais:j.pais_documento||'PE',dtipo:j.tipo_documento||'DNI'}).replace(/'/g,"&#39;")})' class="text-xs font-bold text-ink-400 border border-line rounded-lg px-2.5 py-1.5 hover:bg-paper" title="Editar foto, documento, dorsal, capitán, posición, pie hábil, consentimiento, estado e inhabilitación">✏️</button>
